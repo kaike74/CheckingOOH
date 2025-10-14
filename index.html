@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Checking OOH - Monitoramento de Mídia</title>
+    
+    <!-- Google Fonts - Space Grotesk -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- CSS -->
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="logo">
+                <h1>Checking <span class="gradient-text">OOH</span></h1>
+            </div>
+            <div class="header-info">
+                <span id="user-type-badge" class="badge">Carregando...</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Loading State -->
+    <div id="loading-screen" class="loading-screen">
+        <div class="spinner"></div>
+        <p>Carregando dados...</p>
+    </div>
+
+    <!-- Main Content -->
+    <main class="main-content" id="main-content" style="display: none;">
+        <div class="container">
+            
+            <!-- Informações da Exibidora -->
+            <section class="info-section" id="exhibitor-info">
+                <div class="info-card">
+                    <h2 class="section-title">Informações da Exibidora</h2>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <span class="info-label">Exibidora:</span>
+                            <span class="info-value" id="exhibitor-name">-</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Campanha:</span>
+                            <span class="info-value" id="campaign-name">-</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Lista de Pontos -->
+            <section class="points-section" id="points-section">
+                <!-- Os pontos serão inseridos dinamicamente aqui -->
+            </section>
+
+        </div>
+    </main>
+
+    <!-- Modal para Upload -->
+    <div id="upload-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-title">Upload de Arquivos</h3>
+                <button class="close-btn" onclick="closeUploadModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="upload-area" id="upload-area">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                    <p>Clique ou arraste arquivos aqui</p>
+                    <small>Fotos e vídeos aceitos</small>
+                    <input type="file" id="file-input" multiple accept="image/*,video/*">
+                </div>
+                <div id="upload-progress" class="upload-progress" style="display: none;">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progress-fill"></div>
+                    </div>
+                    <p id="upload-status">Enviando arquivos...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para Visualizar Arquivos -->
+    <div id="view-modal" class="modal">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3 id="view-modal-title">Arquivos</h3>
+                <button class="close-btn" onclick="closeViewModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="media-grid" id="media-grid">
+                    <!-- Arquivos serão inseridos aqui -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para Captura de Câmera -->
+    <div id="camera-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Tirar Foto</h3>
+                <button class="close-btn" onclick="closeCameraModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <video id="camera-video" autoplay playsinline></video>
+                <canvas id="camera-canvas" style="display: none;"></canvas>
+                <div class="camera-controls">
+                    <button class="btn btn-secondary" onclick="closeCameraModal()">Cancelar</button>
+                    <button class="btn btn-primary" onclick="capturePhoto()">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <circle cx="12" cy="12" r="3"></circle>
+                        </svg>
+                        Capturar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error Message -->
+    <div id="error-toast" class="toast toast-error" style="display: none;">
+        <p id="error-message"></p>
+    </div>
+
+    <!-- Success Message -->
+    <div id="success-toast" class="toast toast-success" style="display: none;">
+        <p id="success-message"></p>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/js/notion-api.js"></script>
+    <script src="/js/drive-api.js"></script>
+    <script src="/js/main.js"></script>
+</body>
+</html>
