@@ -108,14 +108,14 @@ async function loadClienteData(clienteId) {
         appData.pontos = [notionData.ponto]; // Cliente vê apenas seu ponto
         appData.pontoAtual = notionData.ponto;
         
-        // Atualizar header
-        updatePageHeader(`👤 ${appData.pontoAtual.ponto}`, `Modo Cliente • Visualização`);
+        // Atualizar header com endereço do ponto
+        updatePageHeader(`👤 ${appData.pontoAtual.endereco}`, `Modo Cliente • Visualização`);
         
         // Renderizar ponto do cliente (somente leitura)
         await renderPontos(true);
         
         Logger.success('Dados do cliente carregados', { 
-            ponto: appData.pontoAtual.ponto 
+            endereco: appData.pontoAtual.endereco 
         });
         
     } catch (error) {
@@ -166,12 +166,12 @@ async function createPontoElement(ponto, readOnly = false) {
     const headerDiv = document.createElement('div');
     headerDiv.className = 'ponto-header';
     
-    // Informações do ponto
+    // ⚠️ IMPORTANTE: Usar "endereco" em vez de "ponto"
     const infoDiv = document.createElement('div');
     infoDiv.className = 'ponto-info';
     infoDiv.innerHTML = `
-        <h3>${ponto.ponto}</h3>
-        <p>📍 ${ponto.endereco}</p>
+        <h3>📍 ${ponto.endereco}</h3>
+        <p style="font-size: 14px; color: #64748B;">Exibidora: ${ponto.exibidora}</p>
     `;
     
     // Ações do ponto (apenas para exibidora)
@@ -469,10 +469,10 @@ async function openPhotoModal(pontoId, tipo) {
             throw new Error('Ponto não encontrado');
         }
         
-        // Atualizar título do modal
+        // Atualizar título do modal com ENDEREÇO
         const modalTitle = document.getElementById('modal-title');
         const tipoText = tipo === 'entrada' ? 'Entrada' : 'Saída';
-        modalTitle.textContent = `📸 ${ponto.ponto} - ${tipoText}`;
+        modalTitle.textContent = `📸 ${ponto.endereco} - ${tipoText}`;
         
         // Buscar arquivos
         const result = await DriveAPI.listDriveFiles(appData.exibidora, pontoId, tipo);
@@ -627,6 +627,45 @@ function showError(message, details = null) {
     document.getElementById('error').style.display = 'block';
 }
 
+/**
+ * ✅ MOSTRAR MENSAGEM DE SUCESSO
+ * Exibe uma notificação de sucesso temporária
+ */
+function showSuccessMessage(message) {
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: linear-gradient(135deg, #10B981 0%, #34D399 100%);
+        color: white;
+        padding: 16px 24px;
+        border-radius: 12px;
+        box-shadow: 0 8px 25px rgba(16, 185, 129, 0.3);
+        z-index: 9999;
+        font-family: 'Space Grotesk', sans-serif;
+        font-weight: 600;
+        transform: translateX(100%);
+        transition: transform 0.3s ease;
+    `;
+    notification.textContent = message;
+    
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.style.transform = 'translateX(0)';
+    }, 100);
+    
+    setTimeout(() => {
+        notification.style.transform = 'translateX(100%)';
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 300);
+    }, 4000);
+}
+
 // 🚀 EXPORTAR FUNÇÕES GLOBAIS
 window.togglePontoContent = togglePontoContent;
 window.toggleEditMode = toggleEditMode;
@@ -636,5 +675,6 @@ window.closePhotoModal = closePhotoModal;
 window.openFullImage = openFullImage;
 window.hideDemoWarning = hideDemoWarning;
 window.updateMediaPreview = updateMediaPreview;
+window.showSuccessMessage = showSuccessMessage;
 
 Logger.info('Script principal carregado');
