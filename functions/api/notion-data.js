@@ -45,27 +45,16 @@ export async function onRequest(context) {
             });
         }
 
-        // ID do database
-        const databaseId = context.env.NOTION_DATABASE_ID;
-        if (!databaseId) {
-            return new Response(JSON.stringify({ 
-                error: 'ID do database não configurado' 
-            }), {
-                status: 500,
-                headers
-            });
-        }
-
         console.log('🔍 Buscando dados no Notion:', { pontoId, clienteId });
 
         let responseData;
 
         if (clienteId) {
             // Modo cliente - buscar ponto específico
-            responseData = await fetchPontoForCliente(clienteId, notionToken, databaseId);
+            responseData = await fetchPontoForCliente(clienteId, notionToken);
         } else {
             // Modo exibidora - buscar todos os pontos da mesma exibidora
-            responseData = await fetchPontosForExibidora(pontoId, notionToken, databaseId);
+            responseData = await fetchPontosForExibidora(pontoId, notionToken);
         }
 
         return new Response(JSON.stringify(responseData), {
@@ -88,7 +77,7 @@ export async function onRequest(context) {
 // =============================================================================
 // 🔍 BUSCAR PONTOS PARA EXIBIDORA
 // =============================================================================
-async function fetchPontosForExibidora(pontoId, notionToken, databaseId) {
+async function fetchPontosForExibidora(pontoId, notionToken) {
     try {
         console.log('📡 Buscando ponto inicial:', pontoId);
 
@@ -114,7 +103,15 @@ async function fetchPontosForExibidora(pontoId, notionToken, databaseId) {
             exibidora: exibidora 
         });
 
-        // Buscar todos os pontos da mesma exibidora
+        // Obter o database parent deste ponto
+        const databaseId = pontoData.parent?.database_id;
+        if (!databaseId) {
+            throw new Error('Não foi possível determinar o database deste ponto');
+        }
+
+        console.log('🔍 Database ID detectado:', databaseId);
+
+        // Buscar todos os pontos da mesma exibidora NO MESMO DATABASE
         console.log('🔍 Buscando todos os pontos da exibidora:', exibidora);
 
         const queryResponse = await fetch(`https://api.notion.com/v1/databases/${databaseId}/query`, {
@@ -147,7 +144,8 @@ async function fetchPontosForExibidora(pontoId, notionToken, databaseId) {
             mode: 'exibidora',
             exibidora: exibidora,
             ponto: pontoExtraido,
-            pontos: pontos
+            pontos: pontos,
+            databaseId: databaseId
         };
 
     } catch (error) {
@@ -159,7 +157,7 @@ async function fetchPontosForExibidora(pontoId, notionToken, databaseId) {
 // =============================================================================
 // 👤 BUSCAR PONTO PARA CLIENTE
 // =============================================================================
-async function fetchPontoForCliente(clienteId, notionToken, databaseId) {
+async function fetchPontoForCliente(clienteId, notionToken) {
     try {
         console.log('👤 Buscando ponto para cliente:', clienteId);
 
@@ -181,7 +179,7 @@ async function fetchPontoForCliente(clienteId, notionToken, databaseId) {
 
         console.log('✅ Ponto do cliente encontrado:', { 
             id: pontoExtraido.id, 
-            ponto: pontoExtraido.ponto 
+            endereco: pontoExtraido.endereco 
         });
 
         return {
@@ -230,33 +228,35 @@ function extractPontoData(notionPage) {
                     return prop.number !== null && prop.number !== undefined ? prop.number : defaultValue;
                 case 'checkbox':
                     return prop.checkbox || false;
+                case 'formula':
+                    // Fórmulas podem retornar diferentes tipos
+                    if (prop.formula?.type === 'string') {
+                        return prop.formula.string || defaultValue;
+                    }
+                    return defaultValue;
                 default:
                     return defaultValue;
             }
         };
         
-        // Mapear campos do Notion (campos personalizáveis)
+        // ⚠️ IMPORTANTE: Campos ajustados para sua estrutura real
         const pontoData = {
             id: notionPage.id.replace(/-/g, ''), // Remover hífens
-            exibidora: extractValue(properties['Exibidora'], 'Exibidora'),
-            ponto: extractValue(properties['Ponto'], 'Ponto'),
-            endereco: extractValue(properties['Endereço'] || properties['Endereco'], 'Endereço não informado'),
+            exibidora: extractValue(properties['Exibidora'], 'Exibidora Desconhecida'),
+            endereco: extractValue(properties['Endereço'], 'Endereço não informado'), // Campo Title
             urlExibidora: extractValue(properties['URL Exibidora'], ''),
             urlCliente: extractValue(properties['URL Cliente'], ''),
-            status: extractValue(properties['Status'], 'Pendente'),
-            campanha: extractValue(properties['Campanha'], ''),
+            // Campos opcionais adicionais (se existirem)
             valor: extractValue(properties['Valor'], 0),
-            periodo: extractValue(properties['Período'] || properties['Periodo'], ''),
-            observacoes: extractValue(properties['Observações'] || properties['Observacoes'], ''),
-            dataInicio: extractValue(properties['Data Início'] || properties['Data Inicio'], ''),
-            dataFim: extractValue(properties['Data Fim'], ''),
+            periodo: extractValue(properties['Período'], ''),
+            observacoes: extractValue(properties['Observações'], ''),
             lastUpdate: new Date().toISOString()
         };
         
         console.log('📊 Dados extraídos:', {
             id: pontoData.id,
             exibidora: pontoData.exibidora,
-            ponto: pontoData.ponto
+            endereco: pontoData.endereco
         });
 
         return pontoData;
