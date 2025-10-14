@@ -1,0 +1,49 @@
+{
+  "name": "checking-ooh",
+  "version": "1.0.0",
+  "description": "Sistema de Checking OOH - Monitoramento de Painéis de Mídia Externa",
+  "scripts": {
+    "dev": "wrangler pages dev .",
+    "deploy": "wrangler pages deploy . --project-name=checking-ooh",
+    "deploy:dev": "wrangler pages deploy . --project-name=checking-ooh-dev",
+    "preview": "wrangler pages dev . --port=3000",
+    "build": "echo 'No build step required - static files'",
+    "test": "echo 'No tests specified'",
+    "lint": "echo 'No linting configured'"
+  },
+  "keywords": [
+    "ooh",
+    "outdoor",
+    "media",
+    "monitoring",
+    "cloudflare",
+    "notion",
+    "google-drive",
+    "emidias"
+  ],
+  "author": "E-MÍDIAS",
+  "license": "MIT",
+  "devDependencies": {
+    "wrangler": "^4.42.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SEU_USUARIO/checking-ooh.git"
+  },
+  "homepage": "https://checking-ooh.pages.dev",
+  "bugs": {
+    "url": "https://github.com/SEU_USUARIO/checking-ooh/issues"
+  },
+  "files": [
+    "index.html",
+    "style.css",
+    "js/",
+    "functions/",
+    "wrangler.toml",
+    "_headers",
+    "README.md"
+  ]
+}
