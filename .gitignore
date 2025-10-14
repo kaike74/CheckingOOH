@@ -1,0 +1,142 @@
+# =============================================================================
+# 🙈 GITIGNORE - CHECKING OOH
+# =============================================================================
+
+# 🔐 Variáveis de ambiente e secrets
+.env
+.env.local
+.env.production
+.env.development
+*.key
+*.pem
+service-account.json
+google-credentials.json
+
+# 📁 Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# 🚀 Build e Deploy
+dist/
+build/
+.output/
+.vercel/
+.netlify/
+
+# 📊 Logs
+*.log
+logs/
+*.log.*
+
+# 🧹 Cache
+.cache/
+.temp/
+.tmp/
+.wrangler/
+
+# 💻 Sistema Operacional
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# 📝 IDEs e Editores
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.settings/
+.classpath
+
+# 🎯 Específicos do projeto
+test-uploads/
+temp-files/
+backup/
+screenshots/
+mockups/
+
+# 📤 Arquivos temporários de upload
+uploads/
+temp-images/
+temp-videos/
+
+# 🧪 Dados de teste
+test-data.json
+mock-responses.json
+sample-*.json
+
+# 📋 Documentação temporária
+docs-temp/
+readme-old.md
+notes.md
+todo.md
+
+# 🔧 Configurações locais
+local.config.js
+dev.config.js
+wrangler.local.toml
+
+# 📊 Analytics e métricas
+analytics/
+metrics/
+reports/
+
+# 🗄️ Backup de databases
+*.sqlite
+*.db
+*.sql
+
+# 📸 Assets temporários
+*.tmp.jpg
+*.tmp.png
+*.tmp.mp4
+*.tmp.mov
+
+# 🌐 Cloudflare específico
+.wrangler/
+worker-configuration.d.ts
+
+# 📱 Mobile development
+*.xcodeproj
+*.xcworkspace
+android/
+ios/
+
+# 🎨 Design assets fonte
+*.psd
+*.ai
+*.sketch
+*.figma
+
+# 🧪 Testes
+coverage/
+*.test.js.snap
+test-results/
+
+# 📦 Package managers
+.pnpm-store/
+.yarn/
+
+# 🔄 Git específico
+*.orig
+*.rej
+
+# 🌍 Internacionalização
+*.pot
+*.po~
+
+# 🚫 Arquivos específicos que não devem ser commitados
+config/production.json
+config/staging.json
+secrets.yaml
+private-key.txt
