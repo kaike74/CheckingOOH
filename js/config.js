@@ -5,37 +5,30 @@
 /**
  * 🔧 VARIÁVEIS DE CONFIGURAÇÃO
  * 
- * IMPORTANTE: Configure essas variáveis antes de usar o sistema:
- * 
- * 1. NOTION_DATABASE_ID: ID do seu database no Notion
- * 2. GOOGLE_DRIVE_FOLDER_ID: ID da pasta raiz no Google Drive
- * 3. MODO_DEMO: true para usar dados fictícios, false para dados reais
+ * IMPORTANTE: Configure as variáveis de ambiente no Cloudflare Pages:
+ * - NOTION_TOKEN
+ * - GOOGLE_SERVICE_ACCOUNT_KEY (recomendado) ou GOOGLE_DRIVE_API_KEY
+ * - GOOGLE_DRIVE_FOLDER_ID (opcional, padrão é 'root')
  */
 
 const CONFIG = {
     // 🗄️ CONFIGURAÇÕES DO NOTION
     NOTION: {
-        // ID do database do Notion (32 caracteres hex)
-        DATABASE_ID: 'SEU_DATABASE_ID_AQUI',
+        // ⚠️ IMPORTANTE: Não precisa mais de DATABASE_ID fixo
+        // O sistema detecta automaticamente a tabela pela página acessada
         
-        // Campos esperados no database (personalize conforme sua estrutura)
+        // Campos do seu database (AJUSTADOS para sua estrutura real)
         FIELDS: {
-            EXIBIDORA: 'Exibidora',
-            PONTO: 'Ponto', 
-            ENDERECO: 'Endereço',
-            URL_EXIBIDORA: 'URL Exibidora',
-            URL_CLIENTE: 'URL Cliente',
-            STATUS: 'Status',
-            CAMPANHA: 'Campanha'
+            EXIBIDORA: 'Exibidora',        // Campo Select
+            ENDERECO: 'Endereço',          // Campo Title (não "Ponto"!)
+            URL_EXIBIDORA: 'URL Exibidora', // Fórmula gerada automaticamente
+            URL_CLIENTE: 'URL Cliente'      // Fórmula gerada automaticamente
         }
     },
     
     // 📂 CONFIGURAÇÕES DO GOOGLE DRIVE
     DRIVE: {
-        // ID da pasta raiz no Google Drive onde serão salvos os arquivos
-        FOLDER_ID: 'SEU_FOLDER_ID_AQUI',
-        
-        // Estrutura de pastas que será criada automaticamente:
+        // Estrutura de pastas criada automaticamente:
         // /CheckingOOH/
         //   ├── ExibidoraA/
         //   │   ├── Entrada/
@@ -67,30 +60,24 @@ const CONFIG = {
     // 🧪 MODO DEMONSTRAÇÃO
     DEMO: {
         // true = usar dados fictícios, false = usar APIs reais
-        ENABLED: true,
+        ENABLED: true, // ⚠️ Altere para false após configurar as variáveis de ambiente
         
         // Dados fictícios para demonstração
         SAMPLE_DATA: [
             {
                 id: '12345678901234567890123456789012',
                 exibidora: 'Exibidora Central',
-                ponto: 'Painel 001',
-                endereco: 'Av. Paulista, 1000 - São Paulo, SP',
-                status: 'Ativo'
+                endereco: 'Av. Paulista, 1000 - São Paulo, SP'
             },
             {
                 id: '12345678901234567890123456789013',
                 exibidora: 'Exibidora Central', 
-                ponto: 'Painel 002',
-                endereco: 'Rua Augusta, 500 - São Paulo, SP',
-                status: 'Ativo'
+                endereco: 'Rua Augusta, 500 - São Paulo, SP'
             },
             {
                 id: '12345678901234567890123456789014',
                 exibidora: 'Exibidora Norte',
-                ponto: 'Painel 003', 
-                endereco: 'Av. Faria Lima, 2000 - São Paulo, SP',
-                status: 'Pendente'
+                endereco: 'Av. Faria Lima, 2000 - São Paulo, SP'
             }
         ],
         
@@ -127,7 +114,7 @@ const CONFIG = {
             facingMode: 'environment' // Câmera traseira por padrão
         },
         
-        // Qualidade da foto capturada
+        // Qualidade da foto capturada (0.1 - 1.0)
         PHOTO_QUALITY: 0.8,
         
         // Formato da foto
@@ -173,13 +160,8 @@ function validateConfig() {
     const errors = [];
     
     if (!CONFIG.DEMO.ENABLED) {
-        if (!CONFIG.NOTION.DATABASE_ID || CONFIG.NOTION.DATABASE_ID === 'SEU_DATABASE_ID_AQUI') {
-            errors.push('NOTION_DATABASE_ID não configurado');
-        }
-        
-        if (!CONFIG.DRIVE.FOLDER_ID || CONFIG.DRIVE.FOLDER_ID === 'SEU_FOLDER_ID_AQUI') {
-            errors.push('GOOGLE_DRIVE_FOLDER_ID não configurado');
-        }
+        // Em produção, as variáveis de ambiente são verificadas no backend
+        // Aqui apenas validamos configurações locais
     }
     
     return {
@@ -199,7 +181,7 @@ function getApiBaseUrl() {
     }
     
     // Em desenvolvimento local
-    return 'http://localhost:8787';
+    return 'http://localhost:8788';
 }
 
 /**
