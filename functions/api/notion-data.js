@@ -1,9 +1,8 @@
 // =============================================================================
-// 📄 CLOUDFLARE PAGES FUNCTION - NOTION DATA API
+// 📄 CLOUDFLARE PAGES FUNCTION - NOTION DATA API (CORRIGIDO)
 // =============================================================================
 
 export async function onRequest(context) {
-    // Permitir CORS
     const headers = {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Content-Type',
@@ -11,58 +10,38 @@ export async function onRequest(context) {
         'Content-Type': 'application/json'
     };
 
-    // Responder OPTIONS para CORS preflight
     if (context.request.method === 'OPTIONS') {
-        return new Response('', {
-            status: 200,
-            headers
-        });
+        return new Response('', { status: 200, headers });
     }
 
     try {
-        // Obter parâmetros da URL
         const url = new URL(context.request.url);
         const pontoId = url.searchParams.get('id');
         const clienteId = url.searchParams.get('idcliente');
         
-        console.log('📥 Parâmetros recebidos:', { pontoId, clienteId });
-        
         if (!pontoId && !clienteId) {
             return new Response(JSON.stringify({ 
                 error: 'ID do ponto ou cliente é obrigatório' 
-            }), {
-                status: 400,
-                headers
-            });
+            }), { status: 400, headers });
         }
 
-        // Token do Notion
         const notionToken = context.env.NOTION_TOKEN;
         if (!notionToken) {
-            console.error('❌ Token do Notion não configurado');
             return new Response(JSON.stringify({ 
                 error: 'Token do Notion não configurado' 
-            }), {
-                status: 500,
-                headers
-            });
+            }), { status: 500, headers });
         }
 
-        console.log('🔍 Buscando dados no Notion...');
+        console.log('🔍 Buscando dados no Notion...', { pontoId, clienteId });
 
         let responseData;
 
         if (clienteId) {
-            // Modo cliente - buscar ponto específico
-            console.log('👤 Modo cliente ativado');
             responseData = await fetchPontoForCliente(clienteId, notionToken);
         } else {
-            // Modo exibidora - buscar todos os pontos da mesma exibidora
-            console.log('🏢 Modo exibidora ativado');
             responseData = await fetchPontosForExibidora(pontoId, notionToken);
         }
 
-        console.log('✅ Dados processados com sucesso');
         return new Response(JSON.stringify(responseData), {
             status: 200,
             headers
@@ -72,23 +51,18 @@ export async function onRequest(context) {
         console.error('💥 Erro na função Notion:', error);
         return new Response(JSON.stringify({ 
             error: 'Erro interno do servidor',
-            details: error.message,
-            stack: error.stack
-        }), {
-            status: 500,
-            headers
-        });
+            details: error.message
+        }), { status: 500, headers });
     }
 }
 
 // =============================================================================
-// 🔍 BUSCAR PONTOS PARA EXIBIDORA
+// 🔍 BUSCAR PONTOS PARA EXIBIDORA (CORRIGIDO)
 // =============================================================================
 async function fetchPontosForExibidora(pontoId, notionToken) {
     try {
         console.log('📡 Buscando ponto inicial:', pontoId);
 
-        // Normalizar ID (adicionar hífens se necessário)
         const normalizedId = normalizeNotionId(pontoId);
         console.log('🔧 ID normalizado:', normalizedId);
 
@@ -103,13 +77,10 @@ async function fetchPontosForExibidora(pontoId, notionToken) {
 
         if (!pontoResponse.ok) {
             const errorText = await pontoResponse.text();
-            console.error('❌ Erro na resposta do Notion:', pontoResponse.status, errorText);
             throw new Error(`Erro ao buscar ponto: ${pontoResponse.status} - ${errorText}`);
         }
 
         const pontoData = await pontoResponse.json();
-        console.log('📄 Dados do ponto recebidos:', pontoData.id);
-        
         const pontoExtraido = extractPontoData(pontoData);
         const exibidora = pontoExtraido.exibidora;
 
@@ -119,16 +90,16 @@ async function fetchPontosForExibidora(pontoId, notionToken) {
             endereco: pontoExtraido.endereco
         });
 
-        // Obter o database parent deste ponto
+        // Obter o database parent
         const databaseId = pontoData.parent?.database_id;
         if (!databaseId) {
             throw new Error('Não foi possível determinar o database deste ponto');
         }
 
-        console.log('�� Database ID detectado:', databaseId);
+        console.log('🗄️ Database ID:', databaseId);
 
-        // Buscar todos os pontos da mesma exibidora NO MESMO DATABASE
-        console.log('🔍 Buscando todos os pontos da exibidora:', exibidora);
+        // ✅ CORREÇÃO: Filtro para campo TEXT em vez de SELECT
+        console.log('🔍 Buscando pontos da exibidora:', exibidora);
 
         const queryResponse = await fetch(`https://api.notion.com/v1/databases/${databaseId}/query`, {
             method: 'POST',
@@ -140,7 +111,7 @@ async function fetchPontosForExibidora(pontoId, notionToken) {
             body: JSON.stringify({
                 filter: {
                     property: 'Exibidora',
-                    select: {
+                    rich_text: {  // ✅ MUDANÇA: rich_text em vez de select
                         equals: exibidora
                     }
                 }
@@ -149,7 +120,6 @@ async function fetchPontosForExibidora(pontoId, notionToken) {
 
         if (!queryResponse.ok) {
             const errorText = await queryResponse.text();
-            console.error('❌ Erro na query do database:', queryResponse.status, errorText);
             throw new Error(`Erro ao buscar pontos da exibidora: ${queryResponse.status} - ${errorText}`);
         }
 
@@ -179,13 +149,10 @@ async function fetchPontosForExibidora(pontoId, notionToken) {
 // =============================================================================
 async function fetchPontoForCliente(clienteId, notionToken) {
     try {
-        console.log('👤 Buscando ponto para cliente:', clienteId);
+        console.log('�� Buscando ponto para cliente:', clienteId);
 
-        // Normalizar ID
         const normalizedId = normalizeNotionId(clienteId);
-        console.log('🔧 ID normalizado:', normalizedId);
 
-        // Buscar ponto específico
         const pontoResponse = await fetch(`https://api.notion.com/v1/pages/${normalizedId}`, {
             headers: {
                 'Authorization': `Bearer ${notionToken}`,
@@ -196,7 +163,6 @@ async function fetchPontoForCliente(clienteId, notionToken) {
 
         if (!pontoResponse.ok) {
             const errorText = await pontoResponse.text();
-            console.error('❌ Erro na resposta do Notion:', pontoResponse.status, errorText);
             throw new Error(`Erro ao buscar ponto do cliente: ${pontoResponse.status} - ${errorText}`);
         }
 
@@ -212,7 +178,7 @@ async function fetchPontoForCliente(clienteId, notionToken) {
             success: true,
             mode: 'cliente',
             ponto: pontoExtraido,
-            pontos: [pontoExtraido], // Cliente vê apenas seu ponto
+            pontos: [pontoExtraido],
             totalPontos: 1
         };
 
@@ -228,20 +194,17 @@ async function fetchPontoForCliente(clienteId, notionToken) {
 function normalizeNotionId(id) {
     if (!id) return id;
     
-    // Remover hífens primeiro
     const cleanId = id.replace(/-/g, '');
     
-    // Adicionar hífens no formato padrão do Notion: 8-4-4-4-12
     if (cleanId.length === 32) {
         return `${cleanId.slice(0, 8)}-${cleanId.slice(8, 12)}-${cleanId.slice(12, 16)}-${cleanId.slice(16, 20)}-${cleanId.slice(20, 32)}`;
     }
     
-    // Se já tem hífens ou formato diferente, retornar como está
     return id;
 }
 
 // =============================================================================
-// 🔧 EXTRAIR DADOS DO PONTO
+// 🔧 EXTRAIR DADOS DO PONTO (CORRIGIDO)
 // =============================================================================
 function extractPontoData(notionPage) {
     try {
@@ -249,7 +212,6 @@ function extractPontoData(notionPage) {
 
         const properties = notionPage.properties || {};
         
-        // Função helper para extrair valores
         const extractValue = (prop, defaultValue = '') => {
             if (!prop) return defaultValue;
             
@@ -276,7 +238,6 @@ function extractPontoData(notionPage) {
                     case 'checkbox':
                         return prop.checkbox || false;
                     case 'formula':
-                        // Fórmulas podem retornar diferentes tipos
                         if (prop.formula?.type === 'string') {
                             return prop.formula.string || defaultValue;
                         }
@@ -291,20 +252,18 @@ function extractPontoData(notionPage) {
             }
         };
         
-        // ⚠️ IMPORTANTE: Campos ajustados para sua estrutura real
+        // ✅ CAMPOS CORRIGIDOS: Exibidora como rich_text
         const pontoData = {
-            id: notionPage.id.replace(/-/g, ''), // Remover hífens para compatibilidade
-            idOriginal: notionPage.id, // Manter ID original com hífens
-            exibidora: extractValue(properties['Exibidora'], 'Exibidora Desconhecida'),
-            endereco: extractValue(properties['Endereço'], 'Endereço não informado'), // Campo Title
+            id: notionPage.id.replace(/-/g, ''),
+            idOriginal: notionPage.id,
+            exibidora: extractValue(properties['Exibidora'], 'Exibidora Desconhecida'), // rich_text
+            endereco: extractValue(properties['Endereço'], 'Endereço não informado'), // title
             urlExibidora: extractValue(properties['URL Exibidora'], ''),
             urlCliente: extractValue(properties['URL Cliente'], ''),
-            // Campos opcionais adicionais (se existirem)
             valor: extractValue(properties['Valor'], 0),
             periodo: extractValue(properties['Período'], ''),
             observacoes: extractValue(properties['Observações'], ''),
             lastUpdate: new Date().toISOString(),
-            // Metadados
             createdTime: notionPage.created_time,
             lastEditedTime: notionPage.last_edited_time
         };
@@ -319,7 +278,6 @@ function extractPontoData(notionPage) {
         
     } catch (error) {
         console.error('❌ Erro ao extrair dados do ponto:', error);
-        console.error('📄 Dados da página:', notionPage);
         throw new Error(`Erro ao processar dados do Notion: ${error.message}`);
     }
 }
