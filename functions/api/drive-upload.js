@@ -1,5 +1,5 @@
 // =============================================================================
-// 📤 CLOUDFLARE PAGES FUNCTION - GOOGLE DRIVE UPLOAD (DEBUG)
+// 📤 CLOUDFLARE PAGES FUNCTION - GOOGLE DRIVE UPLOAD (VERSÃO FINAL)
 // =============================================================================
 
 export async function onRequest(context) {
@@ -15,56 +15,35 @@ export async function onRequest(context) {
     }
 
     try {
-        console.log('🚀 Iniciando debug do upload');
+        console.log('📤 Iniciando upload real para Google Drive');
 
         // Verificar variáveis de ambiente
         const serviceAccountKey = context.env.GOOGLE_SERVICE_ACCOUNT_KEY;
-        const driveFolder = context.env.GOOGLE_DRIVE_FOLDER_ID;
+        const driveFolder = context.env.GOOGLE_DRIVE_FOLDER_ID || 'root';
         
-        console.log('🔑 Variáveis de ambiente:', {
-            hasServiceAccount: !!serviceAccountKey,
-            hasDriveFolder: !!driveFolder,
-            serviceAccountLength: serviceAccountKey ? serviceAccountKey.length : 0
-        });
-
         if (!serviceAccountKey) {
             return new Response(JSON.stringify({
-                error: 'Service Account não configurada',
-                debug: 'GOOGLE_SERVICE_ACCOUNT_KEY não encontrada'
+                error: 'Service Account não configurada'
             }), { status: 500, headers });
         }
 
-        // Verificar se é POST
+        // Verificar método
         if (context.request.method !== 'POST') {
             return new Response(JSON.stringify({
-                error: 'Método não permitido',
-                method: context.request.method
+                error: 'Método não permitido'
             }), { status: 405, headers });
         }
 
         // Processar FormData
-        console.log('📋 Processando FormData...');
-        
-        let formData;
-        try {
-            formData = await context.request.formData();
-        } catch (error) {
-            return new Response(JSON.stringify({
-                error: 'Erro ao processar FormData',
-                details: error.message
-            }), { status: 400, headers });
-        }
-
+        const formData = await context.request.formData();
         const file = formData.get('file');
         const exibidora = formData.get('exibidora');
         const pontoId = formData.get('pontoId');
         const tipo = formData.get('tipo');
 
-        console.log('�� Dados recebidos:', {
-            hasFile: !!file,
+        console.log('📋 Dados do upload:', {
             fileName: file?.name,
             fileSize: file?.size,
-            fileType: file?.type,
             exibidora,
             pontoId,
             tipo
@@ -72,104 +51,90 @@ export async function onRequest(context) {
 
         if (!file || !exibidora || !pontoId || !tipo) {
             return new Response(JSON.stringify({
-                error: 'Dados obrigatórios ausentes',
-                received: {
-                    file: !!file,
-                    exibidora: !!exibidora,
-                    pontoId: !!pontoId,
-                    tipo: !!tipo
-                }
+                error: 'Dados obrigatórios ausentes'
             }), { status: 400, headers });
         }
 
-        // Teste de autenticação
-        console.log('🔐 Testando autenticação...');
-        
-        let accessToken;
-        try {
-            accessToken = await getAccessToken(context.env);
-            console.log('✅ Token obtido com sucesso');
-        } catch (error) {
-            console.error('❌ Erro na autenticação:', error);
+        // Validar arquivo
+        const validation = validateFile(file);
+        if (!validation.valid) {
             return new Response(JSON.stringify({
-                error: 'Erro na autenticação',
-                details: error.message,
-                stack: error.stack
-            }), { status: 500, headers });
+                error: validation.error
+            }), { status: 400, headers });
         }
 
-        // Teste simples - listar arquivos do Drive
-        console.log('📂 Testando acesso ao Drive...');
-        
-        try {
-            const testResponse = await fetch('https://www.googleapis.com/drive/v3/files?pageSize=1', {
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`
-                }
-            });
+        // Obter token de acesso
+        const accessToken = await getAccessToken(context.env);
+        console.log('✅ Token obtido para upload');
 
-            console.log('📊 Status do teste:', testResponse.status);
+        // Fazer upload real
+        const uploadResult = await uploadFileToGoogleDrive(
+            file,
+            exibidora,
+            pontoId,
+            tipo,
+            accessToken,
+            driveFolder
+        );
 
-            if (!testResponse.ok) {
-                const errorText = await testResponse.text();
-                return new Response(JSON.stringify({
-                    error: 'Falha no acesso ao Drive',
-                    status: testResponse.status,
-                    details: errorText
-                }), { status: 500, headers });
-            }
+        console.log('✅ Upload concluído:', uploadResult.fileId);
 
-            console.log('✅ Acesso ao Drive confirmado');
-
-        } catch (error) {
-            return new Response(JSON.stringify({
-                error: 'Erro ao testar Drive',
-                details: error.message
-            }), { status: 500, headers });
-        }
-
-        // Se chegou até aqui, retornar sucesso do debug
-        return new Response(JSON.stringify({
-            success: true,
-            debug: 'Todos os testes passaram',
-            message: 'Upload seria executado aqui',
-            data: {
-                fileName: file.name,
-                fileSize: file.size,
-                exibidora,
-                pontoId,
-                tipo
-            }
-        }), { status: 200, headers });
+        return new Response(JSON.stringify(uploadResult), {
+            status: 200,
+            headers
+        });
 
     } catch (error) {
-        console.error('💥 Erro geral:', error);
-        
+        console.error('💥 Erro no upload:', error);
         return new Response(JSON.stringify({
-            error: 'Erro interno geral',
-            message: error.message,
-            stack: error.stack,
-            name: error.name
+            error: 'Erro interno do servidor',
+            details: error.message
         }), { status: 500, headers });
     }
 }
 
 // =============================================================================
-// 🔑 OBTER TOKEN DE ACESSO (SIMPLIFICADO PARA DEBUG)
+// ✅ VALIDAR ARQUIVO
+// =============================================================================
+function validateFile(file) {
+    const allowedTypes = [
+        'image/jpeg',
+        'image/jpg', 
+        'image/png',
+        'image/gif',
+        'image/webp',
+        'video/mp4',
+        'video/mov',
+        'video/avi',
+        'video/quicktime'
+    ];
+
+    const maxSize = 100 * 1024 * 1024; // 100MB
+
+    if (!allowedTypes.includes(file.type)) {
+        return {
+            valid: false,
+            error: `Tipo de arquivo não permitido: ${file.type}`
+        };
+    }
+
+    if (file.size > maxSize) {
+        return {
+            valid: false,
+            error: 'Arquivo muito grande. Máximo: 100MB'
+        };
+    }
+
+    return { valid: true };
+}
+
+// =============================================================================
+// 🔑 OBTER TOKEN DE ACESSO
 // =============================================================================
 async function getAccessToken(env) {
     try {
-        console.log('🔑 Obtendo token...');
-
         const serviceAccount = JSON.parse(env.GOOGLE_SERVICE_ACCOUNT_KEY);
-        
-        console.log('📋 Service Account:', {
-            hasEmail: !!serviceAccount.client_email,
-            hasPrivateKey: !!serviceAccount.private_key,
-            email: serviceAccount.client_email
-        });
 
-        // Criar JWT
         const header = {
             alg: 'RS256',
             typ: 'JWT'
@@ -184,11 +149,8 @@ async function getAccessToken(env) {
             iat: now
         };
 
-        console.log('🔧 Criando JWT...');
         const token = await createJWT(header, payload, serviceAccount.private_key);
-        
-        console.log('📡 Trocando JWT por access token...');
-        
+
         const response = await fetch('https://oauth2.googleapis.com/token', {
             method: 'POST',
             headers: {
@@ -200,16 +162,12 @@ async function getAccessToken(env) {
             })
         });
 
-        console.log('📊 Status OAuth2:', response.status);
-
         if (!response.ok) {
             const errorText = await response.text();
             throw new Error(`OAuth2 falhou: ${response.status} - ${errorText}`);
         }
 
         const tokenData = await response.json();
-        console.log('✅ Access token obtido');
-        
         return tokenData.access_token;
 
     } catch (error) {
@@ -219,7 +177,7 @@ async function getAccessToken(env) {
 }
 
 // =============================================================================
-// 🔧 CRIAR JWT (VERSÃO SIMPLIFICADA PARA DEBUG)
+// 🔧 CRIAR JWT
 // =============================================================================
 async function createJWT(header, payload, privateKey) {
     try {
@@ -228,10 +186,8 @@ async function createJWT(header, payload, privateKey) {
         
         const message = `${headerB64}.${payloadB64}`;
         
-        // Preparar chave privada
         const pemKey = privateKey.replace(/\n/g, '\n');
         
-        // Importar chave privada
         const keyData = await crypto.subtle.importKey(
             'pkcs8',
             pemToBinary(pemKey),
@@ -243,7 +199,6 @@ async function createJWT(header, payload, privateKey) {
             ['sign']
         );
         
-        // Assinar
         const signature = await crypto.subtle.sign(
             'RSASSA-PKCS1-v1_5',
             keyData,
@@ -260,7 +215,243 @@ async function createJWT(header, payload, privateKey) {
     }
 }
 
-// Funções auxiliares
+// =============================================================================
+// 📂 UPLOAD PARA GOOGLE DRIVE (IMPLEMENTAÇÃO REAL)
+// =============================================================================
+async function uploadFileToGoogleDrive(file, exibidora, pontoId, tipo, accessToken, rootFolderId) {
+    try {
+        console.log('📂 Executando upload real...');
+
+        // 1. Criar estrutura de pastas
+        const folderPath = await createFolderStructure(exibidora, tipo, accessToken, rootFolderId);
+        console.log('📁 Pasta de destino:', folderPath.folderId);
+
+        // 2. Gerar nome único
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const extension = file.name.split('.').pop();
+        const uniqueFileName = `${tipo}_${pontoId}_${timestamp}.${extension}`;
+
+        console.log('📝 Nome do arquivo:', uniqueFileName);
+
+        // 3. Converter arquivo para ArrayBuffer
+        const fileBuffer = await file.arrayBuffer();
+        console.log('📦 Arquivo convertido:', fileBuffer.byteLength, 'bytes');
+
+        // 4. Upload usando resumable upload (melhor para arquivos grandes)
+        const uploadResult = await uploadFileResumable(
+            fileBuffer,
+            uniqueFileName,
+            file.type,
+            folderPath.folderId,
+            accessToken,
+            exibidora,
+            pontoId,
+            tipo
+        );
+
+        console.log('✅ Upload finalizado:', uploadResult.id);
+
+        // 5. Tornar arquivo público
+        await makeFilePublic(uploadResult.id, accessToken);
+
+        return {
+            success: true,
+            fileId: uploadResult.id,
+            fileName: uniqueFileName,
+            fileUrl: `https://drive.google.com/uc?id=${uploadResult.id}`,
+            downloadUrl: `https://drive.google.com/file/d/${uploadResult.id}/view`,
+            uploadDate: new Date().toISOString(),
+            message: 'Upload realizado com sucesso'
+        };
+
+    } catch (error) {
+        console.error('❌ Erro no upload:', error);
+        throw error;
+    }
+}
+
+// =============================================================================
+// 📤 UPLOAD RESUMABLE (MAIS CONFIÁVEL)
+// =============================================================================
+async function uploadFileResumable(fileBuffer, fileName, mimeType, parentId, accessToken, exibidora, pontoId, tipo) {
+    try {
+        console.log('🚀 Iniciando upload resumable...');
+
+        // Metadados do arquivo
+        const metadata = {
+            name: fileName,
+            parents: [parentId],
+            description: `Arquivo de ${tipo} para ponto ${pontoId} - ${exibidora}`
+        };
+
+        // 1. Iniciar sessão de upload
+        const initResponse = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(metadata)
+        });
+
+        if (!initResponse.ok) {
+            const errorText = await initResponse.text();
+            throw new Error(`Erro ao iniciar upload: ${initResponse.status} - ${errorText}`);
+        }
+
+        const uploadUrl = initResponse.headers.get('Location');
+        if (!uploadUrl) {
+            throw new Error('URL de upload não recebida');
+        }
+
+        console.log('📍 URL de upload obtida');
+
+        // 2. Enviar arquivo
+        const uploadResponse = await fetch(uploadUrl, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': mimeType
+            },
+            body: fileBuffer
+        });
+
+        if (!uploadResponse.ok) {
+            const errorText = await uploadResponse.text();
+            throw new Error(`Erro no upload: ${uploadResponse.status} - ${errorText}`);
+        }
+
+        const result = await uploadResponse.json();
+        console.log('✅ Upload resumable concluído');
+
+        return result;
+
+    } catch (error) {
+        console.error('❌ Erro no upload resumable:', error);
+        throw error;
+    }
+}
+
+// =============================================================================
+// 📁 CRIAR ESTRUTURA DE PASTAS
+// =============================================================================
+async function createFolderStructure(exibidora, tipo, accessToken, rootFolderId) {
+    try {
+        console.log('📁 Criando estrutura de pastas...');
+
+        // CheckingOOH
+        const checkingFolder = await findOrCreateFolder('CheckingOOH', rootFolderId, accessToken);
+        
+        // Exibidora
+        const exibidoraFolder = await findOrCreateFolder(exibidora, checkingFolder.id, accessToken);
+        
+        // Tipo (Entrada/Saida)
+        const tipoFolderName = tipo === 'entrada' ? 'Entrada' : 'Saida';
+        const tipoFolder = await findOrCreateFolder(tipoFolderName, exibidoraFolder.id, accessToken);
+
+        return {
+            folderId: tipoFolder.id,
+            path: `CheckingOOH/${exibidora}/${tipoFolderName}`
+        };
+
+    } catch (error) {
+        console.error('❌ Erro ao criar estrutura:', error);
+        throw error;
+    }
+}
+
+// =============================================================================
+// 🔍 BUSCAR OU CRIAR PASTA
+// =============================================================================
+async function findOrCreateFolder(folderName, parentId, accessToken) {
+    try {
+        // Buscar pasta existente
+        const query = `name='${folderName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+        
+        const searchResponse = await fetch(
+            `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}`,
+            {
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`
+                }
+            }
+        );
+
+        if (!searchResponse.ok) {
+            throw new Error(`Erro ao buscar pasta: ${searchResponse.status}`);
+        }
+
+        const searchResult = await searchResponse.json();
+
+        if (searchResult.files && searchResult.files.length > 0) {
+            console.log(`📁 Pasta encontrada: ${folderName}`);
+            return searchResult.files[0];
+        }
+
+        // Criar nova pasta
+        console.log(`📁 Criando pasta: ${folderName}`);
+        
+        const createResponse = await fetch('https://www.googleapis.com/drive/v3/files', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                name: folderName,
+                mimeType: 'application/vnd.google-apps.folder',
+                parents: [parentId]
+            })
+        });
+
+        if (!createResponse.ok) {
+            const errorText = await createResponse.text();
+            throw new Error(`Erro ao criar pasta: ${createResponse.status} - ${errorText}`);
+        }
+
+        const newFolder = await createResponse.json();
+        console.log(`✅ Pasta criada: ${folderName}`);
+        
+        return newFolder;
+
+    } catch (error) {
+        console.error(`❌ Erro com pasta ${folderName}:`, error);
+        throw error;
+    }
+}
+
+// =============================================================================
+// 🌐 TORNAR ARQUIVO PÚBLICO
+// =============================================================================
+async function makeFilePublic(fileId, accessToken) {
+    try {
+        console.log('🌐 Tornando arquivo público...');
+
+        const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                role: 'reader',
+                type: 'anyone'
+            })
+        });
+
+        if (response.ok) {
+            console.log('✅ Arquivo público');
+        } else {
+            console.warn('⚠️ Não foi possível tornar público');
+        }
+
+    } catch (error) {
+        console.warn('⚠️ Erro ao tornar público:', error);
+    }
+}
+
+// =============================================================================
+// 🔧 FUNÇÕES AUXILIARES
+// =============================================================================
 function base64UrlEncode(data) {
     let base64;
     if (typeof data === 'string') {
