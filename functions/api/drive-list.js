@@ -44,10 +44,9 @@ export async function onRequest(context) {
         });
 
         // Verificar variáveis de ambiente
-        const driveApiKey = context.env.GOOGLE_DRIVE_API_KEY;
         const serviceAccountKey = context.env.GOOGLE_SERVICE_ACCOUNT_KEY;
         
-        if (!driveApiKey && !serviceAccountKey) {
+        if (!serviceAccountKey) {
             return new Response(JSON.stringify({ 
                 error: 'Credenciais do Google Drive não configuradas' 
             }), {
@@ -86,23 +85,17 @@ export async function onRequest(context) {
 }
 
 // =============================================================================
-// 🔑 OBTER TOKEN DE ACESSO (REUTILIZADO)
+// 🔑 OBTER TOKEN DE ACESSO
 // =============================================================================
 async function getAccessToken(env) {
     try {
         console.log('🔑 Obtendo token de acesso...');
 
-        // Se tem Service Account Key, usar OAuth2
-        if (env.GOOGLE_SERVICE_ACCOUNT_KEY) {
-            return await getServiceAccountToken(env.GOOGLE_SERVICE_ACCOUNT_KEY);
+        if (!env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+            throw new Error('Service Account Key não configurada');
         }
 
-        // Fallback para API Key (limitado)
-        if (env.GOOGLE_DRIVE_API_KEY) {
-            return env.GOOGLE_DRIVE_API_KEY;
-        }
-
-        throw new Error('Nenhuma credencial válida encontrada');
+        return await getServiceAccountToken(env.GOOGLE_SERVICE_ACCOUNT_KEY);
 
     } catch (error) {
         console.error('❌ Erro ao obter token de acesso:', error);
@@ -111,13 +104,13 @@ async function getAccessToken(env) {
 }
 
 // =============================================================================
-// 🔐 OBTER TOKEN DA SERVICE ACCOUNT (REUTILIZADO)
+// 🔐 OBTER TOKEN DA SERVICE ACCOUNT (CORRIGIDO)
 // =============================================================================
 async function getServiceAccountToken(serviceAccountKeyJson) {
     try {
         const serviceAccount = JSON.parse(serviceAccountKeyJson);
         
-        // Criar JWT simplificado
+        // Criar JWT com assinatura real
         const header = {
             alg: 'RS256',
             typ: 'JWT'
@@ -126,7 +119,7 @@ async function getServiceAccountToken(serviceAccountKeyJson) {
         const now = Math.floor(Date.now() / 1000);
         const payload = {
             iss: serviceAccount.client_email,
-            scope: 'https://www.googleapis.com/auth/drive.readonly',
+            scope: 'https://www.googleapis.com/auth/drive', // ✅ Escopo completo
             aud: 'https://oauth2.googleapis.com/token',
             exp: now + 3600,
             iat: now
@@ -147,7 +140,8 @@ async function getServiceAccountToken(serviceAccountKeyJson) {
         });
 
         if (!response.ok) {
-            throw new Error(`Erro OAuth2: ${response.status}`);
+            const errorText = await response.text();
+            throw new Error(`Erro OAuth2: ${response.status} - ${errorText}`);
         }
 
         const tokenData = await response.json();
@@ -160,20 +154,74 @@ async function getServiceAccountToken(serviceAccountKeyJson) {
 }
 
 // =============================================================================
-// 🔧 CRIAR JWT SIMPLIFICADO (REUTILIZADO)
+// 🔧 CRIAR JWT COM ASSINATURA REAL (CORRIGIDO)
 // =============================================================================
 async function createJWT(header, payload, privateKey) {
-    const encoder = new TextEncoder();
+    try {
+        // Codificar header e payload
+        const headerB64 = base64UrlEncode(JSON.stringify(header));
+        const payloadB64 = base64UrlEncode(JSON.stringify(payload));
+        
+        const message = `${headerB64}.${payloadB64}`;
+        
+        // Preparar chave privada
+        const pemKey = privateKey.replace(/\n/g, '\n');
+        
+        // Importar chave privada
+        const keyData = await crypto.subtle.importKey(
+            'pkcs8',
+            pemToBinary(pemKey),
+            {
+                name: 'RSASSA-PKCS1-v1_5',
+                hash: 'SHA-256'
+            },
+            false,
+            ['sign']
+        );
+        
+        // Assinar
+        const signature = await crypto.subtle.sign(
+            'RSASSA-PKCS1-v1_5',
+            keyData,
+            new TextEncoder().encode(message)
+        );
+        
+        const signatureB64 = base64UrlEncode(signature);
+        
+        return `${message}.${signatureB64}`;
+
+    } catch (error) {
+        console.error('❌ Erro ao criar JWT:', error);
+        throw error;
+    }
+}
+
+// =============================================================================
+// 🔧 FUNÇÕES AUXILIARES PARA JWT
+// =============================================================================
+function base64UrlEncode(data) {
+    let base64;
+    if (typeof data === 'string') {
+        base64 = btoa(data);
+    } else {
+        // ArrayBuffer
+        base64 = btoa(String.fromCharCode(...new Uint8Array(data)));
+    }
+    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+function pemToBinary(pem) {
+    const lines = pem.split('\n');
+    const encoded = lines
+        .filter(line => !line.includes('-----'))
+        .join('');
     
-    const headerB64 = btoa(JSON.stringify(header));
-    const payloadB64 = btoa(JSON.stringify(payload));
-    
-    const message = `${headerB64}.${payloadB64}`;
-    
-    // Simplificado para demonstração
-    const signature = btoa(message);
-    
-    return `${message}.${signature}`;
+    const binary = atob(encoded);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes.buffer;
 }
 
 // =============================================================================
@@ -212,7 +260,8 @@ async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, accessToken, r
         );
 
         if (!response.ok) {
-            throw new Error(`Erro ao listar arquivos: ${response.status}`);
+            const errorText = await response.text();
+            throw new Error(`Erro ao listar arquivos: ${response.status} - ${errorText}`);
         }
 
         const listResult = await response.json();
@@ -314,7 +363,8 @@ async function findFolder(folderName, parentId, accessToken) {
         );
 
         if (!response.ok) {
-            throw new Error(`Erro ao buscar pasta: ${response.status}`);
+            const errorText = await response.text();
+            throw new Error(`Erro ao buscar pasta: ${response.status} - ${errorText}`);
         }
 
         const result = await response.json();
@@ -342,33 +392,4 @@ function getFileViewUrl(file) {
     
     // Para outros tipos, usar URL de visualização
     return file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`;
-}
-
-// =============================================================================
-// 📊 OBTER ESTATÍSTICAS DOS ARQUIVOS
-// =============================================================================
-async function getFileStats(files) {
-    const stats = {
-        totalFiles: files.length,
-        totalSize: 0,
-        images: 0,
-        videos: 0,
-        others: 0
-    };
-
-    files.forEach(file => {
-        stats.totalSize += file.size || 0;
-        
-        if (file.mimeType) {
-            if (file.mimeType.startsWith('image/')) {
-                stats.images++;
-            } else if (file.mimeType.startsWith('video/')) {
-                stats.videos++;
-            } else {
-                stats.others++;
-            }
-        }
-    });
-
-    return stats;
 }
