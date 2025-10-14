@@ -1,5 +1,5 @@
 // =============================================================================
-// 📤 CLOUDFLARE PAGES FUNCTION - GOOGLE DRIVE UPLOAD
+// 📤 CLOUDFLARE PAGES FUNCTION - GOOGLE DRIVE UPLOAD (CORRIGIDO)
 // =============================================================================
 
 export async function onRequest(context) {
@@ -33,10 +33,9 @@ export async function onRequest(context) {
         }
 
         // Verificar variáveis de ambiente
-        const driveApiKey = context.env.GOOGLE_DRIVE_API_KEY;
         const serviceAccountKey = context.env.GOOGLE_SERVICE_ACCOUNT_KEY;
         
-        if (!driveApiKey && !serviceAccountKey) {
+        if (!serviceAccountKey) {
             return new Response(JSON.stringify({ 
                 error: 'Credenciais do Google Drive não configuradas' 
             }), {
@@ -148,23 +147,17 @@ function validateFile(file) {
 }
 
 // =============================================================================
-// 🔑 OBTER TOKEN DE ACESSO
+// 🔑 OBTER TOKEN DE ACESSO (CORRIGIDO)
 // =============================================================================
 async function getAccessToken(env) {
     try {
         console.log('🔑 Obtendo token de acesso...');
 
-        // Se tem Service Account Key, usar OAuth2
-        if (env.GOOGLE_SERVICE_ACCOUNT_KEY) {
-            return await getServiceAccountToken(env.GOOGLE_SERVICE_ACCOUNT_KEY);
+        if (!env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+            throw new Error('Service Account Key não configurada');
         }
 
-        // Fallback para API Key (limitado)
-        if (env.GOOGLE_DRIVE_API_KEY) {
-            return env.GOOGLE_DRIVE_API_KEY;
-        }
-
-        throw new Error('Nenhuma credencial válida encontrada');
+        return await getServiceAccountToken(env.GOOGLE_SERVICE_ACCOUNT_KEY);
 
     } catch (error) {
         console.error('❌ Erro ao obter token de acesso:', error);
@@ -173,13 +166,13 @@ async function getAccessToken(env) {
 }
 
 // =============================================================================
-// 🔐 OBTER TOKEN DA SERVICE ACCOUNT
+// 🔐 OBTER TOKEN DA SERVICE ACCOUNT (CORRIGIDO)
 // =============================================================================
 async function getServiceAccountToken(serviceAccountKeyJson) {
     try {
         const serviceAccount = JSON.parse(serviceAccountKeyJson);
         
-        // Criar JWT
+        // Criar JWT com assinatura real
         const header = {
             alg: 'RS256',
             typ: 'JWT'
@@ -188,14 +181,12 @@ async function getServiceAccountToken(serviceAccountKeyJson) {
         const now = Math.floor(Date.now() / 1000);
         const payload = {
             iss: serviceAccount.client_email,
-            scope: 'https://www.googleapis.com/auth/drive.file',
+            scope: 'https://www.googleapis.com/auth/drive', // ✅ Escopo completo
             aud: 'https://oauth2.googleapis.com/token',
             exp: now + 3600,
             iat: now
         };
 
-        // Implementação simplificada do JWT
-        // Em produção, usar biblioteca JWT adequada
         const token = await createJWT(header, payload, serviceAccount.private_key);
 
         // Trocar JWT por access token
@@ -211,7 +202,8 @@ async function getServiceAccountToken(serviceAccountKeyJson) {
         });
 
         if (!response.ok) {
-            throw new Error(`Erro OAuth2: ${response.status}`);
+            const errorText = await response.text();
+            throw new Error(`Erro OAuth2: ${response.status} - ${errorText}`);
         }
 
         const tokenData = await response.json();
@@ -224,23 +216,74 @@ async function getServiceAccountToken(serviceAccountKeyJson) {
 }
 
 // =============================================================================
-// 🔧 CRIAR JWT (IMPLEMENTAÇÃO SIMPLIFICADA)
+// 🔧 CRIAR JWT COM ASSINATURA REAL (CORRIGIDO)
 // =============================================================================
 async function createJWT(header, payload, privateKey) {
-    // Esta é uma implementação simplificada
-    // Em produção, use uma biblioteca JWT adequada
+    try {
+        // Codificar header e payload
+        const headerB64 = base64UrlEncode(JSON.stringify(header));
+        const payloadB64 = base64UrlEncode(JSON.stringify(payload));
+        
+        const message = `${headerB64}.${payloadB64}`;
+        
+        // Preparar chave privada
+        const pemKey = privateKey.replace(/\n/g, '\n');
+        
+        // Importar chave privada
+        const keyData = await crypto.subtle.importKey(
+            'pkcs8',
+            pemToBinary(pemKey),
+            {
+                name: 'RSASSA-PKCS1-v1_5',
+                hash: 'SHA-256'
+            },
+            false,
+            ['sign']
+        );
+        
+        // Assinar
+        const signature = await crypto.subtle.sign(
+            'RSASSA-PKCS1-v1_5',
+            keyData,
+            new TextEncoder().encode(message)
+        );
+        
+        const signatureB64 = base64UrlEncode(signature);
+        
+        return `${message}.${signatureB64}`;
+
+    } catch (error) {
+        console.error('❌ Erro ao criar JWT:', error);
+        throw error;
+    }
+}
+
+// =============================================================================
+// 🔧 FUNÇÕES AUXILIARES PARA JWT
+// =============================================================================
+function base64UrlEncode(data) {
+    let base64;
+    if (typeof data === 'string') {
+        base64 = btoa(data);
+    } else {
+        // ArrayBuffer
+        base64 = btoa(String.fromCharCode(...new Uint8Array(data)));
+    }
+    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+function pemToBinary(pem) {
+    const lines = pem.split('\n');
+    const encoded = lines
+        .filter(line => !line.includes('-----'))
+        .join('');
     
-    const encoder = new TextEncoder();
-    
-    const headerB64 = btoa(JSON.stringify(header));
-    const payloadB64 = btoa(JSON.stringify(payload));
-    
-    const message = `${headerB64}.${payloadB64}`;
-    
-    // Para demonstração - em produção, implementar assinatura RSA adequada
-    const signature = btoa(message); // Simplificado
-    
-    return `${message}.${signature}`;
+    const binary = atob(encoded);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes.buffer;
 }
 
 // =============================================================================
@@ -374,7 +417,8 @@ async function findOrCreateFolder(folderName, parentId, accessToken) {
         );
 
         if (!searchResponse.ok) {
-            throw new Error(`Erro ao buscar pasta: ${searchResponse.status}`);
+            const errorText = await searchResponse.text();
+            throw new Error(`Erro ao buscar pasta: ${searchResponse.status} - ${errorText}`);
         }
 
         const searchResult = await searchResponse.json();
@@ -402,7 +446,8 @@ async function findOrCreateFolder(folderName, parentId, accessToken) {
         });
 
         if (!createResponse.ok) {
-            throw new Error(`Erro ao criar pasta: ${createResponse.status}`);
+            const errorText = await createResponse.text();
+            throw new Error(`Erro ao criar pasta: ${createResponse.status} - ${errorText}`);
         }
 
         const newFolder = await createResponse.json();
