@@ -60,7 +60,7 @@ const CONFIG = {
     // 🧪 MODO DEMONSTRAÇÃO
     DEMO: {
         // true = usar dados fictícios, false = usar APIs reais
-        ENABLED: true, // ⚠️ Altere para false após configurar as variáveis de ambiente
+        ENABLED: false, // ⚠️ Altere para false após configurar as variáveis de ambiente
         
         // Dados fictícios para demonstração
         SAMPLE_DATA: [
