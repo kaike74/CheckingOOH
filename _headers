@@ -1,0 +1,54 @@
+/*
+  Access-Control-Allow-Origin: *
+  Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS
+  Access-Control-Allow-Headers: Content-Type, Authorization
+  X-Frame-Options: SAMEORIGIN
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=*, microphone=(), camera=*
+
+# Cache para assets estáticos
+/js/*
+  Cache-Control: public, max-age=86400, s-maxage=86400
+
+/css/*
+  Cache-Control: public, max-age=86400, s-maxage=86400
+
+*.css
+  Cache-Control: public, max-age=86400, s-maxage=86400
+
+*.js
+  Cache-Control: public, max-age=86400, s-maxage=86400
+
+# Cache para imagens
+*.png
+  Cache-Control: public, max-age=2592000, s-maxage=2592000
+
+*.jpg
+  Cache-Control: public, max-age=2592000, s-maxage=2592000
+
+*.jpeg
+  Cache-Control: public, max-age=2592000, s-maxage=2592000
+
+*.gif
+  Cache-Control: public, max-age=2592000, s-maxage=2592000
+
+*.webp
+  Cache-Control: public, max-age=2592000, s-maxage=2592000
+
+*.svg
+  Cache-Control: public, max-age=2592000, s-maxage=2592000
+
+# APIs - sem cache
+/api/*
+  Cache-Control: no-store, no-cache, must-revalidate
+  Access-Control-Allow-Origin: *
+  Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS
+  Access-Control-Allow-Headers: Content-Type, Authorization
+
+# Página principal
+/
+  Cache-Control: public, max-age=3600, s-maxage=3600
+
+*.html
+  Cache-Control: public, max-age=3600, s-maxage=3600
