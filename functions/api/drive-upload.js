@@ -16,6 +16,7 @@ export async function onRequest(context) {
 
     try {
         console.log('📤 Iniciando upload para Google Drive...');
+        console.log('🔄 VERSÃO: v2.0-corrected - 2025-01-14T18:30:00Z');
 
         if (context.request.method !== 'POST') {
             throw new Error('Método não permitido');
