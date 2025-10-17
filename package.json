@@ -1,15 +1,20 @@
 {
   "name": "checking-ooh",
-  "version": "1.0.0",
-  "description": "Sistema de Checking OOH - Monitoramento de Painéis de Mídia Externa",
+  "version": "3.1.0",
+  "description": "Sistema de Checking OOH - Monitoramento de Painéis de Mídia Externa - E-MÍDIAS",
+  "main": "index.html",
   "scripts": {
     "dev": "wrangler pages dev .",
-    "deploy": "wrangler pages deploy . --project-name=checking-ooh",
+    "deploy": "wrangler pages deploy . --project-name=checkingooh",
     "deploy:dev": "wrangler pages deploy . --project-name=checking-ooh-dev",
     "preview": "wrangler pages dev . --port=3000",
     "build": "echo 'No build step required - static files'",
     "test": "echo 'No tests specified'",
-    "lint": "echo 'No linting configured'"
+    "lint": "echo 'No linting configured'",
+    "logs": "wrangler pages deployment tail",
+    "env": "wrangler pages secret list",
+    "clean": "rm -rf .wrangler",
+    "status": "curl https://checkingooh.emidiastec.com.br/api/debug-env"
   },
   "keywords": [
     "ooh",
@@ -19,23 +24,33 @@
     "cloudflare",
     "notion",
     "google-drive",
-    "emidias"
+    "emidias",
+    "checking",
+    "upload",
+    "serverless"
   ],
-  "author": "E-MÍDIAS",
+  "author": {
+    "name": "E-MÍDIAS",
+    "email": "contato@emidias.com.br",
+    "url": "https://emidias.com.br"
+  },
   "license": "MIT",
   "devDependencies": {
     "wrangler": "^4.42.2"
   },
+  "dependencies": {},
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/SEU_USUARIO/checking-ooh.git"
+    "url": "https://github.com/kaike74/checking-ooh.git"
   },
-  "homepage": "https://checking-ooh.pages.dev",
+  "homepage": "https://checkingooh.emidiastec.com.br",
   "bugs": {
-    "url": "https://github.com/SEU_USUARIO/checking-ooh/issues"
+    "url": "https://github.com/kaike74/checking-ooh/issues",
+    "email": "contato@emidias.com.br"
   },
   "files": [
     "index.html",
@@ -44,6 +59,20 @@
     "functions/",
     "wrangler.toml",
     "_headers",
-    "README.md"
-  ]
+    "README.md",
+    "package.json"
+  ],
+  "config": {
+    "project": "checkingooh",
+    "domain": "checkingooh.emidiastec.com.br",
+    "version": "v3.1-estrutura-corrigida"
+  },
+  "browserslist": [
+    "> 1%",
+    "last 2 versions",
+    "not dead",
+    "not ie 11"
+  ],
+  "private": false,
+  "type": "module"
 }
