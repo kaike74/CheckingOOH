@@ -503,59 +503,64 @@ async function findOrCreateFolderUltra(folderName, parentId, accessToken) {
 }
 
 // =============================================================================
-// 📤 UPLOAD SIMPLES ULTRA (SEM MULTIPART)
+// 📤 UPLOAD SIMPLES ULTRA (MÉTODO CORRETO)
 // =============================================================================
 async function uploadFileSimpleUltra(fileBuffer, fileName, mimeType, parentId, accessToken) {
     try {
-        console.log('📤 Upload simples ultra:', { fileName, mimeType, parentId });
+        console.log('📤 Upload simples ultra CORRIGIDO:', { fileName, mimeType, parentId });
 
-        // Primeiro, criar metadata do arquivo
-        console.log('📋 Criando metadata...');
-        const metadataResponse = await fetch('https://www.googleapis.com/drive/v3/files', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                name: fileName,
-                parents: [parentId]
-            })
-        });
+        // Usar uploadType=multipart para enviar metadata + conteúdo em uma única requisição
+        const boundary = '-------314159265358979323846';
+        const delimiter = `\r\n--${boundary}\r\n`;
+        const close_delim = `\r\n--${boundary}--`;
 
-        if (!metadataResponse.ok) {
-            const errorText = await metadataResponse.text();
-            throw new Error(`Erro ao criar metadata: ${metadataResponse.status} - ${errorText}`);
-        }
+        // Preparar metadata
+        const metadata = {
+            name: fileName,
+            parents: [parentId]
+        };
 
-        const fileMetadata = await metadataResponse.json();
-        console.log('✅ Metadata criada:', fileMetadata.id);
+        // Construir corpo multipart
+        let body = delimiter;
+        body += 'Content-Type: application/json\r\n\r\n';
+        body += JSON.stringify(metadata) + delimiter;
+        body += `Content-Type: ${mimeType}\r\n`;
+        body += 'Content-Transfer-Encoding: base64\r\n\r\n';
+        
+        // Converter buffer para base64
+        const base64Data = btoa(String.fromCharCode(...new Uint8Array(fileBuffer)));
+        body += base64Data;
+        body += close_delim;
 
-        // Depois, fazer upload do conteúdo
-        console.log('📤 Fazendo upload do conteúdo...');
+        console.log('📦 Corpo preparado, tamanho:', body.length);
+
+        // Fazer upload
         const uploadResponse = await fetch(
-            `https://www.googleapis.com/upload/drive/v3/files/${fileMetadata.id}?uploadType=media`,
+            'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
             {
-                method: 'PATCH',
+                method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${accessToken}`,
-                    'Content-Type': mimeType
+                    'Content-Type': `multipart/related; boundary="${boundary}"`
                 },
-                body: fileBuffer
+                body: body
             }
         );
 
+        console.log('📡 Response status:', uploadResponse.status);
+
         if (!uploadResponse.ok) {
             const errorText = await uploadResponse.text();
+            console.error('❌ Erro detalhado:', errorText);
             throw new Error(`Erro no upload: ${uploadResponse.status} - ${errorText}`);
         }
 
         const uploadResult = await uploadResponse.json();
-        console.log('✅ Upload simples concluído');
+        console.log('✅ Upload simples CORRIGIDO concluído:', uploadResult.id);
         return uploadResult;
 
     } catch (error) {
-        console.error('❌ Erro no upload simples:', error);
+        console.error('❌ Erro no upload simples CORRIGIDO:', error);
         throw error;
     }
 }
