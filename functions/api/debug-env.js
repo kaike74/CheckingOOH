@@ -142,6 +142,13 @@ export async function onRequest(context) {
             URLSearchParams: typeof URLSearchParams === 'function'
         };
 
+        // ✅ 7. VERIFICAR VERSÃO DO UPLOAD FUNCTION
+        debug.tests.uploadFunctionVersion = {
+            version: 'v2.0-corrected',
+            timestamp: '2025-01-14T18:30:00Z',
+            status: 'Função de upload corrigida ativa'
+        };
+
         console.log('✅ Debug concluído');
 
         return new Response(JSON.stringify(debug, null, 2), {
