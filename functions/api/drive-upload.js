@@ -401,29 +401,24 @@ async function uploadToGoogleDriveUltra(file, exibidora, pontoId, tipo, accessTo
 }
 
 // =============================================================================
-// 📁 CRIAR ESTRUTURA DE PASTAS ULTRA
+// 📁 CRIAR ESTRUTURA DE PASTAS ULTRA (CORRIGIDA)
 // =============================================================================
 async function createFolderStructureUltra(exibidora, tipo, accessToken, rootFolderId) {
     try {
-        console.log('📁 Criando estrutura ultra:', { exibidora, tipo, rootFolderId });
+        console.log('📁 Criando estrutura CORRIGIDA:', { exibidora, tipo, rootFolderId });
 
-        // Passo 1: CheckingOOH
-        const checkingFolder = await findOrCreateFolderUltra(
-            'CheckingOOH', 
-            rootFolderId, 
-            accessToken
-        );
-        console.log('📂 Pasta CheckingOOH:', checkingFolder.id);
-
-        // Passo 2: Exibidora
+        // ✅ CORREÇÃO: rootFolderId JÁ É a pasta CheckingOOH
+        // Não precisamos criar outra pasta CheckingOOH!
+        
+        // Passo 1: Criar pasta da Exibidora diretamente na CheckingOOH
         const exibidoraFolder = await findOrCreateFolderUltra(
             exibidora, 
-            checkingFolder.id, 
+            rootFolderId,  // <- Usar diretamente a pasta CheckingOOH existente
             accessToken
         );
         console.log('📂 Pasta Exibidora:', exibidoraFolder.id);
 
-        // Passo 3: Tipo (Entrada/Saida)
+        // Passo 2: Criar pasta do Tipo (Entrada/Saida) dentro da Exibidora
         const tipoFolderName = tipo === 'entrada' ? 'Entrada' : 'Saida';
         const tipoFolder = await findOrCreateFolderUltra(
             tipoFolderName, 
