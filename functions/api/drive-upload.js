@@ -1,5 +1,5 @@
 // =============================================================================
-// 📤 CLOUDFLARE PAGES FUNCTION - GOOGLE DRIVE UPLOAD (VERSÃO ULTRA CORRIGIDA V4)
+// 📤 CLOUDFLARE PAGES FUNCTION - GOOGLE DRIVE UPLOAD (VERSÃO V5 - SHARED DRIVE FIX)
 // =============================================================================
 
 export async function onRequest(context) {
@@ -15,8 +15,8 @@ export async function onRequest(context) {
     }
 
     try {
-        console.log('📤 === INICIANDO UPLOAD ULTRA V4 ===');
-        console.log('🆔 Versão: v4.0-upload-fix - 2025-10-17T20:54:00Z');
+        console.log('📤 === INICIANDO UPLOAD V5 - SHARED DRIVE FIX ===');
+        console.log('🆔 Versão: v5.0-shared-drive-fix - 2025-10-17T21:10:00Z');
 
         if (context.request.method !== 'POST') {
             throw new Error('Método não permitido');
@@ -97,7 +97,7 @@ export async function onRequest(context) {
         );
         console.log('✅ ETAPA 5: Upload concluído');
 
-        console.log('🎉 === UPLOAD ULTRA V4 CONCLUÍDO ===');
+        console.log('🎉 === UPLOAD V5 CONCLUÍDO ===');
         return new Response(JSON.stringify(uploadResult), {
             status: 200,
             headers
@@ -115,7 +115,7 @@ export async function onRequest(context) {
             error: 'Erro no upload',
             details: error.message,
             timestamp: new Date().toISOString(),
-            version: 'v4.0-upload-fix'
+            version: 'v5.0-shared-drive-fix'
         }), {
             status: 500,
             headers
@@ -311,9 +311,9 @@ async function uploadToGoogleDriveUltra(file, exibidora, pontoId, tipo, accessTo
     try {
         console.log('📤 Iniciando upload ultra...');
 
-        // ✅ PASSO 1: VERIFICAR ACESSO À PASTA RAIZ
+        // ✅ PASSO 1: VERIFICAR ACESSO À PASTA RAIZ (COM SUPORTE A SHARED DRIVES)
         console.log('🔍 Verificando acesso à pasta raiz...');
-        const rootResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${rootFolderId}`, {
+        const rootResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${rootFolderId}?supportsAllDrives=true`, {
             headers: { 'Authorization': `Bearer ${accessToken}` }
         });
 
@@ -349,7 +349,7 @@ async function uploadToGoogleDriveUltra(file, exibidora, pontoId, tipo, accessTo
         const fileBuffer = await file.arrayBuffer();
         console.log('📊 Buffer size:', fileBuffer.byteLength);
 
-        // ✅ PASSO 5: UPLOAD MULTIPART (CORRIGIDO)
+        // ✅ PASSO 5: UPLOAD MULTIPART (COM SUPORTE A SHARED DRIVES)
         console.log('📤 Fazendo upload multipart...');
         const uploadResult = await uploadFileMultipartUltra(
             fileBuffer,
@@ -420,7 +420,7 @@ async function createFolderStructureUltra(exibidora, tipo, accessToken, rootFold
 }
 
 // =============================================================================
-// 🔍 BUSCAR OU CRIAR PASTA ULTRA
+// 🔍 BUSCAR OU CRIAR PASTA ULTRA (COM SUPORTE A SHARED DRIVES)
 // =============================================================================
 async function findOrCreateFolderUltra(folderName, parentId, accessToken) {
     try {
@@ -429,7 +429,8 @@ async function findOrCreateFolderUltra(folderName, parentId, accessToken) {
         const escapedName = folderName.replace(/'/g, "\\'");
         const query = `name='${escapedName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
         
-        const searchUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name)`;
+        // ✅ ADICIONADO: supportsAllDrives=true e includeItemsFromAllDrives=true
+        const searchUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name)&supportsAllDrives=true&includeItemsFromAllDrives=true`;
         
         const searchResponse = await fetch(searchUrl, {
             headers: { 'Authorization': `Bearer ${accessToken}` }
@@ -448,7 +449,8 @@ async function findOrCreateFolderUltra(folderName, parentId, accessToken) {
 
         console.log(`📁 Criando pasta "${folderName}"...`);
         
-        const createResponse = await fetch('https://www.googleapis.com/drive/v3/files', {
+        // ✅ ADICIONADO: supportsAllDrives=true
+        const createResponse = await fetch('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${accessToken}`,
@@ -477,36 +479,30 @@ async function findOrCreateFolderUltra(folderName, parentId, accessToken) {
 }
 
 // =============================================================================
-// 📤 UPLOAD MULTIPART (SOLUÇÃO PARA CLOUDFLARE)
+// 📤 UPLOAD MULTIPART (COM SUPORTE A SHARED DRIVES)
 // =============================================================================
 async function uploadFileMultipartUltra(fileBuffer, fileName, mimeType, parentId, accessToken) {
     try {
         console.log('📤 Upload multipart:', { fileName, mimeType, parentId });
 
-        // Criar metadata
         const metadata = {
             name: fileName,
             parents: [parentId]
         };
 
-        // Criar boundary
         const boundary = '-------314159265358979323846';
         
-        // Criar corpo multipart
         const delimiter = `\r\n--${boundary}\r\n`;
         const closeDelimiter = `\r\n--${boundary}--`;
 
-        // Parte 1: Metadata
         const metadataPart = delimiter + 
             'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
             JSON.stringify(metadata);
 
-        // Parte 2: Arquivo
         const filePart = delimiter +
             `Content-Type: ${mimeType}\r\n` +
             'Content-Transfer-Encoding: base64\r\n\r\n';
 
-        // Converter buffer para base64
         const base64File = btoa(
             new Uint8Array(fileBuffer).reduce(
                 (data, byte) => data + String.fromCharCode(byte),
@@ -514,13 +510,13 @@ async function uploadFileMultipartUltra(fileBuffer, fileName, mimeType, parentId
             )
         );
 
-        // Combinar tudo
         const multipartBody = metadataPart + filePart + base64File + closeDelimiter;
 
         console.log('📤 Enviando para Google Drive...');
         
+        // ✅ ADICIONADO: supportsAllDrives=true
         const uploadResponse = await fetch(
-            'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+            'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true',
             {
                 method: 'POST',
                 headers: {
@@ -550,13 +546,14 @@ async function uploadFileMultipartUltra(fileBuffer, fileName, mimeType, parentId
 }
 
 // =============================================================================
-// 🌐 TORNAR ARQUIVO PÚBLICO ULTRA
+// 🌐 TORNAR ARQUIVO PÚBLICO ULTRA (COM SUPORTE A SHARED DRIVES)
 // =============================================================================
 async function makeFilePublicUltra(fileId, accessToken) {
     try {
         console.log('🌐 Tornando arquivo público:', fileId);
 
-        const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
+        // ✅ ADICIONADO: supportsAllDrives=true
+        const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions?supportsAllDrives=true`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${accessToken}`,
