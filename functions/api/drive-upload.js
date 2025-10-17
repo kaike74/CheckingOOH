@@ -1,5 +1,5 @@
 // =============================================================================
-// 📤 CLOUDFLARE PAGES FUNCTION - GOOGLE DRIVE UPLOAD (VERSÃO ULTRA CORRIGIDA)
+// 📤 CLOUDFLARE PAGES FUNCTION - GOOGLE DRIVE UPLOAD (VERSÃO ULTRA CORRIGIDA V4)
 // =============================================================================
 
 export async function onRequest(context) {
@@ -15,8 +15,8 @@ export async function onRequest(context) {
     }
 
     try {
-        console.log('📤 === INICIANDO UPLOAD ULTRA CORRIGIDO ===');
-        console.log('🆔 Versão: v3.1-estrutura-corrigida - 2025-10-17T19:00:00Z');
+        console.log('📤 === INICIANDO UPLOAD ULTRA V4 ===');
+        console.log('🆔 Versão: v4.0-upload-fix - 2025-10-17T20:54:00Z');
 
         if (context.request.method !== 'POST') {
             throw new Error('Método não permitido');
@@ -81,7 +81,6 @@ export async function onRequest(context) {
                 if (attempts >= maxAttempts) {
                     throw new Error(`Falha ao obter token após ${maxAttempts} tentativas: ${error.message}`);
                 }
-                // Aguardar antes de tentar novamente
                 await new Promise(resolve => setTimeout(resolve, 1000));
             }
         }
@@ -98,7 +97,7 @@ export async function onRequest(context) {
         );
         console.log('✅ ETAPA 5: Upload concluído');
 
-        console.log('🎉 === UPLOAD ULTRA CORRIGIDO CONCLUÍDO ===');
+        console.log('🎉 === UPLOAD ULTRA V4 CONCLUÍDO ===');
         return new Response(JSON.stringify(uploadResult), {
             status: 200,
             headers
@@ -116,7 +115,7 @@ export async function onRequest(context) {
             error: 'Erro no upload',
             details: error.message,
             timestamp: new Date().toISOString(),
-            version: 'v3.1-estrutura-corrigida'
+            version: 'v4.0-upload-fix'
         }), {
             status: 500,
             headers
@@ -173,7 +172,6 @@ async function getAccessTokenUltra(env) {
     try {
         console.log('🔑 Iniciando obtenção do token...');
         
-        // Parse do Service Account
         let serviceAccount;
         try {
             serviceAccount = JSON.parse(env.GOOGLE_SERVICE_ACCOUNT_KEY);
@@ -183,7 +181,6 @@ async function getAccessTokenUltra(env) {
             throw new Error('Service Account JSON inválido');
         }
 
-        // Verificar campos obrigatórios
         if (!serviceAccount.client_email || !serviceAccount.private_key) {
             throw new Error('Service Account incompleta - faltam campos obrigatórios');
         }
@@ -191,12 +188,10 @@ async function getAccessTokenUltra(env) {
         console.log('📧 Client email:', serviceAccount.client_email);
         console.log('🔐 Private key presente:', !!serviceAccount.private_key);
 
-        // Criar JWT de forma mais robusta
         console.log('🔧 Criando JWT...');
         const jwt = await createJWTUltra(serviceAccount);
         console.log('✅ JWT criado');
 
-        // Trocar JWT por access token
         console.log('🔄 Trocando JWT por access token...');
         const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
             method: 'POST',
@@ -238,13 +233,11 @@ async function createJWTUltra(serviceAccount) {
     try {
         console.log('🔧 Criando JWT ultra robusto...');
 
-        // Preparar header
         const header = {
             alg: 'RS256',
             typ: 'JWT'
         };
 
-        // Preparar payload
         const now = Math.floor(Date.now() / 1000);
         const payload = {
             iss: serviceAccount.client_email,
@@ -262,27 +255,21 @@ async function createJWTUltra(serviceAccount) {
             exp: payload.exp
         });
 
-        // Codificar header e payload
         const headerB64 = base64UrlEncodeUltra(JSON.stringify(header));
         const payloadB64 = base64UrlEncodeUltra(JSON.stringify(payload));
         const message = `${headerB64}.${payloadB64}`;
 
         console.log('🔐 Processando chave privada...');
         
-        // Preparar chave privada
         let privateKey = serviceAccount.private_key;
-        
-        // Normalizar quebras de linha
         privateKey = privateKey.replace(/\n/g, '\n');
         
-        // Verificar formato PEM
         if (!privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
             privateKey = `-----BEGIN PRIVATE KEY-----\n${privateKey}\n-----END PRIVATE KEY-----`;
         }
 
         console.log('🔑 Importando chave...');
         
-        // Importar chave privada
         const keyData = await crypto.subtle.importKey(
             'pkcs8',
             pemToBinaryUltra(privateKey),
@@ -296,7 +283,6 @@ async function createJWTUltra(serviceAccount) {
 
         console.log('✅ Chave importada com sucesso');
 
-        // Assinar mensagem
         console.log('✍️ Assinando JWT...');
         const signature = await crypto.subtle.sign(
             'RSASSA-PKCS1-v1_5',
@@ -356,16 +342,16 @@ async function uploadToGoogleDriveUltra(file, exibidora, pontoId, tipo, accessTo
         const baseFileName = `${tipo}_${pontoId}_${timestamp}`;
         const uniqueFileName = `${baseFileName}.${fileExtension}`;
 
-        console.log('�� Nome final:', uniqueFileName);
+        console.log('📄 Nome final:', uniqueFileName);
 
         // ✅ PASSO 4: CONVERTER ARQUIVO PARA BUFFER
         console.log('💾 Convertendo arquivo...');
         const fileBuffer = await file.arrayBuffer();
         console.log('📊 Buffer size:', fileBuffer.byteLength);
 
-        // ✅ PASSO 5: UPLOAD RESUMABLE
-        console.log('📤 Fazendo upload resumable...');
-        const uploadResult = await uploadFileSimpleUltra(
+        // ✅ PASSO 5: UPLOAD MULTIPART (CORRIGIDO)
+        console.log('📤 Fazendo upload multipart...');
+        const uploadResult = await uploadFileMultipartUltra(
             fileBuffer,
             uniqueFileName,
             file.type,
@@ -401,24 +387,19 @@ async function uploadToGoogleDriveUltra(file, exibidora, pontoId, tipo, accessTo
 }
 
 // =============================================================================
-// 📁 CRIAR ESTRUTURA DE PASTAS ULTRA (CORRIGIDA)
+// 📁 CRIAR ESTRUTURA DE PASTAS ULTRA
 // =============================================================================
 async function createFolderStructureUltra(exibidora, tipo, accessToken, rootFolderId) {
     try {
-        console.log('📁 Criando estrutura CORRIGIDA:', { exibidora, tipo, rootFolderId });
+        console.log('📁 Criando estrutura:', { exibidora, tipo, rootFolderId });
 
-        // ✅ CORREÇÃO: rootFolderId JÁ É a pasta CheckingOOH
-        // Não precisamos criar outra pasta CheckingOOH!
-        
-        // Passo 1: Criar pasta da Exibidora diretamente na CheckingOOH
         const exibidoraFolder = await findOrCreateFolderUltra(
             exibidora, 
-            rootFolderId,  // <- Usar diretamente a pasta CheckingOOH existente
+            rootFolderId,
             accessToken
         );
-        console.log('�� Pasta Exibidora:', exibidoraFolder.id);
+        console.log('📁 Pasta Exibidora:', exibidoraFolder.id);
 
-        // Passo 2: Criar pasta do Tipo (Entrada/Saida) dentro da Exibidora
         const tipoFolderName = tipo === 'entrada' ? 'Entrada' : 'Saida';
         const tipoFolder = await findOrCreateFolderUltra(
             tipoFolderName, 
@@ -445,8 +426,7 @@ async function findOrCreateFolderUltra(folderName, parentId, accessToken) {
     try {
         console.log(`🔍 Buscando pasta "${folderName}" em ${parentId}...`);
 
-        // Buscar pasta existente
-        const escapedName = folderName.replace(/'/g, "\'");
+        const escapedName = folderName.replace(/'/g, "\\'");
         const query = `name='${escapedName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
         
         const searchUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name)`;
@@ -466,7 +446,6 @@ async function findOrCreateFolderUltra(folderName, parentId, accessToken) {
             return searchResult.files[0];
         }
 
-        // Criar nova pasta
         console.log(`📁 Criando pasta "${folderName}"...`);
         
         const createResponse = await fetch('https://www.googleapis.com/drive/v3/files', {
@@ -498,58 +477,61 @@ async function findOrCreateFolderUltra(folderName, parentId, accessToken) {
 }
 
 // =============================================================================
-// 📤 UPLOAD RESUMABLE ULTRA
+// 📤 UPLOAD MULTIPART (SOLUÇÃO PARA CLOUDFLARE)
 // =============================================================================
-async function uploadFileSimpleUltra(fileBuffer, fileName, mimeType, parentId, accessToken) {
+async function uploadFileMultipartUltra(fileBuffer, fileName, mimeType, parentId, accessToken) {
     try {
-        console.log('📤 Upload resumable ultra:', { fileName, mimeType, parentId });
+        console.log('📤 Upload multipart:', { fileName, mimeType, parentId });
 
-        // Passo 1: Iniciar sessão de upload resumable
-        console.log('🚀 Iniciando sessão resumable...');
-        const initResponse = await fetch(
-            'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable',
+        // Criar metadata
+        const metadata = {
+            name: fileName,
+            parents: [parentId]
+        };
+
+        // Criar boundary
+        const boundary = '-------314159265358979323846';
+        
+        // Criar corpo multipart
+        const delimiter = `\r\n--${boundary}\r\n`;
+        const closeDelimiter = `\r\n--${boundary}--`;
+
+        // Parte 1: Metadata
+        const metadataPart = delimiter + 
+            'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+            JSON.stringify(metadata);
+
+        // Parte 2: Arquivo
+        const filePart = delimiter +
+            `Content-Type: ${mimeType}\r\n` +
+            'Content-Transfer-Encoding: base64\r\n\r\n';
+
+        // Converter buffer para base64
+        const base64File = btoa(
+            new Uint8Array(fileBuffer).reduce(
+                (data, byte) => data + String.fromCharCode(byte),
+                ''
+            )
+        );
+
+        // Combinar tudo
+        const multipartBody = metadataPart + filePart + base64File + closeDelimiter;
+
+        console.log('📤 Enviando para Google Drive...');
+        
+        const uploadResponse = await fetch(
+            'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
             {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${accessToken}`,
-                    'Content-Type': 'application/json',
-                    'X-Upload-Content-Type': mimeType,
-                    'X-Upload-Content-Length': fileBuffer.byteLength.toString()
+                    'Content-Type': `multipart/related; boundary=${boundary}`
                 },
-                body: JSON.stringify({
-                    name: fileName,
-                    parents: [parentId]
-                })
+                body: multipartBody
             }
         );
 
-        console.log('📡 Init response status:', initResponse.status);
-
-        if (!initResponse.ok) {
-            const errorText = await initResponse.text();
-            console.error('❌ Erro ao iniciar upload:', errorText);
-            throw new Error(`Erro ao iniciar upload: ${initResponse.status} - ${errorText}`);
-        }
-
-        const uploadUrl = initResponse.headers.get('Location');
-        if (!uploadUrl) {
-            throw new Error('URL de upload não recebida');
-        }
-
-        console.log('✅ Sessão iniciada, URL:', uploadUrl.substring(0, 50) + '...');
-
-        // Passo 2: Enviar dados do arquivo
-        console.log('📤 Enviando dados...');
-        const uploadResponse = await fetch(uploadUrl, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': mimeType,
-                'Content-Length': fileBuffer.byteLength.toString()
-            },
-            body: fileBuffer
-        });
-
-        console.log('�� Upload response status:', uploadResponse.status);
+        console.log('📡 Upload response status:', uploadResponse.status);
 
         if (!uploadResponse.ok) {
             const errorText = await uploadResponse.text();
@@ -558,11 +540,11 @@ async function uploadFileSimpleUltra(fileBuffer, fileName, mimeType, parentId, a
         }
 
         const uploadResult = await uploadResponse.json();
-        console.log('✅ Upload resumable concluído:', uploadResult.id);
+        console.log('✅ Upload multipart concluído:', uploadResult.id);
         return uploadResult;
 
     } catch (error) {
-        console.error('❌ Erro no upload resumable:', error);
+        console.error('❌ Erro no upload multipart:', error);
         throw error;
     }
 }
@@ -572,7 +554,7 @@ async function uploadFileSimpleUltra(fileBuffer, fileName, mimeType, parentId, a
 // =============================================================================
 async function makeFilePublicUltra(fileId, accessToken) {
     try {
-        console.log('�� Tornando arquivo público:', fileId);
+        console.log('🌐 Tornando arquivo público:', fileId);
 
         const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
             method: 'POST',
@@ -590,11 +572,9 @@ async function makeFilePublicUltra(fileId, accessToken) {
             console.log('✅ Arquivo tornado público');
         } else {
             console.warn('⚠️ Não foi possível tornar público:', response.status);
-            // Não falhar por causa disso
         }
     } catch (error) {
         console.warn('⚠️ Erro ao tornar público:', error);
-        // Não falhar por causa disso
     }
 }
 
@@ -604,13 +584,10 @@ async function makeFilePublicUltra(fileId, accessToken) {
 function base64UrlEncodeUltra(data) {
     let base64;
     if (typeof data === 'string') {
-        // Para strings, usar encodeURIComponent para lidar com caracteres especiais
         base64 = btoa(unescape(encodeURIComponent(data)));
     } else {
-        // Para ArrayBuffer
         base64 = btoa(String.fromCharCode(...new Uint8Array(data)));
     }
-    // Converter para base64url
     return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
@@ -618,7 +595,6 @@ function pemToBinaryUltra(pem) {
     try {
         console.log('🔐 Convertendo PEM para binary...');
         
-        // Remover header/footer e quebras de linha
         const lines = pem.split('\n');
         const encoded = lines
             .filter(line => !line.includes('-----'))
@@ -630,7 +606,6 @@ function pemToBinaryUltra(pem) {
 
         console.log('📏 Base64 length:', encoded.length);
         
-        // Decodificar base64
         const binary = atob(encoded);
         const bytes = new Uint8Array(binary.length);
         
