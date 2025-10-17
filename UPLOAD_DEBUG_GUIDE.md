@@ -108,17 +108,17 @@ Este endpoint executa 6 testes:
 ```bash
 # 1. Verificar JSON da service account
 cat service-account.json | jq .
-
-# 2. Verificar se tem todos os campos
-- type
-- project_id
-- private_key_id
-- private_key
-- client_email
-- client_id
-- auth_uri
-- token_uri
 ```
+
+Campos obrigatórios no JSON:
+- `type`
+- `project_id`
+- `private_key_id`
+- `private_key`
+- `client_email`
+- `client_id`
+- `auth_uri`
+- `token_uri`
 
 #### Erro na Etapa FILE_UPLOAD
 
@@ -234,8 +234,8 @@ Os logs agora seguem um padrão estruturado:
 
 ```
 📤 === INICIANDO UPLOAD V6 - ERROR HANDLING IMPROVED ===
-🆔 Versão: v6.0-error-handling - 2025-10-17T22:00:00Z
-🕐 Timestamp: 2025-10-17T22:03:00.000Z
+🆔 Versão: v6.0-error-handling - YYYY-MM-DDTHH:mm:ssZ
+🕐 Timestamp: YYYY-MM-DDTHH:mm:ss.sssZ
 🔍 ETAPA 1: Verificando variáveis de ambiente...
 ✅ Service Account JSON válido
 📧 Client email: seu-email@projeto.iam.gserviceaccount.com
@@ -306,7 +306,7 @@ Antes de reportar um problema, verifique:
 ## 🎯 Resumo de Melhorias v6.0
 
 | Aspecto | Antes (v5) | Depois (v6) |
-|---------|-----------|-------------|
+|:--------|:----------|:------------|
 | **Rastreamento de erro** | Genérico | Por etapa específica |
 | **Validação de env** | Básica | Completa com parse |
 | **Timeouts** | Nenhum | 10s/60s configurado |
@@ -318,6 +318,6 @@ Antes de reportar um problema, verifique:
 ---
 
 **Versão do Guia**: 1.0  
-**Data**: 2025-10-17  
+**Última Atualização**: Outubro 2024  
 **Autor**: Sistema CheckingOOH  
 **Compatibilidade**: v6.0-error-handling e superior
