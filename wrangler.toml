@@ -1,13 +1,8 @@
 name = "checkingooh"
 compatibility_date = "2024-10-17"
 
-[env.production]
-compatibility_date = "2024-10-17"
-
-[[env.production.vars]]
+[env.production.vars]
 NODE_ENV = "production"
-
-[[env.production.vars]]
 PROJECT_VERSION = "v3.1-estrutura-corrigida"
 
 [vars]
