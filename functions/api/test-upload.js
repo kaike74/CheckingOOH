@@ -20,9 +20,9 @@ export async function onRequest(context) {
         const testResult = {
             timestamp: new Date().toISOString(),
             uploadFunction: {
-                version: 'v2.0-corrected',
-                status: 'Função de upload corrigida está ativa',
-                message: 'Se você está vendo isso, o deploy funcionou!'
+                version: 'v5.1-shared-drive-complete',
+                status: 'Upload, listagem e exclusão com suporte a Shared Drives',
+                message: 'Todas as funções do Google Drive agora suportam Shared Drives!'
             },
             environment: {
                 hasServiceAccount: !!context.env.GOOGLE_SERVICE_ACCOUNT_KEY,
