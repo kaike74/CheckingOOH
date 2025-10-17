@@ -1,18 +1,15 @@
 name = "checkingooh"
-compatibility_date = "2024-03-08"
-pages_build_output_dir = "."
+compatibility_date = "2024-10-17"
 
 [env.production]
-compatibility_date = "2024-03-08"
+compatibility_date = "2024-10-17"
 
 [[env.production.vars]]
-name = "NODE_ENV"
-value = "production"
+NODE_ENV = "production"
 
-[build]
-command = ""
-cwd = ""
-watch_dir = ""
+[[env.production.vars]]
+PROJECT_VERSION = "v3.1-estrutura-corrigida"
 
 [vars]
 NODE_ENV = "development"
+PROJECT_VERSION = "v3.1-estrutura-corrigida"
