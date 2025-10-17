@@ -144,8 +144,8 @@ export async function onRequest(context) {
 
         // ✅ 7. VERIFICAR VERSÃO DO UPLOAD FUNCTION
         debug.tests.uploadFunctionVersion = {
-            version: 'v2.0-corrected',
-            timestamp: '2025-01-14T18:30:00Z',
+            version: 'v3.1-estrutura-corrigida',
+            timestamp: '2025-10-17T19:00:00Z',
             status: 'Função de upload corrigida ativa'
         };
 
