@@ -16,7 +16,7 @@ export async function onRequest(context) {
 
     try {
         console.log('📤 === INICIANDO UPLOAD ULTRA CORRIGIDO ===');
-        console.log('🆔 Versão: v3.0-ultra-fixed - 2025-10-17T18:30:00Z');
+        console.log('🆔 Versão: v3.1-estrutura-corrigida - 2025-10-17T19:00:00Z');
 
         if (context.request.method !== 'POST') {
             throw new Error('Método não permitido');
@@ -116,7 +116,7 @@ export async function onRequest(context) {
             error: 'Erro no upload',
             details: error.message,
             timestamp: new Date().toISOString(),
-            version: 'v3.0-ultra-fixed'
+            version: 'v3.1-estrutura-corrigida'
         }), {
             status: 500,
             headers
@@ -273,7 +273,7 @@ async function createJWTUltra(serviceAccount) {
         let privateKey = serviceAccount.private_key;
         
         // Normalizar quebras de linha
-        privateKey = privateKey.replace(/\\n/g, '\n');
+        privateKey = privateKey.replace(/\n/g, '\n');
         
         // Verificar formato PEM
         if (!privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
@@ -356,15 +356,15 @@ async function uploadToGoogleDriveUltra(file, exibidora, pontoId, tipo, accessTo
         const baseFileName = `${tipo}_${pontoId}_${timestamp}`;
         const uniqueFileName = `${baseFileName}.${fileExtension}`;
 
-        console.log('📄 Nome final:', uniqueFileName);
+        console.log('�� Nome final:', uniqueFileName);
 
         // ✅ PASSO 4: CONVERTER ARQUIVO PARA BUFFER
         console.log('💾 Convertendo arquivo...');
         const fileBuffer = await file.arrayBuffer();
         console.log('📊 Buffer size:', fileBuffer.byteLength);
 
-        // ✅ PASSO 5: UPLOAD SIMPLES (SEM MULTIPART)
-        console.log('📤 Fazendo upload simples...');
+        // ✅ PASSO 5: UPLOAD RESUMABLE
+        console.log('📤 Fazendo upload resumable...');
         const uploadResult = await uploadFileSimpleUltra(
             fileBuffer,
             uniqueFileName,
@@ -416,7 +416,7 @@ async function createFolderStructureUltra(exibidora, tipo, accessToken, rootFold
             rootFolderId,  // <- Usar diretamente a pasta CheckingOOH existente
             accessToken
         );
-        console.log('📂 Pasta Exibidora:', exibidoraFolder.id);
+        console.log('�� Pasta Exibidora:', exibidoraFolder.id);
 
         // Passo 2: Criar pasta do Tipo (Entrada/Saida) dentro da Exibidora
         const tipoFolderName = tipo === 'entrada' ? 'Entrada' : 'Saida';
@@ -446,7 +446,7 @@ async function findOrCreateFolderUltra(folderName, parentId, accessToken) {
         console.log(`🔍 Buscando pasta "${folderName}" em ${parentId}...`);
 
         // Buscar pasta existente
-        const escapedName = folderName.replace(/'/g, "\\'");
+        const escapedName = folderName.replace(/'/g, "\'");
         const query = `name='${escapedName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
         
         const searchUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name)`;
@@ -498,7 +498,7 @@ async function findOrCreateFolderUltra(folderName, parentId, accessToken) {
 }
 
 // =============================================================================
-// 📤 UPLOAD SIMPLES ULTRA (VERSÃO RESUMABLE)
+// 📤 UPLOAD RESUMABLE ULTRA
 // =============================================================================
 async function uploadFileSimpleUltra(fileBuffer, fileName, mimeType, parentId, accessToken) {
     try {
@@ -523,8 +523,11 @@ async function uploadFileSimpleUltra(fileBuffer, fileName, mimeType, parentId, a
             }
         );
 
+        console.log('📡 Init response status:', initResponse.status);
+
         if (!initResponse.ok) {
             const errorText = await initResponse.text();
+            console.error('❌ Erro ao iniciar upload:', errorText);
             throw new Error(`Erro ao iniciar upload: ${initResponse.status} - ${errorText}`);
         }
 
@@ -546,8 +549,11 @@ async function uploadFileSimpleUltra(fileBuffer, fileName, mimeType, parentId, a
             body: fileBuffer
         });
 
+        console.log('�� Upload response status:', uploadResponse.status);
+
         if (!uploadResponse.ok) {
             const errorText = await uploadResponse.text();
+            console.error('❌ Erro no upload:', errorText);
             throw new Error(`Erro no upload: ${uploadResponse.status} - ${errorText}`);
         }
 
@@ -561,30 +567,12 @@ async function uploadFileSimpleUltra(fileBuffer, fileName, mimeType, parentId, a
     }
 }
 
-        console.log('📡 Response status:', uploadResponse.status);
-
-        if (!uploadResponse.ok) {
-            const errorText = await uploadResponse.text();
-            console.error('❌ Erro detalhado:', errorText);
-            throw new Error(`Erro no upload: ${uploadResponse.status} - ${errorText}`);
-        }
-
-        const uploadResult = await uploadResponse.json();
-        console.log('✅ Upload simples CORRIGIDO concluído:', uploadResult.id);
-        return uploadResult;
-
-    } catch (error) {
-        console.error('❌ Erro no upload simples CORRIGIDO:', error);
-        throw error;
-    }
-}
-
 // =============================================================================
 // 🌐 TORNAR ARQUIVO PÚBLICO ULTRA
 // =============================================================================
 async function makeFilePublicUltra(fileId, accessToken) {
     try {
-        console.log('🌐 Tornando arquivo público:', fileId);
+        console.log('�� Tornando arquivo público:', fileId);
 
         const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
             method: 'POST',
