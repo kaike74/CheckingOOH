@@ -7,6 +7,13 @@ e este projeto segue [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased] - Em Desenvolvimento
 
+### 🔧 Corrigido - 2025-10-17
+- **Suporte completo para Google Shared Drives** - Adicionado `supportsAllDrives=true` em todas as funções da API do Google Drive
+  - ✅ drive-upload.js: Já tinha suporte
+  - ✅ drive-list.js: Adicionado suporte para listagem de arquivos e busca de pastas
+  - ✅ drive-delete.js: Adicionado suporte para exclusão, obtenção de informações e operações de log
+- **Consistência entre APIs** - Todas as três funções agora trabalham corretamente com Shared Drives e My Drive
+
 ### 🔄 Planejado
 - Notificações por email quando arquivo é enviado
 - Dashboard com estatísticas de uso
