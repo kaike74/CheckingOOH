@@ -251,7 +251,7 @@ async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, accessToken, r
         const query = `'${folderPath.id}' in parents and trashed=false and mimeType!='application/vnd.google-apps.folder'`;
         
         const response = await fetch(
-            `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,mimeType,size,createdTime,modifiedTime,webViewLink,webContentLink,thumbnailLink)&orderBy=createdTime desc`,
+            `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,mimeType,size,createdTime,modifiedTime,webViewLink,webContentLink,thumbnailLink)&orderBy=createdTime desc&supportsAllDrives=true&includeItemsFromAllDrives=true`,
             {
                 headers: {
                     'Authorization': `Bearer ${accessToken}`
@@ -354,7 +354,7 @@ async function findFolder(folderName, parentId, accessToken) {
         const query = `name='${folderName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
         
         const response = await fetch(
-            `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name)`,
+            `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name)&supportsAllDrives=true&includeItemsFromAllDrives=true`,
             {
                 headers: {
                     'Authorization': `Bearer ${accessToken}`

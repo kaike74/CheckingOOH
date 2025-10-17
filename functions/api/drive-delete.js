@@ -203,7 +203,7 @@ async function deleteFileFromGoogleDrive(fileId, fileName, accessToken) {
         });
 
         // Executar exclusão
-        const deleteResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
+        const deleteResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?supportsAllDrives=true`, {
             method: 'DELETE',
             headers: {
                 'Authorization': `Bearer ${accessToken}`
@@ -255,7 +255,7 @@ async function getFileInfo(fileId, accessToken) {
         console.log('ℹ️ Obtendo informações do arquivo:', fileId);
 
         const response = await fetch(
-            `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType,size,createdTime,modifiedTime,parents`,
+            `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType,size,createdTime,modifiedTime,parents&supportsAllDrives=true`,
             {
                 headers: {
                     'Authorization': `Bearer ${accessToken}`
@@ -328,7 +328,7 @@ async function createLogFile(logData, accessToken) {
         const logsFolder = await findOrCreateLogsFolder(accessToken);
 
         // Criar arquivo de log
-        const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+        const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${accessToken}`,
@@ -356,7 +356,7 @@ async function findOrCreateLogsFolder(accessToken) {
     try {
         // Buscar pasta existente
         const searchResponse = await fetch(
-            `https://www.googleapis.com/drive/v3/files?q=name='CheckingOOH_Logs' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+            `https://www.googleapis.com/drive/v3/files?q=name='CheckingOOH_Logs' and mimeType='application/vnd.google-apps.folder' and trashed=false&supportsAllDrives=true&includeItemsFromAllDrives=true`,
             {
                 headers: {
                     'Authorization': `Bearer ${accessToken}`
@@ -371,7 +371,7 @@ async function findOrCreateLogsFolder(accessToken) {
         }
 
         // Criar pasta de logs
-        const createResponse = await fetch('https://www.googleapis.com/drive/v3/files', {
+        const createResponse = await fetch('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${accessToken}`,
@@ -424,7 +424,7 @@ async function validateDeletionPermissions(fileId, accessToken) {
     try {
         // Verificar permissões do arquivo
         const response = await fetch(
-            `https://www.googleapis.com/drive/v3/files/${fileId}/permissions`,
+            `https://www.googleapis.com/drive/v3/files/${fileId}/permissions?supportsAllDrives=true`,
             {
                 headers: {
                     'Authorization': `Bearer ${accessToken}`
