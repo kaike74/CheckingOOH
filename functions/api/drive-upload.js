@@ -498,49 +498,68 @@ async function findOrCreateFolderUltra(folderName, parentId, accessToken) {
 }
 
 // =============================================================================
-// 📤 UPLOAD SIMPLES ULTRA (MÉTODO CORRETO)
+// 📤 UPLOAD SIMPLES ULTRA (VERSÃO RESUMABLE)
 // =============================================================================
 async function uploadFileSimpleUltra(fileBuffer, fileName, mimeType, parentId, accessToken) {
     try {
-        console.log('📤 Upload simples ultra CORRIGIDO:', { fileName, mimeType, parentId });
+        console.log('📤 Upload resumable ultra:', { fileName, mimeType, parentId });
 
-        // Usar uploadType=multipart para enviar metadata + conteúdo em uma única requisição
-        const boundary = '-------314159265358979323846';
-        const delimiter = `\r\n--${boundary}\r\n`;
-        const close_delim = `\r\n--${boundary}--`;
-
-        // Preparar metadata
-        const metadata = {
-            name: fileName,
-            parents: [parentId]
-        };
-
-        // Construir corpo multipart
-        let body = delimiter;
-        body += 'Content-Type: application/json\r\n\r\n';
-        body += JSON.stringify(metadata) + delimiter;
-        body += `Content-Type: ${mimeType}\r\n`;
-        body += 'Content-Transfer-Encoding: base64\r\n\r\n';
-        
-        // Converter buffer para base64
-        const base64Data = btoa(String.fromCharCode(...new Uint8Array(fileBuffer)));
-        body += base64Data;
-        body += close_delim;
-
-        console.log('📦 Corpo preparado, tamanho:', body.length);
-
-        // Fazer upload
-        const uploadResponse = await fetch(
-            'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+        // Passo 1: Iniciar sessão de upload resumable
+        console.log('🚀 Iniciando sessão resumable...');
+        const initResponse = await fetch(
+            'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable',
             {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${accessToken}`,
-                    'Content-Type': `multipart/related; boundary="${boundary}"`
+                    'Content-Type': 'application/json',
+                    'X-Upload-Content-Type': mimeType,
+                    'X-Upload-Content-Length': fileBuffer.byteLength.toString()
                 },
-                body: body
+                body: JSON.stringify({
+                    name: fileName,
+                    parents: [parentId]
+                })
             }
         );
+
+        if (!initResponse.ok) {
+            const errorText = await initResponse.text();
+            throw new Error(`Erro ao iniciar upload: ${initResponse.status} - ${errorText}`);
+        }
+
+        const uploadUrl = initResponse.headers.get('Location');
+        if (!uploadUrl) {
+            throw new Error('URL de upload não recebida');
+        }
+
+        console.log('✅ Sessão iniciada, URL:', uploadUrl.substring(0, 50) + '...');
+
+        // Passo 2: Enviar dados do arquivo
+        console.log('📤 Enviando dados...');
+        const uploadResponse = await fetch(uploadUrl, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': mimeType,
+                'Content-Length': fileBuffer.byteLength.toString()
+            },
+            body: fileBuffer
+        });
+
+        if (!uploadResponse.ok) {
+            const errorText = await uploadResponse.text();
+            throw new Error(`Erro no upload: ${uploadResponse.status} - ${errorText}`);
+        }
+
+        const uploadResult = await uploadResponse.json();
+        console.log('✅ Upload resumable concluído:', uploadResult.id);
+        return uploadResult;
+
+    } catch (error) {
+        console.error('❌ Erro no upload resumable:', error);
+        throw error;
+    }
+}
 
         console.log('📡 Response status:', uploadResponse.status);
 
