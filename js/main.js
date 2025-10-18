@@ -2,64 +2,57 @@
 // 🚀 SCRIPT PRINCIPAL - CHECKING OOH
 // =============================================================================
 
-let appData = {
-    mode: null,         // 'exibidora' ou 'cliente'
-    exibidora: null,    // Nome da exibidora
-    pontos: [],         // Lista de pontos
-    pontoAtual: null,   // Ponto específico acessado
-    editMode: {}        // Estado do modo edição por ponto/tipo
+const appData = {
+    mode: null, // 'exibidora' ou 'cliente'
+    exibidora: null,
+    pontos: [],
+    pontoAtual: null,
+    databaseId: null, // ✅ NOVO: ID da campanha
+    editMode: {} // { 'pontoId-tipo': boolean }
 };
 
 /**
- * 🎯 INICIALIZAÇÃO DA APLICAÇÃO
+ * 🎬 INICIALIZAR APLICAÇÃO
  * Ponto de entrada principal
  */
-document.addEventListener('DOMContentLoaded', async () => {
+async function initApp() {
     try {
-        Logger.info('🚀 Iniciando Checking OOH...');
+        Logger.info('Iniciando aplicação Checking OOH...');
         
-        // Validar configurações
-        const configValidation = validateConfig();
-        if (!configValidation.valid && !CONFIG.DEMO.ENABLED) {
-            throw new Error('Configuração inválida: ' + configValidation.errors.join(', '));
-        }
-        
-        // Mostrar aviso de demo se ativo
-        if (CONFIG.DEMO.ENABLED) {
-            showDemoWarning();
-        }
-        
-        // Detectar modo de operação
-        const operationMode = getOperationMode();
-        appData.mode = operationMode.mode;
-        
-        if (operationMode.mode === 'error') {
-            throw new Error('URL inválida. Use ?id=ID_DO_PONTO ou ?idcliente=ID_DO_CLIENTE');
-        }
-        
-        // Carregar dados baseado no modo
-        if (operationMode.mode === 'exibidora') {
-            await loadExibidoraData(operationMode.id);
-        } else if (operationMode.mode === 'cliente') {
-            await loadClienteData(operationMode.id);
-        }
-        
-        // Configurar interface
+        // Configurar interface inicial
         setupInterface();
         
-        // Ocultar loading
-        hideLoading();
+        // Detectar modo de acesso pela URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const pontoId = urlParams.get('id');
+        const clienteId = urlParams.get('idcliente');
         
-        Logger.success('✅ Aplicação inicializada com sucesso');
+        if (pontoId) {
+            // Modo Exibidora
+            appData.mode = 'exibidora';
+            await loadExibidoraData(pontoId);
+        } else if (clienteId) {
+            // Modo Cliente
+            appData.mode = 'cliente';
+            await loadClienteData(clienteId);
+        } else {
+            // Sem ID - Mostrar instruções
+            showWelcomeScreen();
+        }
+        
+        // Configurar drag & drop após carregar dados
+        setupDragAndDrop();
+        
+        Logger.success('Aplicação inicializada com sucesso');
         
     } catch (error) {
-        Logger.error('❌ Erro na inicialização', error);
-        showError(error.message);
+        Logger.error('Erro ao inicializar aplicação', error);
+        showErrorScreen(error.message);
     }
-});
+}
 
 /**
- * 📡 CARREGAR DADOS DA EXIBIDORA
+ * 📢 CARREGAR DADOS DA EXIBIDORA
  * Carrega todos os pontos de uma exibidora
  */
 async function loadExibidoraData(pontoId) {
@@ -72,6 +65,9 @@ async function loadExibidoraData(pontoId) {
         appData.exibidora = notionData.exibidora;
         appData.pontos = notionData.pontos;
         appData.pontoAtual = notionData.ponto;
+        appData.databaseId = notionData.databaseId; // ✅ NOVO: Armazenar ID da campanha
+        
+        Logger.info('✅ Database ID da campanha:', appData.databaseId);
         
         // Atualizar header
         updatePageHeader(`📢 ${appData.exibidora}`, `Modo Exibidora • ${appData.pontos.length} ponto(s)`);
@@ -84,7 +80,8 @@ async function loadExibidoraData(pontoId) {
         
         Logger.success('Dados da exibidora carregados', { 
             exibidora: appData.exibidora, 
-            pontosCount: appData.pontos.length 
+            pontosCount: appData.pontos.length,
+            campanhaId: appData.databaseId
         });
         
     } catch (error) {
@@ -107,6 +104,7 @@ async function loadClienteData(clienteId) {
         appData.exibidora = notionData.ponto.exibidora;
         appData.pontos = [notionData.ponto]; // Cliente vê apenas seu ponto
         appData.pontoAtual = notionData.ponto;
+        appData.databaseId = notionData.databaseId; // ✅ NOVO: Armazenar ID da campanha
         
         // Atualizar header com endereço do ponto
         updatePageHeader(`👤 ${appData.pontoAtual.endereco}`, `Modo Cliente • Visualização`);
@@ -115,7 +113,8 @@ async function loadClienteData(clienteId) {
         await renderPontos(true);
         
         Logger.success('Dados do cliente carregados', { 
-            endereco: appData.pontoAtual.endereco 
+            endereco: appData.pontoAtual.endereco,
+            campanhaId: appData.databaseId
         });
         
     } catch (error) {
@@ -230,11 +229,12 @@ async function createSecaoElement(ponto, tipo, readOnly = false) {
     if (!readOnly) {
         const actionsDiv = document.createElement('div');
         actionsDiv.className = 'secao-actions';
+        // ✅ ALTERADO: Passar databaseId para openUploadModal
         actionsDiv.innerHTML = `
-            <button class="btn btn-camera btn-small" onclick="openUploadModal('${appData.exibidora}', '${ponto.id}', '${tipo}')">
+            <button class="btn btn-camera btn-small" onclick="openUploadModal('${appData.exibidora}', '${ponto.id}', '${tipo}', '${appData.databaseId}')">
                 📷 Tirar Foto
             </button>
-            <button class="btn btn-primary btn-small" onclick="openUploadModal('${appData.exibidora}', '${ponto.id}', '${tipo}')">
+            <button class="btn btn-primary btn-small" onclick="openUploadModal('${appData.exibidora}', '${ponto.id}', '${tipo}', '${appData.databaseId}')">
                 📁 Upload
             </button>
             <button class="btn btn-secondary btn-small" onclick="toggleEditMode('${ponto.id}', '${tipo}')" id="edit-btn-${ponto.id}-${tipo}">
@@ -274,8 +274,8 @@ async function loadMediaPreview(ponto, tipo, container, readOnly = false) {
     try {
         Logger.debug('Carregando preview de mídia', { pontoId: ponto.id, tipo });
         
-        // Buscar arquivos no Drive
-        const result = await DriveAPI.listDriveFiles(appData.exibidora, ponto.id, tipo);
+        // ✅ ALTERADO: Passar databaseId para listDriveFiles
+        const result = await DriveAPI.listDriveFiles(appData.exibidora, ponto.id, tipo, appData.databaseId);
         
         if (result.success && result.files.length > 0) {
             // Atualizar preview
@@ -474,8 +474,8 @@ async function openPhotoModal(pontoId, tipo) {
         const tipoText = tipo === 'entrada' ? 'Entrada' : 'Saída';
         modalTitle.textContent = `📸 ${ponto.endereco} - ${tipoText}`;
         
-        // Buscar arquivos
-        const result = await DriveAPI.listDriveFiles(appData.exibidora, pontoId, tipo);
+        // ✅ ALTERADO: Passar databaseId para listDriveFiles
+        const result = await DriveAPI.listDriveFiles(appData.exibidora, pontoId, tipo, appData.databaseId);
         
         const container = document.getElementById('photos-grid');
         container.innerHTML = '';
@@ -562,8 +562,66 @@ function setupInterface() {
 }
 
 /**
- * 📄 ATUALIZAR HEADER DA PÁGINA
- * Atualiza título e subtítulo da página
+ * 🏠 MOSTRAR TELA DE BOAS-VINDAS
+ * Exibe instruções quando não há ID na URL
+ */
+function showWelcomeScreen() {
+    const container = document.getElementById('pontos-section');
+    container.style.display = 'block';
+    container.innerHTML = `
+        <div style="text-align: center; padding: 60px 20px;">
+            <h2 style="color: #1E293B; margin-bottom: 20px;">👋 Bem-vindo ao Checking OOH</h2>
+            <p style="color: #64748B; margin-bottom: 30px;">Para acessar o sistema, use um dos links abaixo:</p>
+            
+            <div style="max-width: 600px; margin: 0 auto; text-align: left;">
+                <div style="background: #F1F5F9; padding: 20px; border-radius: 12px; margin-bottom: 20px;">
+                    <h3 style="color: #1E293B; margin-bottom: 10px;">📢 Modo Exibidora</h3>
+                    <p style="color: #64748B; font-size: 14px;">Acesse com o ID do ponto do Notion:</p>
+                    <code style="background: white; padding: 8px 12px; border-radius: 6px; display: block; margin-top: 10px;">
+                        ?id=SEU_PONTO_ID
+                    </code>
+                </div>
+                
+                <div style="background: #F1F5F9; padding: 20px; border-radius: 12px;">
+                    <h3 style="color: #1E293B; margin-bottom: 10px;">👤 Modo Cliente</h3>
+                    <p style="color: #64748B; font-size: 14px;">Acesse com o ID do cliente do Notion:</p>
+                    <code style="background: white; padding: 8px 12px; border-radius: 6px; display: block; margin-top: 10px;">
+                        ?idcliente=SEU_CLIENTE_ID
+                    </code>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * ❌ MOSTRAR TELA DE ERRO
+ * Exibe mensagem de erro amigável
+ */
+function showErrorScreen(errorMessage) {
+    const container = document.getElementById('pontos-section');
+    container.style.display = 'block';
+    container.innerHTML = `
+        <div style="text-align: center; padding: 60px 20px;">
+            <h2 style="color: #EF4444; margin-bottom: 20px;">⚠️ Erro ao Carregar Dados</h2>
+            <p style="color: #64748B; margin-bottom: 20px;">${errorMessage}</p>
+            <button onclick="location.reload()" class="btn btn-primary">🔄 Recarregar Página</button>
+        </div>
+    `;
+}
+
+/**
+ * 📢 MOSTRAR INFORMAÇÕES DA EXIBIDORA
+ * Exibe informações no topo da página
+ */
+function showExibidoraInfo() {
+    // Pode ser expandido para mostrar mais informações
+    Logger.debug('Exibindo informações da exibidora');
+}
+
+/**
+ * 🏷️ ATUALIZAR HEADER DA PÁGINA
+ * Atualiza título e subtítulo do header
  */
 function updatePageHeader(title, subtitle) {
     const titleElement = document.getElementById('page-title');
@@ -574,57 +632,59 @@ function updatePageHeader(title, subtitle) {
 }
 
 /**
- * 📢 MOSTRAR INFORMAÇÕES DA EXIBIDORA
- * Exibe o card com informações da exibidora
+ * 📤 MOSTRAR PROGRESSO DE UPLOAD
+ * Exibe barra de progresso durante upload
  */
-function showExibidoraInfo() {
-    const nameElement = document.getElementById('exibidora-name');
-    const countElement = document.getElementById('pontos-count');
+function showUploadProgress(message = 'Enviando...') {
+    const progressContainer = document.getElementById('upload-progress');
+    const progressText = document.getElementById('progress-text');
     
-    if (nameElement) nameElement.textContent = appData.exibidora;
-    if (countElement) countElement.textContent = appData.pontos.length;
-    
-    document.getElementById('exibidora-info').style.display = 'block';
-}
-
-/**
- * 🧪 MOSTRAR AVISO DE DEMO
- * Exibe o aviso de modo demonstração
- */
-function showDemoWarning() {
-    document.getElementById('demo-warning').style.display = 'block';
-}
-
-/**
- * 🙈 OCULTAR AVISO DE DEMO
- * Oculta o aviso de modo demonstração
- */
-function hideDemoWarning() {
-    document.getElementById('demo-warning').style.display = 'none';
-}
-
-/**
- * ⏳ OCULTAR LOADING
- * Oculta a tela de carregamento
- */
-function hideLoading() {
-    document.getElementById('loading').style.display = 'none';
-}
-
-/**
- * ❌ MOSTRAR ERRO
- * Exibe uma mensagem de erro
- */
-function showError(message, details = null) {
-    document.getElementById('loading').style.display = 'none';
-    document.getElementById('error-message').textContent = message;
-    
-    if (details) {
-        document.getElementById('error-details').textContent = details;
-        document.getElementById('error-details').style.display = 'block';
+    if (progressContainer) {
+        progressContainer.style.display = 'block';
     }
     
-    document.getElementById('error').style.display = 'block';
+    if (progressText) {
+        progressText.textContent = message;
+    }
+}
+
+/**
+ * 🔄 ATUALIZAR PROGRESSO DE UPLOAD
+ * Atualiza a barra de progresso
+ */
+function updateUploadProgress(percent) {
+    const progressFill = document.getElementById('progress-fill');
+    if (progressFill) {
+        progressFill.style.width = `${percent}%`;
+    }
+}
+
+/**
+ * 🔒 ESCONDER PROGRESSO DE UPLOAD
+ * Oculta barra de progresso
+ */
+function hideUploadProgress() {
+    const progressContainer = document.getElementById('upload-progress');
+    const progressFill = document.getElementById('progress-fill');
+    
+    if (progressContainer) {
+        progressContainer.style.display = 'none';
+    }
+    
+    if (progressFill) {
+        progressFill.style.width = '0%';
+    }
+}
+
+/**
+ * ❌ ESCONDER AVISO DEMO
+ * Remove o aviso de modo demonstração
+ */
+function hideDemoWarning() {
+    const warning = document.getElementById('demo-warning');
+    if (warning) {
+        warning.style.display = 'none';
+    }
 }
 
 /**
