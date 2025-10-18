@@ -27,10 +27,17 @@ export async function onRequest(context) {
         const exibidora = url.searchParams.get('exibidora');
         const pontoId = url.searchParams.get('pontoId');
         const tipo = url.searchParams.get('tipo'); // 'entrada' ou 'saida'
+        const databaseId = url.searchParams.get('databaseId'); // ✅ NOVO: ID da campanha
 
-        if (!exibidora || !pontoId || !tipo) {
+        if (!exibidora || !pontoId || !tipo || !databaseId) { // ✅ ALTERADO: Validar databaseId
             return new Response(JSON.stringify({ 
-                error: 'Parâmetros obrigatórios não fornecidos' 
+                error: 'Parâmetros obrigatórios não fornecidos',
+                missing: {
+                    exibidora: !exibidora,
+                    pontoId: !pontoId,
+                    tipo: !tipo,
+                    databaseId: !databaseId // ✅ NOVO
+                }
             }), {
                 status: 400,
                 headers
@@ -40,7 +47,8 @@ export async function onRequest(context) {
         console.log('📋 Parâmetros da listagem:', {
             exibidora: exibidora,
             pontoId: pontoId,
-            tipo: tipo
+            tipo: tipo,
+            databaseId: databaseId // ✅ NOVO
         });
 
         // Verificar variáveis de ambiente
@@ -62,7 +70,8 @@ export async function onRequest(context) {
         const listResult = await listFilesFromGoogleDrive(
             exibidora, 
             pontoId, 
-            tipo, 
+            tipo,
+            databaseId, // ✅ NOVO: Passar databaseId
             accessToken,
             context.env.GOOGLE_DRIVE_FOLDER_ID || 'root'
         );
@@ -104,13 +113,12 @@ async function getAccessToken(env) {
 }
 
 // =============================================================================
-// 🔐 OBTER TOKEN DA SERVICE ACCOUNT (CORRIGIDO)
+// 🔐 OBTER TOKEN DA SERVICE ACCOUNT
 // =============================================================================
 async function getServiceAccountToken(serviceAccountKeyJson) {
     try {
         const serviceAccount = JSON.parse(serviceAccountKeyJson);
         
-        // Criar JWT com assinatura real
         const header = {
             alg: 'RS256',
             typ: 'JWT'
@@ -119,7 +127,7 @@ async function getServiceAccountToken(serviceAccountKeyJson) {
         const now = Math.floor(Date.now() / 1000);
         const payload = {
             iss: serviceAccount.client_email,
-            scope: 'https://www.googleapis.com/auth/drive', // ✅ Escopo completo
+            scope: 'https://www.googleapis.com/auth/drive',
             aud: 'https://oauth2.googleapis.com/token',
             exp: now + 3600,
             iat: now
@@ -127,7 +135,6 @@ async function getServiceAccountToken(serviceAccountKeyJson) {
 
         const token = await createJWT(header, payload, serviceAccount.private_key);
 
-        // Trocar JWT por access token
         const response = await fetch('https://oauth2.googleapis.com/token', {
             method: 'POST',
             headers: {
@@ -154,20 +161,17 @@ async function getServiceAccountToken(serviceAccountKeyJson) {
 }
 
 // =============================================================================
-// 🔧 CRIAR JWT COM ASSINATURA REAL (CORRIGIDO)
+// 🔧 CRIAR JWT COM ASSINATURA
 // =============================================================================
 async function createJWT(header, payload, privateKey) {
     try {
-        // Codificar header e payload
         const headerB64 = base64UrlEncode(JSON.stringify(header));
         const payloadB64 = base64UrlEncode(JSON.stringify(payload));
         
         const message = `${headerB64}.${payloadB64}`;
         
-        // Preparar chave privada
         const pemKey = privateKey.replace(/\n/g, '\n');
         
-        // Importar chave privada
         const keyData = await crypto.subtle.importKey(
             'pkcs8',
             pemToBinary(pemKey),
@@ -179,7 +183,6 @@ async function createJWT(header, payload, privateKey) {
             ['sign']
         );
         
-        // Assinar
         const signature = await crypto.subtle.sign(
             'RSASSA-PKCS1-v1_5',
             keyData,
@@ -204,7 +207,6 @@ function base64UrlEncode(data) {
     if (typeof data === 'string') {
         base64 = btoa(data);
     } else {
-        // ArrayBuffer
         base64 = btoa(String.fromCharCode(...new Uint8Array(data)));
     }
     return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
@@ -227,12 +229,12 @@ function pemToBinary(pem) {
 // =============================================================================
 // 📂 LISTAR ARQUIVOS DO GOOGLE DRIVE
 // =============================================================================
-async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, accessToken, rootFolderId) {
+async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, accessToken, rootFolderId) { // ✅ NOVO: Receber databaseId
     try {
-        console.log('📂 Listando arquivos...', { exibidora, pontoId, tipo });
+        console.log('📂 Listando arquivos...', { exibidora, pontoId, tipo, databaseId });
 
-        // Encontrar pasta específica
-        const folderPath = await findFolderPath(exibidora, tipo, accessToken, rootFolderId);
+        // ✅ ALTERADO: Encontrar pasta específica com databaseId
+        const folderPath = await findFolderPath(exibidora, tipo, databaseId, accessToken, rootFolderId);
         
         if (!folderPath) {
             console.log('📁 Pasta não encontrada - retornando lista vazia');
@@ -305,11 +307,11 @@ async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, accessToken, r
 }
 
 // =============================================================================
-// 🔍 ENCONTRAR CAMINHO DA PASTA
+// 🔍 ENCONTRAR CAMINHO DA PASTA (COM CAMPANHA)
 // =============================================================================
-async function findFolderPath(exibidora, tipo, accessToken, rootFolderId) {
+async function findFolderPath(exibidora, tipo, databaseId, accessToken, rootFolderId) { // ✅ NOVO: Receber databaseId
     try {
-        console.log('🔍 Procurando caminho da pasta...', { exibidora, tipo });
+        console.log('🔍 Procurando caminho da pasta...', { exibidora, tipo, databaseId });
 
         // Buscar pasta CheckingOOH
         const checkingFolder = await findFolder('CheckingOOH', rootFolderId, accessToken);
@@ -325,9 +327,16 @@ async function findFolderPath(exibidora, tipo, accessToken, rootFolderId) {
             return null;
         }
 
+        // ✅ NOVO: Buscar pasta da Campanha (databaseId)
+        const campanhaFolder = await findFolder(databaseId, exibidoraFolder.id, accessToken);
+        if (!campanhaFolder) {
+            console.log(`📁 Pasta da campanha ${databaseId} não encontrada`);
+            return null;
+        }
+
         // Buscar pasta do tipo
         const tipoFolderName = tipo === 'entrada' ? 'Entrada' : 'Saida';
-        const tipoFolder = await findFolder(tipoFolderName, exibidoraFolder.id, accessToken);
+        const tipoFolder = await findFolder(tipoFolderName, campanhaFolder.id, accessToken);
         if (!tipoFolder) {
             console.log(`📁 Pasta ${tipoFolderName} não encontrada`);
             return null;
@@ -337,7 +346,7 @@ async function findFolderPath(exibidora, tipo, accessToken, rootFolderId) {
 
         return {
             id: tipoFolder.id,
-            path: `CheckingOOH/${exibidora}/${tipoFolderName}`
+            path: `CheckingOOH/${exibidora}/${databaseId}/${tipoFolderName}` // ✅ ALTERADO: Incluir databaseId
         };
 
     } catch (error) {
