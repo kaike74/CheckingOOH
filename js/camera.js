@@ -8,6 +8,7 @@ let cameraCanvas = null;
 let currentExibidora = null;
 let currentPontoId = null;
 let currentTipo = null;
+let currentDatabaseId = null; // ✅ NOVO: ID da campanha
 
 /**
  * 📷 ABRIR CÂMERA
@@ -128,19 +129,20 @@ async function capturePhoto() {
  */
 async function uploadCapturedPhoto(photoFile) {
     try {
-        if (!currentExibidora || !currentPontoId || !currentTipo) {
+        if (!currentExibidora || !currentPontoId || !currentTipo || !currentDatabaseId) { // ✅ ALTERADO: Validar databaseId
             throw new Error('Informações de contexto não disponíveis');
         }
         
         // Mostrar progresso
         showUploadProgress('Enviando foto capturada...');
         
-        // Fazer upload
+        // ✅ ALTERADO: Passar databaseId para uploadFileToDrive
         const result = await DriveAPI.uploadFileToDrive(
             photoFile,
             currentExibidora,
             currentPontoId,
-            currentTipo
+            currentTipo,
+            currentDatabaseId
         );
         
         hideUploadProgress();
@@ -152,7 +154,7 @@ async function uploadCapturedPhoto(photoFile) {
             showSuccessMessage('📸 Foto enviada com sucesso!');
             
             // Recarregar lista de arquivos
-            await refreshFilesList(currentExibidora, currentPontoId, currentTipo);
+            await refreshFilesList(currentExibidora, currentPontoId, currentTipo, currentDatabaseId); // ✅ ALTERADO: Passar databaseId
         } else {
             throw new Error(result.error || 'Falha no upload');
         }
@@ -203,115 +205,20 @@ function closeCameraModal() {
 
 /**
  * 🎯 DEFINIR CONTEXTO DA CÂMERA
- * Define qual exibidora/ponto/tipo está sendo usado
+ * Define as informações necessárias para upload
  */
-function setCameraContext(exibidora, pontoId, tipo) {
+function setCameraContext(exibidora, pontoId, tipo, databaseId) { // ✅ NOVO: Receber databaseId
     currentExibidora = exibidora;
     currentPontoId = pontoId;
     currentTipo = tipo;
+    currentDatabaseId = databaseId; // ✅ NOVO: Armazenar databaseId
     
-    Logger.debug('Contexto da câmera definido', { exibidora, pontoId, tipo });
-}
-
-/**
- * 📱 VERIFICAR SUPORTE À CÂMERA
- * Verifica se o dispositivo/navegador suporta câmera
- */
-function checkCameraSupport() {
-    const hasUserMedia = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
-    const hasGetUserMedia = !!(navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia);
-    
-    const support = {
-        supported: hasUserMedia || hasGetUserMedia,
-        modern: hasUserMedia,
-        legacy: hasGetUserMedia && !hasUserMedia
-    };
-    
-    Logger.debug('Suporte à câmera verificado', support);
-    return support;
-}
-
-/**
- * 🔄 ALTERNAR CÂMERA
- * Alterna entre câmera frontal e traseira (se disponível)
- */
-async function switchCamera() {
-    try {
-        if (!cameraStream) {
-            throw new Error('Câmera não está ativa');
-        }
-        
-        Logger.info('Alternando câmera...');
-        
-        // Parar stream atual
-        const tracks = cameraStream.getTracks();
-        tracks.forEach(track => track.stop());
-        
-        // Determinar nova configuração
-        const currentFacingMode = CONFIG.CAMERA.VIDEO_CONSTRAINTS.facingMode;
-        const newFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
-        
-        // Tentar nova câmera
-        const newConstraints = {
-            ...CONFIG.CAMERA.VIDEO_CONSTRAINTS,
-            facingMode: newFacingMode
-        };
-        
-        cameraStream = await navigator.mediaDevices.getUserMedia({
-            video: newConstraints,
-            audio: false
-        });
-        
-        // Atualizar vídeo
-        cameraVideo.srcObject = cameraStream;
-        
-        // Atualizar configuração
-        CONFIG.CAMERA.VIDEO_CONSTRAINTS.facingMode = newFacingMode;
-        
-        Logger.success('Câmera alternada', { facingMode: newFacingMode });
-        
-    } catch (error) {
-        Logger.warning('Não foi possível alternar câmera', error);
-        // Tentar voltar para a câmera original
-        try {
-            cameraStream = await navigator.mediaDevices.getUserMedia({
-                video: CONFIG.CAMERA.VIDEO_CONSTRAINTS,
-                audio: false
-            });
-            cameraVideo.srcObject = cameraStream;
-        } catch (fallbackError) {
-            Logger.error('Erro ao restaurar câmera original', fallbackError);
-            closeCameraModal();
-        }
-    }
-}
-
-/**
- * 📏 OBTER RESOLUÇÃO DISPONÍVEL
- * Lista as resoluções de vídeo disponíveis
- */
-async function getAvailableResolutions() {
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        const track = stream.getVideoTracks()[0];
-        const capabilities = track.getCapabilities();
-        
-        // Parar stream de teste
-        track.stop();
-        
-        const resolutions = {
-            width: capabilities.width,
-            height: capabilities.height,
-            frameRate: capabilities.frameRate
-        };
-        
-        Logger.debug('Resoluções disponíveis', resolutions);
-        return resolutions;
-        
-    } catch (error) {
-        Logger.warning('Não foi possível obter resoluções disponíveis', error);
-        return null;
-    }
+    Logger.debug('Contexto da câmera definido', { 
+        exibidora, 
+        pontoId, 
+        tipo,
+        databaseId // ✅ NOVO
+    });
 }
 
 // 🚀 EXPORTAR FUNÇÕES
@@ -319,10 +226,7 @@ window.CameraManager = {
     openCamera,
     capturePhoto,
     closeCameraModal,
-    setCameraContext,
-    checkCameraSupport,
-    switchCamera,
-    getAvailableResolutions
+    setCameraContext
 };
 
 // 🎯 EXPOR FUNÇÕES GLOBAIS PARA USO NO HTML
@@ -330,20 +234,4 @@ window.openCamera = openCamera;
 window.capturePhoto = capturePhoto;
 window.closeCameraModal = closeCameraModal;
 
-Logger.info('Módulo de câmera carregado');
-
-// 🧪 VERIFICAR SUPORTE INICIAL
-document.addEventListener('DOMContentLoaded', () => {
-    const support = checkCameraSupport();
-    if (!support.supported) {
-        Logger.warning('Câmera não é suportada neste dispositivo/navegador');
-        
-        // Ocultar botões de câmera se não houver suporte
-        const cameraButtons = document.querySelectorAll('.btn-camera');
-        cameraButtons.forEach(btn => {
-            if (btn.textContent.includes('📷')) {
-                btn.style.display = 'none';
-            }
-        });
-    }
-});
+Logger.info('Módulo Camera Manager carregado');
