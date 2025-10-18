@@ -295,7 +295,7 @@ async function signJWT(payload, privateKey) {
 // =============================================================================
 async function uploadToGoogleDrive(file, folderId, pontoId, tipo, accessToken) {
     try {
-        console.log('📤 Fazendo upload para o Google Drive...');
+        console.log('📤 Fazendo upload do arquivo...');
 
         // Gerar nome único para o arquivo
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -343,7 +343,7 @@ async function uploadToGoogleDrive(file, folderId, pontoId, tipo, accessToken) {
 
         const uploadResult = await uploadResponse.json();
         
-        console.log('✅ Upload concluído:', uploadResult.id);
+        console.log('✅ Arquivo enviado com sucesso!');
 
         return {
             success: true,
@@ -369,48 +369,47 @@ async function ensureFolderPathInSharedDrive(exibidora, tipo, databaseId, access
         console.log('📁 Criando estrutura no Shared Drive...', { exibidora, tipo, databaseId });
 
         // ✅ ETAPA 1: Buscar pasta "REDE COMPARTILHADA E-RÁDIOS" (raiz do Shared Drive)
-        console.log('🔍 ETAPA 1: Buscando pasta REDE COMPARTILHADA E-RÁDIOS...');
+        console.log('📁 ETAPA 1: Buscando pasta REDE COMPARTILHADA E-RÁDIOS...');
         const redeFolder = await findFolderInSharedDrives('REDE COMPARTILHADA E-RÁDIOS', accessToken);
         if (!redeFolder) {
             console.log('❌ Pasta REDE COMPARTILHADA E-RÁDIOS não encontrada');
             throw new Error('Pasta REDE COMPARTILHADA E-RÁDIOS não encontrada no Shared Drive');
         }
-        console.log('✅ Pasta REDE COMPARTILHADA E-RÁDIOS encontrada:', redeFolder.id);
+        console.log('✅ ETAPA 1 OK: Pasta REDE encontrada:', redeFolder.id);
 
         // ✅ ETAPA 2: Buscar/Criar pasta CheckingOOH dentro de REDE COMPARTILHADA
-        console.log('🔍 ETAPA 2: Buscando/Criando pasta CheckingOOH...');
+        console.log('📁 ETAPA 2: Buscando/criando pasta CheckingOOH...');
         const checkingFolder = await findOrCreateFolder('CheckingOOH', redeFolder.id, accessToken);
         if (!checkingFolder) {
             throw new Error('Falha ao criar pasta CheckingOOH');
         }
-        console.log('✅ Pasta CheckingOOH encontrada/criada:', checkingFolder.id);
+        console.log('✅ ETAPA 2 OK: Pasta CheckingOOH:', checkingFolder.id);
 
         // ✅ ETAPA 3: Buscar/Criar pasta da Exibidora
-        console.log(`🔍 ETAPA 3: Buscando/Criando pasta da exibidora: ${exibidora}...`);
+        console.log(`📁 ETAPA 3: Buscando/criando pasta ${exibidora}...`);
         const exibidoraFolder = await findOrCreateFolder(exibidora, checkingFolder.id, accessToken);
         if (!exibidoraFolder) {
             throw new Error(`Falha ao criar pasta da exibidora: ${exibidora}`);
         }
-        console.log('✅ Pasta da exibidora encontrada/criada:', exibidoraFolder.id);
+        console.log('✅ ETAPA 3 OK: Pasta da exibidora:', exibidoraFolder.id);
 
         // ✅ ETAPA 4: Buscar/Criar pasta da Campanha (databaseId)
-        console.log(`🔍 ETAPA 4: Buscando/Criando pasta da campanha: ${databaseId}...`);
+        console.log(`📁 ETAPA 4: Buscando/criando pasta ${databaseId}...`);
         const campanhaFolder = await findOrCreateFolder(databaseId, exibidoraFolder.id, accessToken);
         if (!campanhaFolder) {
             throw new Error(`Falha ao criar pasta da campanha: ${databaseId}`);
         }
-        console.log('✅ Pasta da campanha encontrada/criada:', campanhaFolder.id);
+        console.log('✅ ETAPA 4 OK: Pasta da campanha:', campanhaFolder.id);
 
         // ✅ ETAPA 5: Buscar/Criar pasta do tipo (Entrada/Saida)
         const tipoFolderName = tipo === 'entrada' ? 'Entrada' : 'Saida';
-        console.log(`🔍 ETAPA 5: Buscando/Criando pasta do tipo: ${tipoFolderName}...`);
+        console.log(`📁 ETAPA 5: Buscando/criando pasta ${tipoFolderName}...`);
         const tipoFolder = await findOrCreateFolder(tipoFolderName, campanhaFolder.id, accessToken);
         if (!tipoFolder) {
             throw new Error(`Falha ao criar pasta do tipo: ${tipoFolderName}`);
         }
-        console.log('✅ Pasta do tipo encontrada/criada:', tipoFolder.id);
-
-        console.log('✅✅✅ ESTRUTURA COMPLETA CRIADA/ENCONTRADA');
+        console.log('✅ ETAPA 5 OK: Pasta do tipo:', tipoFolder.id);
+        console.log('🎉 ESTRUTURA COMPLETA NO SHARED DRIVE!');
         const fullPath = `REDE COMPARTILHADA E-RÁDIOS/CheckingOOH/${exibidora}/${databaseId}/${tipoFolderName}`;
         console.log('📁 Caminho:', fullPath);
 
