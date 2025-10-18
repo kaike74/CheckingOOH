@@ -5,7 +5,8 @@
 let currentUploadContext = {
     exibidora: null,
     pontoId: null,
-    tipo: null
+    tipo: null,
+    databaseId: null // ✅ NOVO: ID da campanha
 };
 
 let uploadQueue = [];
@@ -15,12 +16,12 @@ let isUploading = false;
  * 📤 ABRIR MODAL DE UPLOAD
  * Abre o modal para seleção e upload de arquivos
  */
-function openUploadModal(exibidora, pontoId, tipo) {
+function openUploadModal(exibidora, pontoId, tipo, databaseId) { // ✅ NOVO: Receber databaseId
     // Definir contexto
-    currentUploadContext = { exibidora, pontoId, tipo };
+    currentUploadContext = { exibidora, pontoId, tipo, databaseId };
     
     // Definir contexto da câmera também
-    CameraManager.setCameraContext(exibidora, pontoId, tipo);
+    CameraManager.setCameraContext(exibidora, pontoId, tipo, databaseId);
     
     // Atualizar título do modal
     const modalTitle = document.getElementById('upload-modal-title');
@@ -33,7 +34,7 @@ function openUploadModal(exibidora, pontoId, tipo) {
     // Mostrar modal
     document.getElementById('upload-modal').style.display = 'flex';
     
-    Logger.info('Modal de upload aberto', { exibidora, pontoId, tipo });
+    Logger.info('Modal de upload aberto', { exibidora, pontoId, tipo, databaseId });
 }
 
 /**
@@ -45,7 +46,7 @@ function closeUploadModal() {
     document.getElementById('upload-modal').style.display = 'none';
     
     // Limpar contexto
-    currentUploadContext = { exibidora: null, pontoId: null, tipo: null };
+    currentUploadContext = { exibidora: null, pontoId: null, tipo: null, databaseId: null };
     
     // Limpar estado
     clearUploadState();
@@ -119,206 +120,166 @@ function processSelectedFiles(files) {
 
 /**
  * ➕ ADICIONAR ARQUIVOS À FILA
- * Adiciona arquivos à fila de upload
+ * Adiciona arquivos validados à fila de upload
  */
 function addFilesToQueue(files) {
-    files.forEach(file => {
-        const uploadItem = {
-            id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-            file: file,
-            status: 'pending', // pending, uploading, completed, error
-            progress: 0,
-            error: null
-        };
-        
-        uploadQueue.push(uploadItem);
-    });
-    
-    Logger.debug('Arquivos adicionados à fila', { count: files.length, total: uploadQueue.length });
+    uploadQueue = [...uploadQueue, ...files];
+    Logger.debug('Arquivos adicionados à fila', { queueSize: uploadQueue.length });
 }
 
 /**
  * 🚀 INICIAR UPLOAD
- * Inicia o processo de upload da fila
+ * Inicia o processo de upload dos arquivos na fila
  */
 async function startUpload() {
-    if (isUploading || uploadQueue.length === 0) {
+    if (isUploading) {
+        Logger.warning('Upload já em andamento');
+        return;
+    }
+    
+    if (uploadQueue.length === 0) {
+        Logger.warning('Nenhum arquivo na fila de upload');
         return;
     }
     
     isUploading = true;
+    showUploadProgress('Iniciando upload...');
     
     try {
-        Logger.info('Iniciando upload', { filesCount: uploadQueue.length });
+        Logger.info('Iniciando upload de arquivos', { count: uploadQueue.length });
         
-        showUploadProgress('Preparando upload...');
+        const totalFiles = uploadQueue.length;
+        let uploadedFiles = 0;
+        let failedFiles = 0;
         
-        const { exibidora, pontoId, tipo } = currentUploadContext;
-        
-        if (!exibidora || !pontoId || !tipo) {
-            throw new Error('Contexto de upload não definido');
-        }
-        
-        // Processar arquivos um por vez
-        for (let i = 0; i < uploadQueue.length; i++) {
-            const uploadItem = uploadQueue[i];
-            
+        // Upload sequencial de cada arquivo
+        for (const file of uploadQueue) {
             try {
-                uploadItem.status = 'uploading';
+                Logger.info('Enviando arquivo', { fileName: file.name });
                 
-                const progressText = `Enviando ${i + 1} de ${uploadQueue.length}: ${uploadItem.file.name}`;
-                updateUploadProgress((i / uploadQueue.length) * 100, progressText);
+                updateUploadProgress((uploadedFiles / totalFiles) * 100);
+                showUploadProgress(`Enviando ${file.name}...`);
                 
-                // Upload do arquivo
+                // ✅ ALTERADO: Passar databaseId para uploadFileToDrive
                 const result = await DriveAPI.uploadFileToDrive(
-                    uploadItem.file,
-                    exibidora,
-                    pontoId,
-                    tipo
+                    file,
+                    currentUploadContext.exibidora,
+                    currentUploadContext.pontoId,
+                    currentUploadContext.tipo,
+                    currentUploadContext.databaseId
                 );
                 
                 if (result.success) {
-                    uploadItem.status = 'completed';
-                    uploadItem.progress = 100;
-                    Logger.success('Arquivo enviado', { fileName: uploadItem.file.name });
+                    uploadedFiles++;
+                    Logger.success('Arquivo enviado', { fileName: file.name });
                 } else {
-                    throw new Error(result.error || 'Falha no upload');
+                    failedFiles++;
+                    Logger.error('Falha no upload', { fileName: file.name, error: result.error });
                 }
                 
             } catch (error) {
-                uploadItem.status = 'error';
-                uploadItem.error = error.message;
-                Logger.error('Erro no upload do arquivo', { fileName: uploadItem.file.name, error });
+                failedFiles++;
+                Logger.error('Erro ao enviar arquivo', { fileName: file.name, error });
             }
         }
         
-        // Verificar resultados
-        const completed = uploadQueue.filter(item => item.status === 'completed');
-        const failed = uploadQueue.filter(item => item.status === 'error');
+        // Atualizar progresso final
+        updateUploadProgress(100);
         
-        hideUploadProgress();
+        // Limpar fila
+        uploadQueue = [];
         
-        if (completed.length > 0) {
-            const message = `✅ ${completed.length} arquivo(s) enviado(s) com sucesso!`;
-            showSuccessMessage(message);
+        // Fechar modal após pequeno delay
+        setTimeout(() => {
+            closeUploadModal();
+            
+            // Mostrar mensagem de sucesso
+            if (uploadedFiles > 0) {
+                const message = failedFiles > 0 
+                    ? `✅ ${uploadedFiles} arquivo(s) enviado(s) • ❌ ${failedFiles} falhou(aram)`
+                    : `✅ ${uploadedFiles} arquivo(s) enviado(s) com sucesso!`;
+                showSuccessMessage(message);
+            }
             
             // Recarregar lista de arquivos
-            await refreshFilesList(exibidora, pontoId, tipo);
-        }
-        
-        if (failed.length > 0) {
-            const failedNames = failed.map(item => `• ${item.file.name}: ${item.error}`).join('\n');
-            alert(`❌ Falha no envio de ${failed.length} arquivo(s):\n\n${failedNames}`);
-        }
-        
-        // Fechar modal se todos foram enviados com sucesso
-        if (failed.length === 0) {
-            closeUploadModal();
-        }
+            refreshFilesList(
+                currentUploadContext.exibidora,
+                currentUploadContext.pontoId,
+                currentUploadContext.tipo,
+                currentUploadContext.databaseId // ✅ NOVO: Passar databaseId
+            );
+            
+        }, 500);
         
     } catch (error) {
-        hideUploadProgress();
         Logger.error('Erro no processo de upload', error);
         alert('Erro no upload: ' + error.message);
     } finally {
         isUploading = false;
+        hideUploadProgress();
     }
 }
 
 /**
- * 📊 MOSTRAR PROGRESSO DO UPLOAD
- * Exibe a barra de progresso
+ * 📤 MOSTRAR PROGRESSO DE UPLOAD
+ * Exibe e atualiza a barra de progresso
  */
-function showUploadProgress(message = 'Enviando...') {
-    const progressDiv = document.getElementById('upload-progress');
+function showUploadProgress(message) {
+    const progressContainer = document.getElementById('upload-progress');
     const progressText = document.getElementById('progress-text');
-    const progressFill = document.getElementById('progress-fill');
     
-    if (progressDiv && progressText && progressFill) {
-        progressDiv.style.display = 'block';
+    if (progressContainer) {
+        progressContainer.style.display = 'block';
+    }
+    
+    if (progressText) {
         progressText.textContent = message;
-        progressFill.style.width = '0%';
     }
 }
 
 /**
- * 🔄 ATUALIZAR PROGRESSO DO UPLOAD
- * Atualiza a barra de progresso
+ * 🔄 ATUALIZAR PROGRESSO DE UPLOAD
+ * Atualiza a porcentagem da barra de progresso
  */
-function updateUploadProgress(percentage, message) {
-    const progressText = document.getElementById('progress-text');
+function updateUploadProgress(percent) {
     const progressFill = document.getElementById('progress-fill');
-    
-    if (progressText && progressFill) {
-        progressText.textContent = message;
-        progressFill.style.width = `${Math.min(100, Math.max(0, percentage))}%`;
+    if (progressFill) {
+        progressFill.style.width = `${Math.min(100, Math.max(0, percent))}%`;
     }
 }
 
 /**
- * 🙈 OCULTAR PROGRESSO DO UPLOAD
+ * 🔒 ESCONDER PROGRESSO DE UPLOAD
  * Oculta a barra de progresso
  */
 function hideUploadProgress() {
-    const progressDiv = document.getElementById('upload-progress');
-    if (progressDiv) {
-        progressDiv.style.display = 'none';
+    const progressContainer = document.getElementById('upload-progress');
+    const progressFill = document.getElementById('progress-fill');
+    const progressText = document.getElementById('progress-text');
+    
+    if (progressContainer) {
+        progressContainer.style.display = 'none';
     }
-}
-
-/**
- * ✅ MOSTRAR MENSAGEM DE SUCESSO
- * Exibe uma mensagem de sucesso temporária
- */
-function showSuccessMessage(message) {
-    // Criar elemento de notificação
-    const notification = document.createElement('div');
-    notification.className = 'success-notification';
-    notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: linear-gradient(135deg, #10B981 0%, #34D399 100%);
-        color: white;
-        padding: 16px 24px;
-        border-radius: 12px;
-        box-shadow: 0 8px 25px rgba(16, 185, 129, 0.3);
-        z-index: 9999;
-        font-family: var(--font-primary);
-        font-weight: 600;
-        transform: translateX(100%);
-        transition: transform 0.3s ease;
-    `;
-    notification.textContent = message;
     
-    document.body.appendChild(notification);
+    if (progressFill) {
+        progressFill.style.width = '0%';
+    }
     
-    // Animar entrada
-    setTimeout(() => {
-        notification.style.transform = 'translateX(0)';
-    }, 100);
-    
-    // Remover após 4 segundos
-    setTimeout(() => {
-        notification.style.transform = 'translateX(100%)';
-        setTimeout(() => {
-            if (notification.parentNode) {
-                notification.parentNode.removeChild(notification);
-            }
-        }, 300);
-    }, 4000);
+    if (progressText) {
+        progressText.textContent = 'Enviando...';
+    }
 }
 
 /**
  * 🔄 RECARREGAR LISTA DE ARQUIVOS
  * Recarrega a lista de arquivos de uma seção específica
  */
-async function refreshFilesList(exibidora, pontoId, tipo) {
+async function refreshFilesList(exibidora, pontoId, tipo, databaseId) { // ✅ NOVO: Receber databaseId
     try {
-        Logger.info('Recarregando lista de arquivos', { exibidora, pontoId, tipo });
+        Logger.info('Recarregando lista de arquivos', { exibidora, pontoId, tipo, databaseId });
         
-        // Buscar arquivos atualizados
-        const result = await DriveAPI.listDriveFiles(exibidora, pontoId, tipo);
+        // ✅ ALTERADO: Passar databaseId para listDriveFiles
+        const result = await DriveAPI.listDriveFiles(exibidora, pontoId, tipo, databaseId);
         
         if (result.success) {
             // Atualizar preview na interface
@@ -400,23 +361,5 @@ window.UploadManager = {
 // 🎯 EXPOR FUNÇÕES GLOBAIS PARA USO NO HTML
 window.openUploadModal = openUploadModal;
 window.closeUploadModal = closeUploadModal;
-window.showUploadProgress = showUploadProgress;
-window.hideUploadProgress = hideUploadProgress;
 
-// 🎯 CONFIGURAR EVENT LISTENERS
-document.addEventListener('DOMContentLoaded', () => {
-    // Configurar drag & drop
-    setupDragAndDrop();
-    
-    // Configurar input de arquivo
-    const fileInput = document.getElementById('file-input');
-    if (fileInput) {
-        fileInput.addEventListener('change', (e) => {
-            processSelectedFiles(e.target.files);
-        });
-    }
-    
-    Logger.info('Upload Manager configurado');
-});
-
-Logger.info('Módulo de upload carregado');
+Logger.info('Módulo Upload Manager carregado');
