@@ -253,7 +253,7 @@ async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, ac
         const query = `'${folderPath.id}' in parents and trashed=false and mimeType!='application/vnd.google-apps.folder'`;
         
         const response = await fetch(
-            `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,mimeType,size,createdTime,modifiedTime,webViewLink,webContentLink,thumbnailLink)&orderBy=createdTime desc`,
+            `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&fields=files(id,name,mimeType,size,createdTime,modifiedTime,webViewLink,webContentLink,thumbnailLink)&orderBy=name`,
             {
                 headers: {
                     'Authorization': `Bearer ${accessToken}`
@@ -313,40 +313,57 @@ async function findFolderPath(exibidora, tipo, databaseId, accessToken, rootFold
     try {
         console.log('🔍 Procurando caminho da pasta...', { exibidora, tipo, databaseId });
 
-        // Buscar pasta CheckingOOH
-        const checkingFolder = await findFolder('CheckingOOH', rootFolderId, accessToken);
-        if (!checkingFolder) {
-            console.log('📁 Pasta CheckingOOH não encontrada');
+        // ETAPA 1: Buscar pasta "REDE COMPARTILHADA E-RÁDIOS" (raiz do Shared Drive)
+        console.log('🔍 ETAPA 1: Buscando pasta REDE COMPARTILHADA E-RÁDIOS...');
+        const redeFolder = await findFolderInSharedDrives('REDE COMPARTILHADA E-RÁDIOS', accessToken);
+        if (!redeFolder) {
+            console.log('❌ Pasta REDE COMPARTILHADA E-RÁDIOS não encontrada');
             return null;
         }
+        console.log('✅ Pasta REDE COMPARTILHADA E-RÁDIOS encontrada:', redeFolder.id);
 
-        // Buscar pasta da Exibidora
+        // ETAPA 2: Buscar pasta CheckingOOH dentro de REDE COMPARTILHADA
+        console.log('🔍 ETAPA 2: Buscando pasta CheckingOOH...');
+        const checkingFolder = await findFolder('CheckingOOH', redeFolder.id, accessToken);
+        if (!checkingFolder) {
+            console.log('❌ Pasta CheckingOOH não encontrada');
+            return null;
+        }
+        console.log('✅ Pasta CheckingOOH encontrada:', checkingFolder.id);
+
+        // ETAPA 3: Buscar pasta da Exibidora
+        console.log(`🔍 ETAPA 3: Buscando pasta da exibidora: ${exibidora}...`);
         const exibidoraFolder = await findFolder(exibidora, checkingFolder.id, accessToken);
         if (!exibidoraFolder) {
-            console.log(`📁 Pasta da exibidora ${exibidora} não encontrada`);
+            console.log(`❌ Pasta da exibidora ${exibidora} não encontrada`);
             return null;
         }
+        console.log('✅ Pasta da exibidora encontrada:', exibidoraFolder.id);
 
-        // ✅ NOVO: Buscar pasta da Campanha (databaseId)
+        // ETAPA 4: Buscar pasta da Campanha (databaseId)
+        console.log(`🔍 ETAPA 4: Buscando pasta da campanha: ${databaseId}...`);
         const campanhaFolder = await findFolder(databaseId, exibidoraFolder.id, accessToken);
         if (!campanhaFolder) {
-            console.log(`📁 Pasta da campanha ${databaseId} não encontrada`);
+            console.log(`❌ Pasta da campanha ${databaseId} não encontrada`);
             return null;
         }
+        console.log('✅ Pasta da campanha encontrada:', campanhaFolder.id);
 
-        // Buscar pasta do tipo
+        // ETAPA 5: Buscar pasta do tipo (Entrada/Saida)
         const tipoFolderName = tipo === 'entrada' ? 'Entrada' : 'Saida';
+        console.log(`🔍 ETAPA 5: Buscando pasta do tipo: ${tipoFolderName}...`);
         const tipoFolder = await findFolder(tipoFolderName, campanhaFolder.id, accessToken);
         if (!tipoFolder) {
-            console.log(`📁 Pasta ${tipoFolderName} não encontrada`);
+            console.log(`❌ Pasta ${tipoFolderName} não encontrada`);
             return null;
         }
 
-        console.log('✅ Caminho da pasta encontrado:', tipoFolder.id);
+        console.log('✅✅✅ CAMINHO COMPLETO DA PASTA ENCONTRADO:', tipoFolder.id);
+        console.log('📁 Caminho:', `REDE COMPARTILHADA E-RÁDIOS/CheckingOOH/${exibidora}/${databaseId}/${tipoFolderName}`);
 
         return {
             id: tipoFolder.id,
-            path: `CheckingOOH/${exibidora}/${databaseId}/${tipoFolderName}` // ✅ ALTERADO: Incluir databaseId
+            path: `REDE COMPARTILHADA E-RÁDIOS/CheckingOOH/${exibidora}/${databaseId}/${tipoFolderName}`
         };
 
     } catch (error) {
@@ -363,7 +380,7 @@ async function findFolder(folderName, parentId, accessToken) {
         const query = `name='${folderName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
         
         const response = await fetch(
-            `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name)`,
+            `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&fields=files(id,name)`,
             {
                 headers: {
                     'Authorization': `Bearer ${accessToken}`
@@ -386,6 +403,46 @@ async function findFolder(folderName, parentId, accessToken) {
 
     } catch (error) {
         console.error(`❌ Erro ao encontrar pasta ${folderName}:`, error);
+        return null;
+    }
+}
+
+// =============================================================================
+// 🌐 ENCONTRAR PASTA EM SHARED DRIVES (SEM PAI ESPECÍFICO)
+// =============================================================================
+async function findFolderInSharedDrives(folderName, accessToken) {
+    try {
+        console.log(`🌐 Buscando pasta "${folderName}" em Shared Drives...`);
+        
+        // Query para buscar pasta em Shared Drives (sem especificar pai)
+        const query = `name='${folderName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+        
+        const response = await fetch(
+            `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&fields=files(id,name,driveId)`,
+            {
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`
+                }
+            }
+        );
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Erro ao buscar pasta em Shared Drives: ${response.status} - ${errorText}`);
+        }
+
+        const result = await response.json();
+        
+        if (result.files && result.files.length > 0) {
+            console.log(`✅ Pasta "${folderName}" encontrada em Shared Drive:`, result.files[0].id);
+            return result.files[0];
+        }
+
+        console.log(`❌ Pasta "${folderName}" NÃO encontrada em Shared Drives`);
+        return null;
+
+    } catch (error) {
+        console.error(`❌ Erro ao encontrar pasta ${folderName} em Shared Drives:`, error);
         return null;
     }
 }
