@@ -1,145 +1,226 @@
 // =============================================================================
-// 📤 CLOUDFLARE PAGES FUNCTION - GOOGLE DRIVE UPLOAD
+// 🔧 CLOUDFLARE WORKER: UPLOAD PARA GOOGLE DRIVE V6 - SHARED DRIVE FIX
+// =============================================================================
+// Data: Outubro 2024
+// Compatível com: Cloudflare Pages Functions
+// Funcionalidade: Upload de arquivos com estrutura de pastas específica
+// CORREÇÃO: Usar Shared Drives em vez de Drive pessoal
 // =============================================================================
 
-export async function onRequest(context) {
-    // Permitir CORS
-    const headers = {
+export async function onRequestPost(context) {
+    const { request, env } = context;
+
+    // Headers CORS para permitir requests do frontend
+    const corsHeaders = {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Content-Type': 'application/json'
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     };
 
-    // Responder OPTIONS para CORS preflight
-    if (context.request.method === 'OPTIONS') {
-        return new Response('', {
-            status: 200,
-            headers
-        });
+    // Responder a requests OPTIONS (preflight)
+    if (request.method === 'OPTIONS') {
+        return new Response(null, { headers: corsHeaders });
     }
 
     try {
-        console.log('📤 Iniciando upload para Google Drive...');
+        console.log('📤 === INICIANDO UPLOAD V6 - SHARED DRIVE FIX ===');
 
-        // Verificar método
-        if (context.request.method !== 'POST') {
-            return new Response(JSON.stringify({ 
-                error: 'Método não permitido' 
+        // =============================================================================
+        // ETAPA 1: VALIDAR VARIÁVEIS DE AMBIENTE
+        // =============================================================================
+        console.log('🔍 ETAPA 1: Validando variáveis de ambiente...');
+        
+        if (!env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+            console.log('❌ GOOGLE_SERVICE_ACCOUNT_KEY não configurada');
+            return new Response(JSON.stringify({
+                success: false,
+                error: 'GOOGLE_SERVICE_ACCOUNT_KEY não configurada',
+                step: 'ENV_VALIDATION'
             }), {
-                status: 405,
-                headers
+                status: 500,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
             });
         }
 
-        // Processar FormData
-        const formData = await context.request.formData();
+        const rootFolderId = env.GOOGLE_DRIVE_FOLDER_ID || 'root';
+        console.log('✅ ETAPA 1: Variáveis de ambiente OK');
+
+        // =============================================================================
+        // ETAPA 2: PROCESSAR FORMDATA
+        // =============================================================================
+        console.log('🔍 ETAPA 2: Processando FormData...');
+        
+        const formData = await request.formData();
         const file = formData.get('file');
         const exibidora = formData.get('exibidora');
         const pontoId = formData.get('pontoId');
         const tipo = formData.get('tipo');
-        const databaseId = formData.get('databaseId'); // ✅ NOVO: ID da campanha
 
-        console.log('📋 Parâmetros do upload:', {
+        console.log('📝 Dados recebidos:', { 
             fileName: file?.name,
             fileSize: file?.size,
-            exibidora: exibidora,
-            pontoId: pontoId,
-            tipo: tipo,
-            databaseId: databaseId // ✅ NOVO
-        });
-
-        // Validar parâmetros
-        if (!file || !exibidora || !pontoId || !tipo || !databaseId) { // ✅ ALTERADO: Validar databaseId
-            return new Response(JSON.stringify({ 
-                error: 'Parâmetros obrigatórios não fornecidos',
-                missing: {
-                    file: !file,
-                    exibidora: !exibidora,
-                    pontoId: !pontoId,
-                    tipo: !tipo,
-                    databaseId: !databaseId // ✅ NOVO
-                }
-            }), {
-                status: 400,
-                headers
-            });
-        }
-
-        // Verificar variáveis de ambiente
-        const serviceAccountKey = context.env.GOOGLE_SERVICE_ACCOUNT_KEY;
-        
-        if (!serviceAccountKey) {
-            return new Response(JSON.stringify({ 
-                error: 'Credenciais do Google Drive não configuradas' 
-            }), {
-                status: 500,
-                headers
-            });
-        }
-
-        // Obter token de acesso
-        const accessToken = await getAccessToken(context.env);
-
-        // Fazer upload
-        const uploadResult = await uploadFileToGoogleDrive(
-            file, 
             exibidora, 
             pontoId, 
-            tipo,
-            databaseId, // ✅ NOVO: Passar databaseId
-            accessToken,
-            context.env.GOOGLE_DRIVE_FOLDER_ID || 'root'
-        );
-
-        return new Response(JSON.stringify(uploadResult), {
-            status: 200,
-            headers
+            tipo 
         });
 
-    } catch (error) {
-        console.error('💥 Erro no upload:', error);
-        return new Response(JSON.stringify({ 
-            error: 'Erro interno do servidor',
-            details: error.message
-        }), {
-            status: 500,
-            headers
-        });
-    }
-}
-
-// =============================================================================
-// 🔑 OBTER TOKEN DE ACESSO
-// =============================================================================
-async function getAccessToken(env) {
-    try {
-        console.log('🔑 Obtendo token de acesso...');
-
-        if (!env.GOOGLE_SERVICE_ACCOUNT_KEY) {
-            throw new Error('Service Account Key não configurada');
+        if (!file || !exibidora || !pontoId || !tipo) {
+            console.log('❌ ETAPA 2: Dados obrigatórios ausentes');
+            return new Response(JSON.stringify({
+                success: false,
+                error: 'Dados obrigatórios ausentes: file, exibidora, pontoId, tipo',
+                step: 'FORM_VALIDATION'
+            }), {
+                status: 400,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
         }
 
-        return await getServiceAccountToken(env.GOOGLE_SERVICE_ACCOUNT_KEY);
+        console.log('✅ ETAPA 2: FormData OK');
+
+        // =============================================================================
+        // ETAPA 3: VALIDAR ARQUIVO
+        // =============================================================================
+        console.log('🔍 ETAPA 3: Validando arquivo...');
+        
+        const maxSize = 100 * 1024 * 1024; // 100MB
+        if (file.size > maxSize) {
+            console.log('❌ ETAPA 3: Arquivo muito grande');
+            return new Response(JSON.stringify({
+                success: false,
+                error: 'Arquivo muito grande (máximo 100MB)',
+                step: 'FILE_VALIDATION'
+            }), {
+                status: 400,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
+        }
+
+        const allowedTypes = [
+            'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
+            'video/mp4', 'video/avi', 'video/mov', 'video/wmv', 'video/flv', 'video/webm'
+        ];
+
+        if (!allowedTypes.includes(file.type)) {
+            console.log('❌ ETAPA 3: Tipo de arquivo não permitido');
+            return new Response(JSON.stringify({
+                success: false,
+                error: 'Tipo de arquivo não permitido',
+                step: 'FILE_VALIDATION'
+            }), {
+                status: 400,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
+        }
+
+        console.log('✅ ETAPA 3: Validação OK');
+
+        // =============================================================================
+        // ETAPA 4: OBTER TOKEN DO GOOGLE
+        // =============================================================================
+        console.log('🔍 ETAPA 4: Obtendo token do Google...');
+        
+        const accessToken = await getGoogleAccessToken(env.GOOGLE_SERVICE_ACCOUNT_KEY);
+        
+        if (!accessToken) {
+            console.log('❌ ETAPA 4: Falha ao obter token');
+            return new Response(JSON.stringify({
+                success: false,
+                error: 'Falha ao obter token de acesso do Google',
+                step: 'TOKEN_ACQUISITION'
+            }), {
+                status: 500,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
+        }
+
+        console.log('✅ ETAPA 4: Token obtido com sucesso');
+
+        // =============================================================================
+        // ETAPA 5: UPLOAD DO ARQUIVO
+        // =============================================================================
+        console.log('🔍 ETAPA 5: Iniciando upload...');
+
+        // ✅ CORREÇÃO: Usar Shared Drive em vez de rootFolderId
+        const databaseId = generateDatabaseId();
+        console.log('📝 Database ID gerado:', databaseId);
+
+        // ✅ NOVO: Usar mesma lógica do drive-list.js para Shared Drives
+        const folderPath = await ensureFolderPathInSharedDrive(exibidora, tipo, databaseId, accessToken);
+        
+        if (!folderPath) {
+            console.log('❌ ETAPA 5: Falha ao criar estrutura de pastas');
+            return new Response(JSON.stringify({
+                success: false,
+                error: 'Falha ao criar estrutura de pastas no Shared Drive',
+                step: 'FOLDER_CREATION'
+            }), {
+                status: 500,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
+        }
+
+        // Upload do arquivo
+        const uploadResult = await uploadToGoogleDrive(
+            file, 
+            folderPath.id, 
+            pontoId, 
+            tipo, 
+            accessToken
+        );
+
+        if (!uploadResult.success) {
+            console.log('❌ ETAPA 5: Upload falhou');
+            return new Response(JSON.stringify({
+                success: false,
+                error: uploadResult.error,
+                step: 'FILE_UPLOAD'
+            }), {
+                status: 500,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
+        }
+
+        console.log('✅ ETAPA 5: Upload concluído');
+        console.log('🎉 === UPLOAD V6 CONCLUÍDO COM SUCESSO ===');
+
+        return new Response(JSON.stringify({
+            success: true,
+            fileId: uploadResult.fileId,
+            fileName: uploadResult.fileName,
+            fileUrl: uploadResult.fileUrl,
+            databaseId: databaseId,
+            folderPath: folderPath.path,
+            message: 'Upload realizado com sucesso!'
+        }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
 
     } catch (error) {
-        console.error('❌ Erro ao obter token de acesso:', error);
-        throw error;
+        console.error('❌ Erro geral:', error);
+        return new Response(JSON.stringify({
+            success: false,
+            error: error.message,
+            step: 'GENERAL_ERROR'
+        }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
     }
 }
 
 // =============================================================================
-// 🔐 OBTER TOKEN DA SERVICE ACCOUNT
+// 🔑 OBTER TOKEN DE ACESSO DO GOOGLE
 // =============================================================================
-async function getServiceAccountToken(serviceAccountKeyJson) {
+async function getGoogleAccessToken(serviceAccountKey) {
     try {
-        const serviceAccount = JSON.parse(serviceAccountKeyJson);
-        
-        const header = {
-            alg: 'RS256',
-            typ: 'JWT'
-        };
+        console.log('🔑 Gerando token de acesso...');
 
+        // Parse da chave da service account
+        const serviceAccount = JSON.parse(serviceAccountKey);
+        
+        // Criar JWT
         const now = Math.floor(Date.now() / 1000);
         const payload = {
             iss: serviceAccount.client_email,
@@ -149,70 +230,304 @@ async function getServiceAccountToken(serviceAccountKeyJson) {
             iat: now
         };
 
-        const token = await createJWT(header, payload, serviceAccount.private_key);
+        // Assinar JWT
+        const jwt = await signJWT(payload, serviceAccount.private_key);
 
-        const response = await fetch('https://oauth2.googleapis.com/token', {
+        // Trocar JWT por access token
+        const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded'
             },
-            body: new URLSearchParams({
-                grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-                assertion: token
-            })
+            body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`
         });
 
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Erro OAuth2: ${response.status} - ${errorText}`);
+        if (!tokenResponse.ok) {
+            const errorText = await tokenResponse.text();
+            throw new Error(`OAuth2 falhou (${tokenResponse.status}): ${errorText}`);
         }
 
-        const tokenData = await response.json();
+        const tokenData = await tokenResponse.json();
+        console.log('✅ Token de acesso obtido');
         return tokenData.access_token;
 
     } catch (error) {
-        console.error('❌ Erro ao obter token da service account:', error);
+        console.error('❌ Erro ao obter token:', error);
         throw error;
     }
 }
 
 // =============================================================================
-// 🔧 CRIAR JWT COM ASSINATURA
+// 🖊️ ASSINAR JWT
 // =============================================================================
-async function createJWT(header, payload, privateKey) {
+async function signJWT(payload, privateKey) {
+    const header = {
+        alg: 'RS256',
+        typ: 'JWT'
+    };
+
+    const encodedHeader = base64UrlEncode(JSON.stringify(header));
+    const encodedPayload = base64UrlEncode(JSON.stringify(payload));
+    const signingInput = `${encodedHeader}.${encodedPayload}`;
+
+    // Importar chave privada
+    const key = await crypto.subtle.importKey(
+        'pkcs8',
+        pemToBinary(privateKey),
+        { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+        false,
+        ['sign']
+    );
+
+    // Assinar
+    const signature = await crypto.subtle.sign(
+        'RSASSA-PKCS1-v1_5',
+        key,
+        new TextEncoder().encode(signingInput)
+    );
+
+    const encodedSignature = base64UrlEncode(signature);
+    return `${signingInput}.${encodedSignature}`;
+}
+
+// =============================================================================
+// 📤 UPLOAD PARA GOOGLE DRIVE
+// =============================================================================
+async function uploadToGoogleDrive(file, folderId, pontoId, tipo, accessToken) {
     try {
-        const headerB64 = base64UrlEncode(JSON.stringify(header));
-        const payloadB64 = base64UrlEncode(JSON.stringify(payload));
-        
-        const message = `${headerB64}.${payloadB64}`;
-        
-        const pemKey = privateKey.replace(/\n/g, '\n');
-        
-        const keyData = await crypto.subtle.importKey(
-            'pkcs8',
-            pemToBinary(pemKey),
+        console.log('📤 Fazendo upload para o Google Drive...');
+
+        // Gerar nome único para o arquivo
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const fileExtension = file.name.split('.').pop();
+        const fileName = `${tipo}_${pontoId}_${timestamp}.${fileExtension}`;
+
+        // Converter arquivo para ArrayBuffer
+        const fileBuffer = await file.arrayBuffer();
+
+        // Upload usando API multipart
+        const boundary = '-------314159265358979323846';
+        const delimiter = "\r\n--" + boundary + "\r\n";
+        const close_delim = "\r\n--" + boundary + "--";
+
+        const metadata = {
+            name: fileName,
+            parents: [folderId]
+        };
+
+        const multipartRequestBody =
+            delimiter +
+            'Content-Type: application/json\r\n\r\n' +
+            JSON.stringify(metadata) +
+            delimiter +
+            `Content-Type: ${file.type}\r\n\r\n` +
+            new TextDecoder().decode(fileBuffer) +
+            close_delim;
+
+        const uploadResponse = await fetch(
+            'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true',
             {
-                name: 'RSASSA-PKCS1-v1_5',
-                hash: 'SHA-256'
-            },
-            false,
-            ['sign']
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Content-Type': `multipart/related; boundary="${boundary}"`
+                },
+                body: multipartRequestBody
+            }
         );
+
+        if (!uploadResponse.ok) {
+            const errorText = await uploadResponse.text();
+            throw new Error(`Upload falhou (${uploadResponse.status}): ${errorText}`);
+        }
+
+        const uploadResult = await uploadResponse.json();
         
-        const signature = await crypto.subtle.sign(
-            'RSASSA-PKCS1-v1_5',
-            keyData,
-            new TextEncoder().encode(message)
-        );
-        
-        const signatureB64 = base64UrlEncode(signature);
-        
-        return `${message}.${signatureB64}`;
+        console.log('✅ Upload concluído:', uploadResult.id);
+
+        return {
+            success: true,
+            fileId: uploadResult.id,
+            fileName: fileName,
+            fileUrl: `https://drive.google.com/file/d/${uploadResult.id}/view`
+        };
 
     } catch (error) {
-        console.error('❌ Erro ao criar JWT:', error);
+        console.error('❌ Erro no upload para Google Drive:', error);
+        return { 
+            success: false, 
+            error: error.message 
+        };
+    }
+}
+
+// =============================================================================
+// 📁 GARANTIR ESTRUTURA DE PASTAS NO SHARED DRIVE
+// =============================================================================
+async function ensureFolderPathInSharedDrive(exibidora, tipo, databaseId, accessToken) {
+    try {
+        console.log('📁 Criando estrutura no Shared Drive...', { exibidora, tipo, databaseId });
+
+        // ✅ ETAPA 1: Buscar pasta "REDE COMPARTILHADA E-RÁDIOS" (raiz do Shared Drive)
+        console.log('🔍 ETAPA 1: Buscando pasta REDE COMPARTILHADA E-RÁDIOS...');
+        const redeFolder = await findFolderInSharedDrives('REDE COMPARTILHADA E-RÁDIOS', accessToken);
+        if (!redeFolder) {
+            console.log('❌ Pasta REDE COMPARTILHADA E-RÁDIOS não encontrada');
+            throw new Error('Pasta REDE COMPARTILHADA E-RÁDIOS não encontrada no Shared Drive');
+        }
+        console.log('✅ Pasta REDE COMPARTILHADA E-RÁDIOS encontrada:', redeFolder.id);
+
+        // ✅ ETAPA 2: Buscar/Criar pasta CheckingOOH dentro de REDE COMPARTILHADA
+        console.log('🔍 ETAPA 2: Buscando/Criando pasta CheckingOOH...');
+        const checkingFolder = await findOrCreateFolder('CheckingOOH', redeFolder.id, accessToken);
+        if (!checkingFolder) {
+            throw new Error('Falha ao criar pasta CheckingOOH');
+        }
+        console.log('✅ Pasta CheckingOOH encontrada/criada:', checkingFolder.id);
+
+        // ✅ ETAPA 3: Buscar/Criar pasta da Exibidora
+        console.log(`🔍 ETAPA 3: Buscando/Criando pasta da exibidora: ${exibidora}...`);
+        const exibidoraFolder = await findOrCreateFolder(exibidora, checkingFolder.id, accessToken);
+        if (!exibidoraFolder) {
+            throw new Error(`Falha ao criar pasta da exibidora: ${exibidora}`);
+        }
+        console.log('✅ Pasta da exibidora encontrada/criada:', exibidoraFolder.id);
+
+        // ✅ ETAPA 4: Buscar/Criar pasta da Campanha (databaseId)
+        console.log(`🔍 ETAPA 4: Buscando/Criando pasta da campanha: ${databaseId}...`);
+        const campanhaFolder = await findOrCreateFolder(databaseId, exibidoraFolder.id, accessToken);
+        if (!campanhaFolder) {
+            throw new Error(`Falha ao criar pasta da campanha: ${databaseId}`);
+        }
+        console.log('✅ Pasta da campanha encontrada/criada:', campanhaFolder.id);
+
+        // ✅ ETAPA 5: Buscar/Criar pasta do tipo (Entrada/Saida)
+        const tipoFolderName = tipo === 'entrada' ? 'Entrada' : 'Saida';
+        console.log(`🔍 ETAPA 5: Buscando/Criando pasta do tipo: ${tipoFolderName}...`);
+        const tipoFolder = await findOrCreateFolder(tipoFolderName, campanhaFolder.id, accessToken);
+        if (!tipoFolder) {
+            throw new Error(`Falha ao criar pasta do tipo: ${tipoFolderName}`);
+        }
+        console.log('✅ Pasta do tipo encontrada/criada:', tipoFolder.id);
+
+        console.log('✅✅✅ ESTRUTURA COMPLETA CRIADA/ENCONTRADA');
+        const fullPath = `REDE COMPARTILHADA E-RÁDIOS/CheckingOOH/${exibidora}/${databaseId}/${tipoFolderName}`;
+        console.log('📁 Caminho:', fullPath);
+
+        return {
+            id: tipoFolder.id,
+            path: fullPath
+        };
+
+    } catch (error) {
+        console.error('❌ Erro ao garantir estrutura de pastas no Shared Drive:', error);
         throw error;
     }
+}
+
+// =============================================================================
+// 📁 ENCONTRAR OU CRIAR PASTA
+// =============================================================================
+async function findOrCreateFolder(folderName, parentId, accessToken) {
+    try {
+        // Primeiro, tentar encontrar a pasta
+        const query = `name='${folderName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+        
+        const searchResponse = await fetch(
+            `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&fields=files(id,name)`,
+            {
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`
+                }
+            }
+        );
+
+        if (searchResponse.ok) {
+            const searchResult = await searchResponse.json();
+            if (searchResult.files && searchResult.files.length > 0) {
+                console.log(`📁 Pasta "${folderName}" já existe:`, searchResult.files[0].id);
+                return searchResult.files[0];
+            }
+        }
+
+        // Se não encontrou, criar a pasta
+        console.log(`📁 Criando pasta "${folderName}"...`);
+        const createResponse = await fetch(
+            'https://www.googleapis.com/drive/v3/files?supportsAllDrives=true',
+            {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    name: folderName,
+                    mimeType: 'application/vnd.google-apps.folder',
+                    parents: [parentId]
+                })
+            }
+        );
+
+        if (!createResponse.ok) {
+            const errorText = await createResponse.text();
+            throw new Error(`Erro ao criar pasta: ${createResponse.status} - ${errorText}`);
+        }
+
+        const newFolder = await createResponse.json();
+        console.log(`✅ Pasta "${folderName}" criada:`, newFolder.id);
+        return newFolder;
+
+    } catch (error) {
+        console.error(`❌ Erro ao encontrar/criar pasta ${folderName}:`, error);
+        return null;
+    }
+}
+
+// =============================================================================
+// 🌐 ENCONTRAR PASTA EM SHARED DRIVES (SEM PAI ESPECÍFICO)
+// =============================================================================
+async function findFolderInSharedDrives(folderName, accessToken) {
+    try {
+        console.log(`🌐 Buscando pasta "${folderName}" em Shared Drives...`);
+        
+        // Query para buscar pasta em Shared Drives (sem especificar pai)
+        const query = `name='${folderName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+        
+        const response = await fetch(
+            `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&fields=files(id,name,driveId)`,
+            {
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`
+                }
+            }
+        );
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Erro ao buscar pasta em Shared Drives: ${response.status} - ${errorText}`);
+        }
+
+        const result = await response.json();
+        
+        if (result.files && result.files.length > 0) {
+            console.log(`✅ Pasta "${folderName}" encontrada em Shared Drive:`, result.files[0].id);
+            return result.files[0];
+        }
+
+        console.log(`❌ Pasta "${folderName}" NÃO encontrada em Shared Drives`);
+        return null;
+
+    } catch (error) {
+        console.error(`❌ Erro ao encontrar pasta ${folderName} em Shared Drives:`, error);
+        return null;
+    }
+}
+
+// =============================================================================
+// 🆔 GERAR DATABASE ID
+// =============================================================================
+function generateDatabaseId() {
+    return crypto.randomUUID();
 }
 
 // =============================================================================
@@ -240,199 +555,4 @@ function pemToBinary(pem) {
         bytes[i] = binary.charCodeAt(i);
     }
     return bytes.buffer;
-}
-
-// =============================================================================
-// 📤 FAZER UPLOAD PARA GOOGLE DRIVE
-// =============================================================================
-async function uploadFileToGoogleDrive(file, exibidora, pontoId, tipo, databaseId, accessToken, rootFolderId) { // ✅ NOVO: Receber databaseId
-    try {
-        console.log('📤 Fazendo upload para Google Drive...', { 
-            fileName: file.name, 
-            exibidora, 
-            pontoId, 
-            tipo,
-            databaseId // ✅ NOVO
-        });
-
-        // ✅ ALTERADO: Criar/obter estrutura de pastas com databaseId
-        const folderPath = await ensureFolderPath(exibidora, tipo, databaseId, accessToken, rootFolderId);
-        
-        if (!folderPath) {
-            throw new Error('Falha ao criar/obter estrutura de pastas');
-        }
-
-        console.log('📁 Pasta destino:', folderPath.id);
-
-        // Gerar nome único do arquivo
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const fileExtension = file.name.split('.').pop();
-        const fileName = `${tipo}_${pontoId}_${timestamp}.${fileExtension}`;
-
-        console.log('📝 Nome do arquivo:', fileName);
-
-        // Converter arquivo para ArrayBuffer
-        const fileBuffer = await file.arrayBuffer();
-
-        // Criar metadata do arquivo
-        const metadata = {
-            name: fileName,
-            parents: [folderPath.id],
-            mimeType: file.type
-        };
-
-        // Upload multipart
-        const boundary = '-------314159265358979323846';
-        const delimiter = "\r\n--" + boundary + "\r\n";
-        const closeDelim = "\r\n--" + boundary + "--";
-
-        const metadataPart = delimiter + 
-            'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
-            JSON.stringify(metadata);
-
-        const dataPart = delimiter +
-            `Content-Type: ${file.type}\r\n` +
-            'Content-Transfer-Encoding: base64\r\n\r\n' +
-            arrayBufferToBase64(fileBuffer);
-
-        const multipartBody = new TextEncoder().encode(metadataPart + dataPart + closeDelim);
-
-        // Fazer upload
-        const uploadResponse = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-                'Content-Type': `multipart/related; boundary=${boundary}`
-            },
-            body: multipartBody
-        });
-
-        if (!uploadResponse.ok) {
-            const errorText = await uploadResponse.text();
-            throw new Error(`Erro no upload: ${uploadResponse.status} - ${errorText}`);
-        }
-
-        const uploadedFile = await uploadResponse.json();
-
-        console.log('✅ Upload concluído:', uploadedFile.id);
-
-        return {
-            success: true,
-            fileId: uploadedFile.id,
-            fileName: fileName,
-            fileUrl: `https://drive.google.com/file/d/${uploadedFile.id}/view`,
-            folderPath: folderPath.path
-        };
-
-    } catch (error) {
-        console.error('❌ Erro no upload para Google Drive:', error);
-        throw error;
-    }
-}
-
-// =============================================================================
-// 📁 GARANTIR ESTRUTURA DE PASTAS (COM CAMPANHA)
-// =============================================================================
-async function ensureFolderPath(exibidora, tipo, databaseId, accessToken, rootFolderId) { // ✅ NOVO: Receber databaseId
-    try {
-        console.log('📁 Garantindo estrutura de pastas...', { exibidora, tipo, databaseId });
-
-        // Pasta raiz: CheckingOOH
-        const checkingFolder = await findOrCreateFolder('CheckingOOH', rootFolderId, accessToken);
-        
-        // Pasta da Exibidora
-        const exibidoraFolder = await findOrCreateFolder(exibidora, checkingFolder.id, accessToken);
-        
-        // ✅ NOVO: Pasta da Campanha (databaseId)
-        const campanhaFolder = await findOrCreateFolder(databaseId, exibidoraFolder.id, accessToken);
-        
-        // Pasta do Tipo (Entrada ou Saida)
-        const tipoFolderName = tipo === 'entrada' ? 'Entrada' : 'Saida';
-        const tipoFolder = await findOrCreateFolder(tipoFolderName, campanhaFolder.id, accessToken);
-
-        console.log('✅ Estrutura de pastas criada/obtida');
-
-        return {
-            id: tipoFolder.id,
-            path: `CheckingOOH/${exibidora}/${databaseId}/${tipoFolderName}` // ✅ ALTERADO: Incluir databaseId no path
-        };
-
-    } catch (error) {
-        console.error('❌ Erro ao garantir estrutura de pastas:', error);
-        return null;
-    }
-}
-
-// =============================================================================
-// 📁 ENCONTRAR OU CRIAR PASTA
-// =============================================================================
-async function findOrCreateFolder(folderName, parentId, accessToken) {
-    try {
-        // Primeiro, tentar encontrar a pasta
-        const query = `name='${folderName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
-        
-        const searchResponse = await fetch(
-            `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name)`,
-            {
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`
-                }
-            }
-        );
-
-        if (!searchResponse.ok) {
-            throw new Error(`Erro ao buscar pasta: ${searchResponse.status}`);
-        }
-
-        const searchResult = await searchResponse.json();
-        
-        // Se encontrou, retornar
-        if (searchResult.files && searchResult.files.length > 0) {
-            console.log(`📂 Pasta "${folderName}" encontrada:`, searchResult.files[0].id);
-            return searchResult.files[0];
-        }
-
-        // Se não encontrou, criar
-        console.log(`📂 Criando pasta "${folderName}"...`);
-        
-        const createResponse = await fetch('https://www.googleapis.com/drive/v3/files', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                name: folderName,
-                mimeType: 'application/vnd.google-apps.folder',
-                parents: [parentId]
-            })
-        });
-
-        if (!createResponse.ok) {
-            const errorText = await createResponse.text();
-            throw new Error(`Erro ao criar pasta: ${createResponse.status} - ${errorText}`);
-        }
-
-        const newFolder = await createResponse.json();
-        console.log(`✅ Pasta "${folderName}" criada:`, newFolder.id);
-        
-        return newFolder;
-
-    } catch (error) {
-        console.error(`❌ Erro ao encontrar/criar pasta "${folderName}":`, error);
-        throw error;
-    }
-}
-
-// =============================================================================
-// 🔧 CONVERTER ARRAYBUFFER PARA BASE64
-// =============================================================================
-function arrayBufferToBase64(buffer) {
-    let binary = '';
-    const bytes = new Uint8Array(buffer);
-    const len = bytes.byteLength;
-    for (let i = 0; i < len; i++) {
-        binary += String.fromCharCode(bytes[i]);
-    }
-    return btoa(binary);
 }
