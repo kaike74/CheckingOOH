@@ -6,14 +6,15 @@
  * 📤 FAZER UPLOAD DE ARQUIVO PARA O GOOGLE DRIVE
  * Envia um arquivo para a pasta específica da exibidora/tipo
  */
-async function uploadFileToDrive(file, exibidora, pontoId, tipo) {
+async function uploadFileToDrive(file, exibidora, pontoId, tipo, databaseId) { // ✅ NOVO: Receber databaseId
     try {
         Logger.info('Iniciando upload para Google Drive', { 
             fileName: file.name, 
             size: file.size, 
             exibidora, 
             pontoId, 
-            tipo 
+            tipo,
+            databaseId // ✅ NOVO
         });
         
         // 🧪 MODO DEMO - SIMULAR UPLOAD
@@ -33,6 +34,7 @@ async function uploadFileToDrive(file, exibidora, pontoId, tipo) {
         formData.append('exibidora', exibidora);
         formData.append('pontoId', pontoId);
         formData.append('tipo', tipo); // 'entrada' ou 'saida'
+        formData.append('databaseId', databaseId); // ✅ NOVO: Enviar ID da campanha
         
         // 🔗 CHAMADA PARA A API
         const response = await fetch(`${getApiBaseUrl()}/api/drive-upload`, {
@@ -60,9 +62,9 @@ async function uploadFileToDrive(file, exibidora, pontoId, tipo) {
  * 📂 LISTAR ARQUIVOS DO GOOGLE DRIVE
  * Lista todos os arquivos de uma exibidora/ponto/tipo específico
  */
-async function listDriveFiles(exibidora, pontoId, tipo) {
+async function listDriveFiles(exibidora, pontoId, tipo, databaseId) { // ✅ NOVO: Receber databaseId
     try {
-        Logger.info('Listando arquivos do Google Drive', { exibidora, pontoId, tipo });
+        Logger.info('Listando arquivos do Google Drive', { exibidora, pontoId, tipo, databaseId });
         
         // 🧪 MODO DEMO - RETORNAR ARQUIVOS FICTÍCIOS
         if (CONFIG.DEMO.ENABLED) {
@@ -73,7 +75,8 @@ async function listDriveFiles(exibidora, pontoId, tipo) {
         const params = new URLSearchParams({
             exibidora: exibidora,
             pontoId: pontoId,
-            tipo: tipo
+            tipo: tipo,
+            databaseId: databaseId // ✅ NOVO: Enviar ID da campanha
         });
         
         const response = await fetch(`${getApiBaseUrl()}/api/drive-list?${params}`);
@@ -164,30 +167,26 @@ function validateFile(file) {
 
 /**
  * 🧪 MOCK DE UPLOAD (MODO DEMO)
- * Simula o upload de um arquivo
+ * Simula um upload para testes sem backend
  */
 async function mockDriveUpload(file, exibidora, pontoId, tipo) {
     Logger.debug('Simulando upload no modo demo');
     
     // Simular delay de upload
-    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
-    
-    // Simular ID do arquivo
-    const fileId = 'mock_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    await new Promise(resolve => setTimeout(resolve, 1500));
     
     return {
         success: true,
-        fileId: fileId,
+        fileId: `mock_${Date.now()}`,
         fileName: file.name,
-        fileUrl: URL.createObjectURL(file), // URL local para demonstração
-        uploadDate: new Date().toISOString(),
+        fileUrl: URL.createObjectURL(file),
         message: 'Upload simulado com sucesso (modo demo)'
     };
 }
 
 /**
  * 🧪 MOCK DE LISTAGEM (MODO DEMO)
- * Simula a listagem de arquivos
+ * Simula listagem de arquivos para testes
  */
 async function mockDriveFileList(exibidora, pontoId, tipo) {
     Logger.debug('Simulando listagem de arquivos no modo demo');
@@ -224,39 +223,42 @@ async function mockDriveFileList(exibidora, pontoId, tipo) {
 }
 
 /**
- * 📱 REDIMENSIONAR IMAGEM
- * Redimensiona uma imagem para otimizar o upload
+ * 🔧 REDIMENSIONAR IMAGEM (SE NECESSÁRIO)
+ * Redimensiona imagens grandes antes do upload
  */
-function resizeImage(file, maxWidth = 1920, maxHeight = 1080, quality = 0.8) {
+async function resizeImage(file, maxWidth = 1920, maxHeight = 1080) {
     return new Promise((resolve) => {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        const img = new Image();
-        
-        img.onload = () => {
-            // Calcular novas dimensões mantendo proporção
-            let { width, height } = img;
-            
-            if (width > maxWidth) {
-                height = (height * maxWidth) / width;
-                width = maxWidth;
-            }
-            
-            if (height > maxHeight) {
-                width = (width * maxHeight) / height;
-                height = maxHeight;
-            }
-            
-            // Redimensionar
-            canvas.width = width;
-            canvas.height = height;
-            ctx.drawImage(img, 0, 0, width, height);
-            
-            // Converter para blob
-            canvas.toBlob(resolve, file.type, quality);
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+                
+                if (width > maxWidth || height > maxHeight) {
+                    if (width > height) {
+                        height = (height / width) * maxWidth;
+                        width = maxWidth;
+                    } else {
+                        width = (width / height) * maxHeight;
+                        height = maxHeight;
+                    }
+                }
+                
+                canvas.width = width;
+                canvas.height = height;
+                
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                
+                canvas.toBlob((blob) => {
+                    resolve(new File([blob], file.name, { type: file.type }));
+                }, file.type, 0.9);
+            };
+            img.src = e.target.result;
         };
-        
-        img.src = URL.createObjectURL(file);
+        reader.readAsDataURL(file);
     });
 }
 
@@ -266,12 +268,10 @@ function resizeImage(file, maxWidth = 1920, maxHeight = 1080, quality = 0.8) {
  */
 function formatFileSize(bytes) {
     if (bytes === 0) return '0 Bytes';
-    
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
 }
 
 /**
