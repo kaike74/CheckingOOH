@@ -738,3 +738,10 @@ window.updateMediaPreview = updateMediaPreview;
 window.showSuccessMessage = showSuccessMessage;
 
 Logger.info('Script principal carregado');
+
+// ✅ INICIALIZAR APLICAÇÃO QUANDO O DOM ESTIVER PRONTO
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initApp);
+} else {
+    initApp();
+}
