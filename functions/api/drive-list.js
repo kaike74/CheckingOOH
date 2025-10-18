@@ -314,22 +314,22 @@ async function findFolderPath(exibidora, tipo, databaseId, accessToken, rootFold
         console.log('🔍 Procurando caminho da pasta...', { exibidora, tipo, databaseId });
 
         // ETAPA 1: Buscar pasta "REDE COMPARTILHADA E-RÁDIOS" (raiz do Shared Drive)
-        console.log('🔍 ETAPA 1: Buscando pasta REDE COMPARTILHADA E-RÁDIOS...');
+        console.log('🔍 ETAPA 1: Buscando pasta REDE COMPARTILHADA E-RÁDIOS em Shared Drives...');
         const redeFolder = await findFolderInSharedDrives('REDE COMPARTILHADA E-RÁDIOS', accessToken);
         if (!redeFolder) {
-            console.log('❌ Pasta REDE COMPARTILHADA E-RÁDIOS não encontrada');
+            console.log('❌ Pasta REDE COMPARTILHADA E-RÁDIOS não encontrada em Shared Drives');
             return null;
         }
-        console.log('✅ Pasta REDE COMPARTILHADA E-RÁDIOS encontrada:', redeFolder.id);
+        console.log('✅ ETAPA 1 OK: Pasta REDE encontrada:', redeFolder.id);
 
         // ETAPA 2: Buscar pasta CheckingOOH dentro de REDE COMPARTILHADA
         console.log('🔍 ETAPA 2: Buscando pasta CheckingOOH...');
         const checkingFolder = await findFolder('CheckingOOH', redeFolder.id, accessToken);
         if (!checkingFolder) {
-            console.log('❌ Pasta CheckingOOH não encontrada');
+            console.log('❌ Pasta CheckingOOH não encontrada dentro de REDE COMPARTILHADA');
             return null;
         }
-        console.log('✅ Pasta CheckingOOH encontrada:', checkingFolder.id);
+        console.log('✅ ETAPA 2 OK: Pasta CheckingOOH encontrada:', checkingFolder.id);
 
         // ETAPA 3: Buscar pasta da Exibidora
         console.log(`🔍 ETAPA 3: Buscando pasta da exibidora: ${exibidora}...`);
@@ -338,7 +338,7 @@ async function findFolderPath(exibidora, tipo, databaseId, accessToken, rootFold
             console.log(`❌ Pasta da exibidora ${exibidora} não encontrada`);
             return null;
         }
-        console.log('✅ Pasta da exibidora encontrada:', exibidoraFolder.id);
+        console.log('✅ ETAPA 3 OK: Pasta da exibidora encontrada:', exibidoraFolder.id);
 
         // ETAPA 4: Buscar pasta da Campanha (databaseId)
         console.log(`🔍 ETAPA 4: Buscando pasta da campanha: ${databaseId}...`);
@@ -347,7 +347,7 @@ async function findFolderPath(exibidora, tipo, databaseId, accessToken, rootFold
             console.log(`❌ Pasta da campanha ${databaseId} não encontrada`);
             return null;
         }
-        console.log('✅ Pasta da campanha encontrada:', campanhaFolder.id);
+        console.log('✅ ETAPA 4 OK: Pasta da campanha encontrada:', campanhaFolder.id);
 
         // ETAPA 5: Buscar pasta do tipo (Entrada/Saida)
         const tipoFolderName = tipo === 'entrada' ? 'Entrada' : 'Saida';
@@ -358,8 +358,8 @@ async function findFolderPath(exibidora, tipo, databaseId, accessToken, rootFold
             return null;
         }
 
-        console.log('✅✅✅ CAMINHO COMPLETO DA PASTA ENCONTRADO:', tipoFolder.id);
-        console.log('📁 Caminho:', `REDE COMPARTILHADA E-RÁDIOS/CheckingOOH/${exibidora}/${databaseId}/${tipoFolderName}`);
+        console.log('✅ ETAPA 5 OK: Pasta do tipo encontrada:', tipoFolder.id);
+        console.log('🎉 SUCESSO! Caminho COMPLETO da pasta encontrado!');
 
         return {
             id: tipoFolder.id,
