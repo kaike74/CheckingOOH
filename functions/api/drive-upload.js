@@ -23,7 +23,7 @@ export async function onRequestPost(context) {
     }
 
     try {
-        console.log('📤 === INICIANDO UPLOAD V6 - SHARED DRIVE FIX ===');
+        console.log('📤 === INICIANDO UPLOAD V7 - ORDEM DE BUSCA CORRIGIDA ===');
 
         // =============================================================================
         // ETAPA 1: VALIDAR VARIÁVEIS DE AMBIENTE
@@ -31,7 +31,7 @@ export async function onRequestPost(context) {
         console.log('🔍 ETAPA 1: Validando variáveis de ambiente...');
         
         if (!env.GOOGLE_SERVICE_ACCOUNT_KEY) {
-            console.log('❌ GOOGLE_SERVICE_ACCOUNT_KEY não configurada');
+            console.error('❌ GOOGLE_SERVICE_ACCOUNT_KEY não configurada');
             return new Response(JSON.stringify({
                 success: false,
                 error: 'GOOGLE_SERVICE_ACCOUNT_KEY não configurada',
@@ -55,20 +55,28 @@ export async function onRequestPost(context) {
         const exibidora = formData.get('exibidora');
         const pontoId = formData.get('pontoId');
         const tipo = formData.get('tipo');
+        const databaseId = formData.get('databaseId');
 
         console.log('📝 Dados recebidos:', { 
             fileName: file?.name,
             fileSize: file?.size,
             exibidora, 
             pontoId, 
-            tipo 
+            tipo,
+            databaseId
         });
 
-        if (!file || !exibidora || !pontoId || !tipo) {
-            console.log('❌ ETAPA 2: Dados obrigatórios ausentes');
+        if (!file || !exibidora || !pontoId || !tipo || !databaseId) {
+            console.error('❌ ETAPA 2: Dados obrigatórios ausentes', {
+                hasFile: !!file,
+                hasExibidora: !!exibidora,
+                hasPontoId: !!pontoId,
+                hasTipo: !!tipo,
+                hasDatabaseId: !!databaseId
+            });
             return new Response(JSON.stringify({
                 success: false,
-                error: 'Dados obrigatórios ausentes: file, exibidora, pontoId, tipo',
+                error: 'Dados obrigatórios ausentes: file, exibidora, pontoId, tipo, databaseId',
                 step: 'FORM_VALIDATION'
             }), {
                 status: 400,
@@ -141,11 +149,10 @@ export async function onRequestPost(context) {
         // =============================================================================
         console.log('🔍 ETAPA 5: Iniciando upload...');
 
-        // ✅ CORREÇÃO: Usar Shared Drive em vez de rootFolderId
-        const databaseId = generateDatabaseId();
-        console.log('📝 Database ID gerado:', databaseId);
+        // Usar databaseId recebido do frontend
+        console.log('📝 Database ID da campanha:', databaseId);
 
-        // ✅ NOVO: Usar mesma lógica do drive-list.js para Shared Drives
+        // ✅ Usar mesma lógica do drive-list.js para buscar/criar pastas
         const folderPath = await ensureFolderPathInSharedDrive(exibidora, tipo, databaseId, accessToken);
         
         if (!folderPath) {
@@ -182,7 +189,7 @@ export async function onRequestPost(context) {
         }
 
         console.log('✅ ETAPA 5: Upload concluído');
-        console.log('🎉 === UPLOAD V6 CONCLUÍDO COM SUCESSO ===');
+        console.log('🎉 === UPLOAD V7 CONCLUÍDO COM SUCESSO ===');
 
         return new Response(JSON.stringify({
             success: true,
@@ -198,7 +205,8 @@ export async function onRequestPost(context) {
         });
 
     } catch (error) {
-        console.error('❌ Erro geral:', error);
+        console.error('❌ Erro geral no upload:', error);
+        console.error('❌ Stack trace:', error.stack);
         return new Response(JSON.stringify({
             success: false,
             error: error.message,
@@ -366,52 +374,94 @@ async function uploadToGoogleDrive(file, folderId, pontoId, tipo, accessToken) {
 // =============================================================================
 async function ensureFolderPathInSharedDrive(exibidora, tipo, databaseId, accessToken) {
     try {
-        console.log('📁 Criando estrutura no Shared Drive...', { exibidora, tipo, databaseId });
+        console.log('📁 Criando estrutura de pastas...', { exibidora, tipo, databaseId });
 
-        // ✅ ETAPA 1: Buscar pasta "REDE COMPARTILHADA E-RÁDIOS" (raiz do Shared Drive)
-        console.log('📁 ETAPA 1: Buscando pasta REDE COMPARTILHADA E-RÁDIOS...');
-        const redeFolder = await findFolderInSharedDrives('REDE COMPARTILHADA E-RÁDIOS', accessToken);
-        if (!redeFolder) {
-            console.log('❌ Pasta REDE COMPARTILHADA E-RÁDIOS não encontrada');
-            throw new Error('Pasta REDE COMPARTILHADA E-RÁDIOS não encontrada no Shared Drive');
+        // ✅ ESTRATÉGIA 1: Buscar diretamente pasta "CheckingOOH" em todos os drives
+        console.log('🔍 ESTRATÉGIA 1: Buscando pasta CheckingOOH diretamente em My Drive e Shared Drives...');
+        const checkingFolderDirect = await findFolderInAllDrives('CheckingOOH', accessToken);
+        
+        if (checkingFolderDirect) {
+            console.log('✅ ESTRATÉGIA 1 OK: Pasta CheckingOOH encontrada diretamente:', checkingFolderDirect.id);
+            
+            // Continuar construindo estrutura a partir de CheckingOOH
+            const result = await buildFolderStructureForUpload(checkingFolderDirect.id, exibidora, tipo, databaseId, accessToken, 'CheckingOOH');
+            if (result) {
+                console.log('🎉 SUCESSO! Estrutura criada via busca direta de CheckingOOH');
+                return result;
+            }
         }
-        console.log('✅ ETAPA 1 OK: Pasta REDE encontrada:', redeFolder.id);
+        
+        console.log('⚠️ ESTRATÉGIA 1 falhou, tentando ESTRATÉGIA 2...');
 
-        // ✅ ETAPA 2: Buscar/Criar pasta CheckingOOH dentro de REDE COMPARTILHADA
-        console.log('📁 ETAPA 2: Buscando/criando pasta CheckingOOH...');
+        // ✅ ESTRATÉGIA 2 (FALLBACK): Buscar pelo caminho completo (REDE COMPARTILHADA -> CheckingOOH)
+        console.log('🔍 ESTRATÉGIA 2 (FALLBACK): Buscando pasta REDE COMPARTILHADA E-RÁDIOS...');
+        const redeFolder = await findFolderInAllDrives('REDE COMPARTILHADA E-RÁDIOS', accessToken);
+        
+        if (!redeFolder) {
+            console.log('❌ ESTRATÉGIA 2 falhou: Pasta REDE COMPARTILHADA E-RÁDIOS não encontrada');
+            console.log('❌ Todas as estratégias falharam.');
+            throw new Error('Pasta raiz CheckingOOH ou REDE COMPARTILHADA E-RÁDIOS não encontrada');
+        }
+        
+        console.log('✅ ESTRATÉGIA 2: Pasta REDE encontrada:', redeFolder.id);
+
+        // Buscar/Criar CheckingOOH dentro de REDE COMPARTILHADA
+        console.log('📁 Buscando/criando pasta CheckingOOH dentro de REDE COMPARTILHADA...');
         const checkingFolder = await findOrCreateFolder('CheckingOOH', redeFolder.id, accessToken);
         if (!checkingFolder) {
-            throw new Error('Falha ao criar pasta CheckingOOH');
+            throw new Error('Falha ao criar pasta CheckingOOH dentro de REDE COMPARTILHADA');
         }
-        console.log('✅ ETAPA 2 OK: Pasta CheckingOOH:', checkingFolder.id);
+        console.log('✅ Pasta CheckingOOH:', checkingFolder.id);
 
-        // ✅ ETAPA 3: Buscar/Criar pasta da Exibidora
-        console.log(`📁 ETAPA 3: Buscando/criando pasta ${exibidora}...`);
-        const exibidoraFolder = await findOrCreateFolder(exibidora, checkingFolder.id, accessToken);
+        // Continuar construindo estrutura
+        const result = await buildFolderStructureForUpload(checkingFolder.id, exibidora, tipo, databaseId, accessToken, 'REDE COMPARTILHADA E-RÁDIOS/CheckingOOH');
+        if (result) {
+            console.log('🎉 SUCESSO! Estrutura criada via REDE COMPARTILHADA E-RÁDIOS');
+            return result;
+        }
+
+        throw new Error('Falha ao criar estrutura de pastas');
+
+    } catch (error) {
+        console.error('❌ Erro ao garantir estrutura de pastas:', error);
+        throw error;
+    }
+}
+
+// =============================================================================
+// 🏗️ CONSTRUIR ESTRUTURA DE PASTAS PARA UPLOAD
+// =============================================================================
+async function buildFolderStructureForUpload(checkingFolderId, exibidora, tipo, databaseId, accessToken, basePath) {
+    try {
+        console.log(`🏗️ Construindo estrutura para upload a partir de ${basePath}...`);
+
+        // ETAPA 1: Buscar/Criar pasta da Exibidora
+        console.log(`📁 ETAPA 1: Buscando/criando pasta ${exibidora}...`);
+        const exibidoraFolder = await findOrCreateFolder(exibidora, checkingFolderId, accessToken);
         if (!exibidoraFolder) {
             throw new Error(`Falha ao criar pasta da exibidora: ${exibidora}`);
         }
-        console.log('✅ ETAPA 3 OK: Pasta da exibidora:', exibidoraFolder.id);
+        console.log('✅ ETAPA 1 OK: Pasta da exibidora:', exibidoraFolder.id);
 
-        // ✅ ETAPA 4: Buscar/Criar pasta da Campanha (databaseId)
-        console.log(`📁 ETAPA 4: Buscando/criando pasta ${databaseId}...`);
+        // ETAPA 2: Buscar/Criar pasta da Campanha (databaseId)
+        console.log(`📁 ETAPA 2: Buscando/criando pasta ${databaseId}...`);
         const campanhaFolder = await findOrCreateFolder(databaseId, exibidoraFolder.id, accessToken);
         if (!campanhaFolder) {
             throw new Error(`Falha ao criar pasta da campanha: ${databaseId}`);
         }
-        console.log('✅ ETAPA 4 OK: Pasta da campanha:', campanhaFolder.id);
+        console.log('✅ ETAPA 2 OK: Pasta da campanha:', campanhaFolder.id);
 
-        // ✅ ETAPA 5: Buscar/Criar pasta do tipo (Entrada/Saida)
+        // ETAPA 3: Buscar/Criar pasta do tipo (Entrada/Saida)
         const tipoFolderName = tipo === 'entrada' ? 'Entrada' : 'Saida';
-        console.log(`📁 ETAPA 5: Buscando/criando pasta ${tipoFolderName}...`);
+        console.log(`📁 ETAPA 3: Buscando/criando pasta ${tipoFolderName}...`);
         const tipoFolder = await findOrCreateFolder(tipoFolderName, campanhaFolder.id, accessToken);
         if (!tipoFolder) {
             throw new Error(`Falha ao criar pasta do tipo: ${tipoFolderName}`);
         }
-        console.log('✅ ETAPA 5 OK: Pasta do tipo:', tipoFolder.id);
-        console.log('🎉 ESTRUTURA COMPLETA NO SHARED DRIVE!');
-        const fullPath = `REDE COMPARTILHADA E-RÁDIOS/CheckingOOH/${exibidora}/${databaseId}/${tipoFolderName}`;
-        console.log('📁 Caminho:', fullPath);
+        console.log('✅ ETAPA 3 OK: Pasta do tipo:', tipoFolder.id);
+        
+        const fullPath = `${basePath}/${exibidora}/${databaseId}/${tipoFolderName}`;
+        console.log('📁 Caminho completo construído:', fullPath);
 
         return {
             id: tipoFolder.id,
@@ -419,7 +469,7 @@ async function ensureFolderPathInSharedDrive(exibidora, tipo, databaseId, access
         };
 
     } catch (error) {
-        console.error('❌ Erro ao garantir estrutura de pastas no Shared Drive:', error);
+        console.error('❌ Erro ao construir estrutura de pastas para upload:', error);
         throw error;
     }
 }
@@ -483,13 +533,13 @@ async function findOrCreateFolder(folderName, parentId, accessToken) {
 }
 
 // =============================================================================
-// 🌐 ENCONTRAR PASTA EM SHARED DRIVES (SEM PAI ESPECÍFICO)
+// 🌐 ENCONTRAR PASTA EM TODOS OS DRIVES (MY DRIVE + SHARED DRIVES)
 // =============================================================================
-async function findFolderInSharedDrives(folderName, accessToken) {
+async function findFolderInAllDrives(folderName, accessToken) {
     try {
-        console.log(`🌐 Buscando pasta "${folderName}" em Shared Drives...`);
+        console.log(`🌐 Buscando pasta "${folderName}" em My Drive e Shared Drives...`);
         
-        // Query para buscar pasta em Shared Drives (sem especificar pai)
+        // Query robusta para buscar pasta em todos os drives
         const query = `name='${folderName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
         
         const response = await fetch(
@@ -503,21 +553,31 @@ async function findFolderInSharedDrives(folderName, accessToken) {
 
         if (!response.ok) {
             const errorText = await response.text();
-            throw new Error(`Erro ao buscar pasta em Shared Drives: ${response.status} - ${errorText}`);
+            console.error(`❌ Erro HTTP ao buscar pasta: ${response.status} - ${errorText}`);
+            throw new Error(`Erro ao buscar pasta em drives: ${response.status} - ${errorText}`);
         }
 
         const result = await response.json();
         
         if (result.files && result.files.length > 0) {
-            console.log(`✅ Pasta "${folderName}" encontrada em Shared Drive:`, result.files[0].id);
-            return result.files[0];
+            // Se encontrou múltiplas pastas, priorizar Shared Drives
+            const sharedDriveFolder = result.files.find(f => f.driveId);
+            const selectedFolder = sharedDriveFolder || result.files[0];
+            
+            console.log(`✅ Pasta "${folderName}" encontrada (total: ${result.files.length}):`, selectedFolder.id);
+            if (selectedFolder.driveId) {
+                console.log(`   📌 Encontrada em Shared Drive: ${selectedFolder.driveId}`);
+            } else {
+                console.log(`   📌 Encontrada em My Drive`);
+            }
+            return selectedFolder;
         }
 
-        console.log(`❌ Pasta "${folderName}" NÃO encontrada em Shared Drives`);
+        console.log(`❌ Pasta "${folderName}" NÃO encontrada em nenhum drive`);
         return null;
 
     } catch (error) {
-        console.error(`❌ Erro ao encontrar pasta ${folderName} em Shared Drives:`, error);
+        console.error(`❌ Erro ao encontrar pasta ${folderName}:`, error);
         return null;
     }
 }
