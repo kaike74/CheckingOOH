@@ -27,16 +27,16 @@ export async function onRequest(context) {
         const exibidora = url.searchParams.get('exibidora');
         const pontoId = url.searchParams.get('pontoId');
         const tipo = url.searchParams.get('tipo'); // 'entrada' ou 'saida'
-        const databaseId = url.searchParams.get('databaseId'); // ✅ NOVO: ID da campanha
+        const databaseId = url.searchParams.get('databaseId');
 
-        if (!exibidora || !pontoId || !tipo || !databaseId) { // ✅ ALTERADO: Validar databaseId
+        if (!exibidora || !pontoId || !tipo || !databaseId) {
             return new Response(JSON.stringify({ 
                 error: 'Parâmetros obrigatórios não fornecidos',
                 missing: {
                     exibidora: !exibidora,
                     pontoId: !pontoId,
                     tipo: !tipo,
-                    databaseId: !databaseId // ✅ NOVO
+                    databaseId: !databaseId
                 }
             }), {
                 status: 400,
@@ -48,7 +48,7 @@ export async function onRequest(context) {
             exibidora: exibidora,
             pontoId: pontoId,
             tipo: tipo,
-            databaseId: databaseId // ✅ NOVO
+            databaseId: databaseId
         });
 
         // Verificar variáveis de ambiente
@@ -71,7 +71,7 @@ export async function onRequest(context) {
             exibidora, 
             pontoId, 
             tipo,
-            databaseId, // ✅ NOVO: Passar databaseId
+            databaseId,
             accessToken,
             context.env.GOOGLE_DRIVE_FOLDER_ID || 'root'
         );
@@ -234,22 +234,24 @@ function pemToBinary(pem) {
 // =============================================================================
 // 📂 LISTAR ARQUIVOS DO GOOGLE DRIVE
 // =============================================================================
-async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, accessToken, rootFolderId) { // ✅ NOVO: Receber databaseId
+async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, accessToken, rootFolderId) {
     try {
         console.log('📂 Listando arquivos...', { exibidora, pontoId, tipo, databaseId });
 
-        // ✅ ALTERADO: Encontrar pasta específica com databaseId
-        const folderPath = await findFolderPath(exibidora, tipo, databaseId, accessToken, rootFolderId);
+        // ✅ NOVO: Encontrar ou criar pasta completa com estrutura
+        const folderPath = await findOrCreateFolderPath(exibidora, tipo, databaseId, accessToken, rootFolderId);
         
         if (!folderPath) {
-            console.log('📁 Pasta não encontrada - retornando lista vazia');
+            console.error('❌ Não foi possível criar/encontrar a estrutura de pastas');
             return {
-                success: true,
+                success: false,
                 files: [],
                 totalCount: 0,
-                message: 'Pasta não encontrada'
+                error: 'Não foi possível criar/encontrar a estrutura de pastas'
             };
         }
+
+        console.log('✅ Estrutura de pastas pronta:', folderPath.path);
 
         // Listar arquivos na pasta
         console.log('📋 Buscando arquivos na pasta:', folderPath.id);
@@ -258,7 +260,7 @@ async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, ac
         const query = `'${folderPath.id}' in parents and trashed=false and mimeType!='application/vnd.google-apps.folder'`;
         
         const response = await fetch(
-            `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&fields=files(id,name,mimeType,size,createdTime,modifiedTime,webViewLink,webContentLink,thumbnailLink)&orderBy=name`,
+            `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&fields=files(id,name,mimeType,size,createdTime,modifiedTime,webViewLink,webContentLink,thumbnailLink)`,
             {
                 headers: {
                     'Authorization': `Bearer ${accessToken}`
@@ -302,7 +304,8 @@ async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, ac
             success: true,
             files: processedFiles,
             totalCount: processedFiles.length,
-            folderPath: folderPath.path
+            folderPath: folderPath.path,
+            folderId: folderPath.id
         };
 
     } catch (error) {
@@ -312,112 +315,114 @@ async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, ac
 }
 
 // =============================================================================
-// 🔍 ENCONTRAR CAMINHO DA PASTA (COM CAMPANHA)
+// 🔍 ENCONTRAR OU CRIAR CAMINHO DA PASTA (NOVA FUNÇÃO)
 // =============================================================================
-async function findFolderPath(exibidora, tipo, databaseId, accessToken, rootFolderId) {
+async function findOrCreateFolderPath(exibidora, tipo, databaseId, accessToken, rootFolderId) {
     try {
-        console.log('🔍 Procurando caminho da pasta...', { exibidora, tipo, databaseId });
+        console.log('🔍 Procurando ou criando estrutura de pastas...', { exibidora, tipo, databaseId });
 
-        // ✅ ESTRATÉGIA 1: Buscar diretamente pasta "CheckingOOH" em todos os drives
-        console.log('🔍 ESTRATÉGIA 1: Buscando pasta CheckingOOH diretamente em My Drive e Shared Drives...');
-        const checkingFolderDirect = await findFolderInAllDrives('CheckingOOH', accessToken);
+        // PASSO 1: Buscar pasta CheckingOOH em todos os drives
+        console.log('🔍 PASSO 1: Buscando pasta CheckingOOH...');
+        let checkingFolder = await findFolderInAllDrives('CheckingOOH', accessToken);
         
-        if (checkingFolderDirect) {
-            console.log('✅ ESTRATÉGIA 1 OK: Pasta CheckingOOH encontrada diretamente:', checkingFolderDirect.id);
-            
-            // Continuar construindo estrutura a partir de CheckingOOH
-            const result = await buildFolderStructure(checkingFolderDirect.id, exibidora, tipo, databaseId, accessToken, 'CheckingOOH');
-            if (result) {
-                console.log('🎉 SUCESSO! Caminho encontrado via busca direta de CheckingOOH');
-                return result;
-            }
-        }
-        
-        console.log('⚠️ ESTRATÉGIA 1 falhou, tentando ESTRATÉGIA 2...');
-
-        // ✅ ESTRATÉGIA 2 (FALLBACK): Buscar pelo caminho completo (REDE COMPARTILHADA -> CheckingOOH)
-        console.log('🔍 ESTRATÉGIA 2 (FALLBACK): Buscando pasta REDE COMPARTILHADA E-RÁDIOS...');
-        const redeFolder = await findFolderInAllDrives('REDE COMPARTILHADA E-RÁDIOS', accessToken);
-        
-        if (!redeFolder) {
-            console.log('❌ ESTRATÉGIA 2 falhou: Pasta REDE COMPARTILHADA E-RÁDIOS não encontrada');
-            console.log('❌ Todas as estratégias falharam. Retornando null.');
-            return null;
-        }
-        
-        console.log('✅ ESTRATÉGIA 2: Pasta REDE encontrada:', redeFolder.id);
-
-        // Buscar CheckingOOH dentro de REDE COMPARTILHADA
-        console.log('🔍 Buscando pasta CheckingOOH dentro de REDE COMPARTILHADA...');
-        const checkingFolder = await findFolder('CheckingOOH', redeFolder.id, accessToken);
         if (!checkingFolder) {
-            console.log('❌ Pasta CheckingOOH não encontrada dentro de REDE COMPARTILHADA');
+            console.log('❌ Pasta CheckingOOH não encontrada. Não é possível criar estrutura sem pasta raiz.');
             return null;
         }
+        
         console.log('✅ Pasta CheckingOOH encontrada:', checkingFolder.id);
 
-        // Continuar construindo estrutura
-        const result = await buildFolderStructure(checkingFolder.id, exibidora, tipo, databaseId, accessToken, 'REDE COMPARTILHADA E-RÁDIOS/CheckingOOH');
-        if (result) {
-            console.log('🎉 SUCESSO! Caminho encontrado via REDE COMPARTILHADA E-RÁDIOS');
-            return result;
+        // PASSO 2: Buscar ou criar pasta da Exibidora
+        console.log(`🔍 PASSO 2: Buscando/criando pasta da exibidora: ${exibidora}...`);
+        let exibidoraFolder = await findFolder(exibidora, checkingFolder.id, accessToken);
+        
+        if (!exibidoraFolder) {
+            console.log(`📁 Criando pasta da exibidora: ${exibidora}...`);
+            exibidoraFolder = await createFolder(exibidora, checkingFolder.id, accessToken, checkingFolder.driveId);
+            console.log('✅ Pasta da exibidora criada:', exibidoraFolder.id);
+        } else {
+            console.log('✅ Pasta da exibidora já existe:', exibidoraFolder.id);
         }
 
-        console.log('❌ Falha ao construir estrutura de pastas');
-        return null;
+        // PASSO 3: Buscar ou criar pasta da Campanha (databaseId)
+        console.log(`🔍 PASSO 3: Buscando/criando pasta da campanha: ${databaseId}...`);
+        let campanhaFolder = await findFolder(databaseId, exibidoraFolder.id, accessToken);
+        
+        if (!campanhaFolder) {
+            console.log(`📁 Criando pasta da campanha: ${databaseId}...`);
+            campanhaFolder = await createFolder(databaseId, exibidoraFolder.id, accessToken, checkingFolder.driveId);
+            console.log('✅ Pasta da campanha criada:', campanhaFolder.id);
+        } else {
+            console.log('✅ Pasta da campanha já existe:', campanhaFolder.id);
+        }
+
+        // PASSO 4: Buscar ou criar pasta do tipo (Entrada/Saida)
+        const tipoFolderName = tipo === 'entrada' ? 'Entrada' : 'Saida';
+        console.log(`🔍 PASSO 4: Buscando/criando pasta do tipo: ${tipoFolderName}...`);
+        let tipoFolder = await findFolder(tipoFolderName, campanhaFolder.id, accessToken);
+        
+        if (!tipoFolder) {
+            console.log(`📁 Criando pasta do tipo: ${tipoFolderName}...`);
+            tipoFolder = await createFolder(tipoFolderName, campanhaFolder.id, accessToken, checkingFolder.driveId);
+            console.log('✅ Pasta do tipo criada:', tipoFolder.id);
+        } else {
+            console.log('✅ Pasta do tipo já existe:', tipoFolder.id);
+        }
+
+        const fullPath = `CheckingOOH/${exibidora}/${databaseId}/${tipoFolderName}`;
+        console.log('🎉 Estrutura completa pronta! Caminho:', fullPath);
+
+        return {
+            id: tipoFolder.id,
+            path: fullPath,
+            driveId: checkingFolder.driveId
+        };
 
     } catch (error) {
-        console.error('❌ Erro ao encontrar caminho da pasta:', error);
+        console.error('❌ Erro ao encontrar/criar estrutura de pastas:', error);
         return null;
     }
 }
 
 // =============================================================================
-// 🏗️ CONSTRUIR ESTRUTURA DE PASTAS
+// 📁 CRIAR PASTA NO GOOGLE DRIVE (NOVA FUNÇÃO)
 // =============================================================================
-async function buildFolderStructure(checkingFolderId, exibidora, tipo, databaseId, accessToken, basePath) {
+async function createFolder(folderName, parentId, accessToken, driveId = null) {
     try {
-        console.log(`🏗️ Construindo estrutura de pastas a partir de ${basePath}...`);
+        console.log(`📁 Criando pasta "${folderName}" dentro de ${parentId}...`);
 
-        // ETAPA 1: Buscar pasta da Exibidora
-        console.log(`🔍 ETAPA 1: Buscando pasta da exibidora: ${exibidora}...`);
-        const exibidoraFolder = await findFolder(exibidora, checkingFolderId, accessToken);
-        if (!exibidoraFolder) {
-            console.log(`❌ Pasta da exibidora ${exibidora} não encontrada`);
-            return null;
-        }
-        console.log('✅ ETAPA 1 OK: Pasta da exibidora encontrada:', exibidoraFolder.id);
-
-        // ETAPA 2: Buscar pasta da Campanha (databaseId)
-        console.log(`🔍 ETAPA 2: Buscando pasta da campanha: ${databaseId}...`);
-        const campanhaFolder = await findFolder(databaseId, exibidoraFolder.id, accessToken);
-        if (!campanhaFolder) {
-            console.log(`❌ Pasta da campanha ${databaseId} não encontrada`);
-            return null;
-        }
-        console.log('✅ ETAPA 2 OK: Pasta da campanha encontrada:', campanhaFolder.id);
-
-        // ETAPA 3: Buscar pasta do tipo (Entrada/Saida)
-        const tipoFolderName = tipo === 'entrada' ? 'Entrada' : 'Saida';
-        console.log(`🔍 ETAPA 3: Buscando pasta do tipo: ${tipoFolderName}...`);
-        const tipoFolder = await findFolder(tipoFolderName, campanhaFolder.id, accessToken);
-        if (!tipoFolder) {
-            console.log(`❌ Pasta ${tipoFolderName} não encontrada`);
-            return null;
-        }
-        console.log('✅ ETAPA 3 OK: Pasta do tipo encontrada:', tipoFolder.id);
-
-        const fullPath = `${basePath}/${exibidora}/${databaseId}/${tipoFolderName}`;
-        console.log('📁 Caminho completo construído:', fullPath);
-
-        return {
-            id: tipoFolder.id,
-            path: fullPath
+        const metadata = {
+            name: folderName,
+            mimeType: 'application/vnd.google-apps.folder',
+            parents: [parentId]
         };
 
+        const url = driveId 
+            ? `https://www.googleapis.com/drive/v3/files?supportsAllDrives=true`
+            : `https://www.googleapis.com/drive/v3/files`;
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(metadata)
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Erro ao criar pasta: ${response.status} - ${errorText}`);
+        }
+
+        const folder = await response.json();
+        console.log(`✅ Pasta "${folderName}" criada com sucesso:`, folder.id);
+        
+        return folder;
+
     } catch (error) {
-        console.error('❌ Erro ao construir estrutura de pastas:', error);
-        return null;
+        console.error(`❌ Erro ao criar pasta ${folderName}:`, error);
+        throw error;
     }
 }
 
@@ -429,7 +434,7 @@ async function findFolder(folderName, parentId, accessToken) {
         const query = `name='${folderName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
         
         const response = await fetch(
-            `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&fields=files(id,name)`,
+            `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&fields=files(id,name,driveId)`,
             {
                 headers: {
                     'Authorization': `Bearer ${accessToken}`
