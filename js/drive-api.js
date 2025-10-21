@@ -6,53 +6,80 @@
  * 📤 FAZER UPLOAD DE ARQUIVO PARA O GOOGLE DRIVE
  * Envia um arquivo para a pasta específica da exibidora/tipo
  */
-async function uploadFileToDrive(file, exibidora, pontoId, tipo, databaseId) { // ✅ NOVO: Receber databaseId
+async function uploadFileToDrive(file, exibidora, pontoId, tipo, databaseId) {
     try {
+        console.log('📤 === DRIVE API: INICIANDO UPLOAD ===');
+        console.log('📤 Parâmetros:', { 
+            fileName: file.name, 
+            size: file.size, 
+            exibidora, 
+            pontoId, 
+            tipo,
+            databaseId
+        });
         Logger.info('Iniciando upload para Google Drive', { 
             fileName: file.name, 
             size: file.size, 
             exibidora, 
             pontoId, 
             tipo,
-            databaseId // ✅ NOVO
+            databaseId
         });
         
         // 🧪 MODO DEMO - SIMULAR UPLOAD
         if (CONFIG.DEMO.ENABLED) {
+            console.log('🧪 Modo demo ativado, simulando upload...');
             return mockDriveUpload(file, exibidora, pontoId, tipo);
         }
         
         // Validar arquivo
         const validation = validateFile(file);
         if (!validation.valid) {
+            console.error('❌ Arquivo inválido:', validation.error);
             throw new Error(validation.error);
         }
+        console.log('✅ Arquivo válido');
         
         // Criar FormData para envio
         const formData = new FormData();
         formData.append('file', file);
         formData.append('exibidora', exibidora);
         formData.append('pontoId', pontoId);
-        formData.append('tipo', tipo); // 'entrada' ou 'saida'
-        formData.append('databaseId', databaseId); // ✅ NOVO: Enviar ID da campanha
+        formData.append('tipo', tipo);
+        formData.append('databaseId', databaseId);
+        
+        console.log('📦 FormData criado com sucesso');
+        console.log('📤 Enviando requisição para /api/drive-upload...');
         
         // 🔗 CHAMADA PARA A API
-        const response = await fetch(`${getApiBaseUrl()}/api/drive-upload`, {
+        const apiUrl = `${getApiBaseUrl()}/api/drive-upload`;
+        console.log('🔗 URL da API:', apiUrl);
+        
+        const response = await fetch(apiUrl, {
             method: 'POST',
             body: formData
         });
         
+        console.log('📥 Resposta recebida:', {
+            status: response.status,
+            statusText: response.statusText,
+            ok: response.ok
+        });
+        
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({ error: 'Erro desconhecido' }));
+            console.error('❌ Erro na resposta da API:', errorData);
             throw new Error(errorData.error || `Erro HTTP ${response.status}`);
         }
         
         const result = await response.json();
+        console.log('✅ Upload concluído com sucesso:', result);
         Logger.success('Upload concluído', result);
         
         return result;
         
     } catch (error) {
+        console.error('❌ Erro no upload para Google Drive:', error);
         Logger.error('Erro no upload para Google Drive', error);
         throw error;
     }
