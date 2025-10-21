@@ -284,6 +284,109 @@ DEMO: {
 2. Faça deploy novamente
 3. Acesse as URLs geradas no Notion
 
+#### 🔍 Como Testar e Debugar (v7.0)
+
+**Teste local com Wrangler**:
+```bash
+# Criar arquivo .dev.vars com variáveis de ambiente
+echo 'NOTION_TOKEN=seu_token' > .dev.vars
+echo 'GOOGLE_SERVICE_ACCOUNT_KEY={"type":"service_account",...}' >> .dev.vars
+
+# Rodar servidor local
+npm run dev
+
+# Acessar http://localhost:8788?id=SEU_PONTO_ID
+```
+
+**Verificar logs detalhados**:
+
+**Frontend (Console do navegador)**:
+- Abra DevTools (F12)
+- Aba Console
+- Procure por logs com emojis: 📤 📁 ✅ ❌
+- Verifique se `databaseId` é passado corretamente
+- Confirme que evento `onchange` dispara ao selecionar arquivo
+
+**Backend (Terminal do Wrangler ou Cloudflare Logs)**:
+```bash
+# Ver logs em tempo real durante desenvolvimento
+wrangler pages deployment tail
+
+# Ou no Cloudflare Dashboard: Analytics > Logs
+```
+
+Procure por:
+- ✅ `Token de acesso obtido com sucesso`
+- 🔍 `ESTRATÉGIA 1: Buscando pasta CheckingOOH diretamente`
+- ✅ `Pasta "CheckingOOH" encontrada`
+- 📤 `Arquivo selecionado`
+- ✅ `Upload concluído`
+
+**Checklist de Debug**:
+- [ ] ✅ Variáveis de ambiente configuradas no Cloudflare?
+- [ ] ✅ Tabela do Notion compartilhada com a integração?
+- [ ] ✅ Service Account tem acesso ao Google Drive?
+- [ ] ✅ Pasta "CheckingOOH" existe e está compartilhada?
+- [ ] ✅ Formato do JSON da Service Account está correto?
+- [ ] ✅ Console mostra logs de upload ao selecionar arquivo?
+- [ ] ✅ Backend mostra busca de pasta em 2 estratégias?
+
+---
+
+## 🔄 Correções Implementadas (v7.0 - Janeiro 2025)
+
+### Problema Resolvido
+O sistema travava na mensagem "Carregando dados e conectando com Google Drive..." porque:
+1. Buscava primeiro "REDE COMPARTILHADA E-RÁDIOS" que nem sempre existia
+2. Não tinha fallback robusto para buscar "CheckingOOH" diretamente
+3. Input de arquivo não disparava upload ao selecionar arquivos
+
+### Mudanças Implementadas
+
+#### 🔧 Backend (functions/api/drive-list.js)
+- ✅ **Ordem de busca invertida**: Agora busca "CheckingOOH" PRIMEIRO em My Drive e Shared Drives
+- ✅ **Fallback robusto**: Se não encontrar, tenta "REDE COMPARTILHADA E-RÁDIOS" > "CheckingOOH"
+- ✅ **Busca inteligente**: Prioriza Shared Drives quando múltiplas pastas são encontradas
+- ✅ **Logs detalhados**: Cada etapa registrada com emojis e mensagens em português
+- ✅ **Função reutilizável**: `buildFolderStructure()` para construir caminho de pastas
+
+#### 🔧 Backend (functions/api/drive-upload.js)
+- ✅ **Mesma lógica de busca**: Alinhado com drive-list.js
+- ✅ **Uso correto do databaseId**: Usa o ID recebido do frontend (não gera novo)
+- ✅ **Logs de erro melhorados**: Stack trace completo em falhas
+- ✅ **Versão atualizada**: V7 com ordem de busca corrigida
+
+#### 🎨 Frontend (js/upload.js)
+- ✅ **Evento onchange adicionado**: Input de arquivo agora dispara upload ao selecionar
+- ✅ **Logs detalhados**: Console mostra cada arquivo selecionado e validado
+- ✅ **Contexto de upload**: Logs mostram exibidora, pontoId, tipo e databaseId
+
+#### 🎨 Frontend (js/drive-api.js)
+- ✅ **Logs de API**: Registra cada etapa do upload (validação, FormData, requisição, resposta)
+- ✅ **Rastreamento de erros**: Mensagens claras em cada ponto de falha
+
+### Estrutura de Pastas Atualizada
+
+**Busca Prioritária** (Estratégia 1):
+```
+My Drive ou Shared Drives
+└── CheckingOOH/                    ← Procurado PRIMEIRO
+    ├── [Exibidora]/
+    │   ├── [Database ID]/
+    │   │   ├── Entrada/
+    │   │   └── Saida/
+```
+
+**Fallback** (Estratégia 2):
+```
+Shared Drive: REDE COMPARTILHADA E-RÁDIOS/
+└── CheckingOOH/                    ← Fallback se Estratégia 1 falhar
+    ├── [Exibidora]/
+    │   ├── [Database ID]/
+    │   │   ├── Entrada/
+    │   │   └── Saida/
+```
+
 ---
 
 ## 📖 Como Usar
