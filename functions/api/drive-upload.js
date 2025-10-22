@@ -1,29 +1,22 @@
 // =============================================================================
-// 🔧 CLOUDFLARE WORKER: UPLOAD PARA GOOGLE DRIVE V6 - SHARED DRIVE FIX
-// =============================================================================
-// Data: Outubro 2024
-// Compatível com: Cloudflare Pages Functions
-// Funcionalidade: Upload de arquivos com estrutura de pastas específica
-// CORREÇÃO: Usar Shared Drives em vez de Drive pessoal
+// 🔧 CLOUDFLARE WORKER: UPLOAD PARA GOOGLE DRIVE - CORREÇÃO COMPLETA
 // =============================================================================
 
 export async function onRequestPost(context) {
     const { request, env } = context;
 
-    // Headers CORS para permitir requests do frontend
     const corsHeaders = {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     };
 
-    // Responder a requests OPTIONS (preflight)
     if (request.method === 'OPTIONS') {
         return new Response(null, { headers: corsHeaders });
     }
 
     try {
-        console.log('📤 === INICIANDO UPLOAD V7 - ORDEM DE BUSCA CORRIGIDA ===');
+        console.log('📤 === INICIANDO UPLOAD V8 - CORREÇÃO COMPLETA ===');
 
         // =============================================================================
         // ETAPA 1: VALIDAR VARIÁVEIS DE AMBIENTE
@@ -52,10 +45,16 @@ export async function onRequestPost(context) {
         
         const formData = await request.formData();
         const file = formData.get('file');
-        const exibidora = formData.get('exibidora');
-        const pontoId = formData.get('pontoId');
-        const tipo = formData.get('tipo');
-        const databaseId = formData.get('databaseId');
+        let exibidora = formData.get('exibidora');
+        let pontoId = formData.get('pontoId');
+        let tipo = formData.get('tipo');
+        let databaseId = formData.get('databaseId');
+
+        // ✅ CORREÇÃO 1 E 2: Sanitizar parâmetros
+        exibidora = sanitizeParam(exibidora);
+        pontoId = sanitizeParam(pontoId);
+        tipo = sanitizeParam(tipo);
+        databaseId = sanitizeParam(databaseId);
 
         console.log('📝 Dados recebidos:', { 
             fileName: file?.name,
@@ -76,7 +75,7 @@ export async function onRequestPost(context) {
             });
             return new Response(JSON.stringify({
                 success: false,
-                error: 'Dados obrigatórios ausentes: file, exibidora, pontoId, tipo, databaseId',
+                error: 'Dados obrigatórios ausentes ou inválidos: file, exibidora, pontoId, tipo, databaseId',
                 step: 'FORM_VALIDATION'
             }), {
                 status: 400,
@@ -149,10 +148,6 @@ export async function onRequestPost(context) {
         // =============================================================================
         console.log('🔍 ETAPA 5: Iniciando upload...');
 
-        // Usar databaseId recebido do frontend
-        console.log('📝 Database ID da campanha:', databaseId);
-
-        // ✅ Usar mesma lógica do drive-list.js para buscar/criar pastas
         const folderPath = await ensureFolderPathInSharedDrive(exibidora, tipo, databaseId, accessToken);
         
         if (!folderPath) {
@@ -189,7 +184,7 @@ export async function onRequestPost(context) {
         }
 
         console.log('✅ ETAPA 5: Upload concluído');
-        console.log('🎉 === UPLOAD V7 CONCLUÍDO COM SUCESSO ===');
+        console.log('🎉 === UPLOAD V8 CONCLUÍDO COM SUCESSO ===');
 
         return new Response(JSON.stringify({
             success: true,
@@ -219,16 +214,24 @@ export async function onRequestPost(context) {
 }
 
 // =============================================================================
+// 🧹 SANITIZAR PARÂMETROS (NOVA FUNÇÃO)
+// =============================================================================
+function sanitizeParam(param) {
+    if (!param || param === 'null' || param === 'undefined' || param.trim() === '') {
+        return null;
+    }
+    return param.trim();
+}
+
+// =============================================================================
 // 🔑 OBTER TOKEN DE ACESSO DO GOOGLE
 // =============================================================================
 async function getGoogleAccessToken(serviceAccountKey) {
     try {
         console.log('🔑 Gerando token de acesso...');
 
-        // Parse da chave da service account
         const serviceAccount = JSON.parse(serviceAccountKey);
         
-        // Criar JWT
         const now = Math.floor(Date.now() / 1000);
         const payload = {
             iss: serviceAccount.client_email,
@@ -238,10 +241,8 @@ async function getGoogleAccessToken(serviceAccountKey) {
             iat: now
         };
 
-        // Assinar JWT
         const jwt = await signJWT(payload, serviceAccount.private_key);
 
-        // Trocar JWT por access token
         const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
             method: 'POST',
             headers: {
@@ -278,7 +279,6 @@ async function signJWT(payload, privateKey) {
     const encodedPayload = base64UrlEncode(JSON.stringify(payload));
     const signingInput = `${encodedHeader}.${encodedPayload}`;
 
-    // Importar chave privada
     const key = await crypto.subtle.importKey(
         'pkcs8',
         pemToBinary(privateKey),
@@ -287,7 +287,6 @@ async function signJWT(payload, privateKey) {
         ['sign']
     );
 
-    // Assinar
     const signature = await crypto.subtle.sign(
         'RSASSA-PKCS1-v1_5',
         key,
@@ -305,44 +304,51 @@ async function uploadToGoogleDrive(file, folderId, pontoId, tipo, accessToken) {
     try {
         console.log('📤 Fazendo upload do arquivo...');
 
-        // Gerar nome único para o arquivo
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         const fileExtension = file.name.split('.').pop();
         const fileName = `${tipo}_${pontoId}_${timestamp}.${fileExtension}`;
 
-        // Converter arquivo para ArrayBuffer
-        const fileBuffer = await file.arrayBuffer();
-
-        // Upload usando API multipart
-        const boundary = '-------314159265358979323846';
-        const delimiter = "\r\n--" + boundary + "\r\n";
-        const close_delim = "\r\n--" + boundary + "--";
-
+        // ✅ CORREÇÃO 5: Upload usando resumable upload para evitar corrupção
         const metadata = {
             name: fileName,
             parents: [folderId]
         };
 
-        const multipartRequestBody =
-            delimiter +
-            'Content-Type: application/json\r\n\r\n' +
-            JSON.stringify(metadata) +
-            delimiter +
-            `Content-Type: ${file.type}\r\n\r\n` +
-            new TextDecoder().decode(fileBuffer) +
-            close_delim;
-
-        const uploadResponse = await fetch(
-            'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true',
+        // Passo 1: Iniciar sessão de upload resumível
+        const initResponse = await fetch(
+            'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true',
             {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${accessToken}`,
-                    'Content-Type': `multipart/related; boundary="${boundary}"`
+                    'Content-Type': 'application/json; charset=UTF-8',
+                    'X-Upload-Content-Type': file.type
                 },
-                body: multipartRequestBody
+                body: JSON.stringify(metadata)
             }
         );
+
+        if (!initResponse.ok) {
+            const errorText = await initResponse.text();
+            throw new Error(`Falha ao iniciar upload: ${initResponse.status} - ${errorText}`);
+        }
+
+        const uploadUrl = initResponse.headers.get('Location');
+        if (!uploadUrl) {
+            throw new Error('URL de upload não retornada');
+        }
+
+        // Passo 2: Upload do conteúdo do arquivo
+        const fileBuffer = await file.arrayBuffer();
+        
+        const uploadResponse = await fetch(uploadUrl, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': file.type,
+                'Content-Length': fileBuffer.byteLength.toString()
+            },
+            body: fileBuffer
+        });
 
         if (!uploadResponse.ok) {
             const errorText = await uploadResponse.text();
@@ -376,51 +382,20 @@ async function ensureFolderPathInSharedDrive(exibidora, tipo, databaseId, access
     try {
         console.log('📁 Criando estrutura de pastas...', { exibidora, tipo, databaseId });
 
-        // ✅ ESTRATÉGIA 1: Buscar diretamente pasta "CheckingOOH" em todos os drives
-        console.log('🔍 ESTRATÉGIA 1: Buscando pasta CheckingOOH diretamente em My Drive e Shared Drives...');
+        console.log('🔍 Buscando pasta CheckingOOH...');
         const checkingFolderDirect = await findFolderInAllDrives('CheckingOOH', accessToken);
         
         if (checkingFolderDirect) {
-            console.log('✅ ESTRATÉGIA 1 OK: Pasta CheckingOOH encontrada diretamente:', checkingFolderDirect.id);
+            console.log('✅ Pasta CheckingOOH encontrada:', checkingFolderDirect.id);
             
-            // Continuar construindo estrutura a partir de CheckingOOH
             const result = await buildFolderStructureForUpload(checkingFolderDirect.id, exibidora, tipo, databaseId, accessToken, 'CheckingOOH');
             if (result) {
-                console.log('🎉 SUCESSO! Estrutura criada via busca direta de CheckingOOH');
+                console.log('🎉 Estrutura criada com sucesso');
                 return result;
             }
         }
-        
-        console.log('⚠️ ESTRATÉGIA 1 falhou, tentando ESTRATÉGIA 2...');
 
-        // ✅ ESTRATÉGIA 2 (FALLBACK): Buscar pelo caminho completo (REDE COMPARTILHADA -> CheckingOOH)
-        console.log('🔍 ESTRATÉGIA 2 (FALLBACK): Buscando pasta REDE COMPARTILHADA E-RÁDIOS...');
-        const redeFolder = await findFolderInAllDrives('REDE COMPARTILHADA E-RÁDIOS', accessToken);
-        
-        if (!redeFolder) {
-            console.log('❌ ESTRATÉGIA 2 falhou: Pasta REDE COMPARTILHADA E-RÁDIOS não encontrada');
-            console.log('❌ Todas as estratégias falharam.');
-            throw new Error('Pasta raiz CheckingOOH ou REDE COMPARTILHADA E-RÁDIOS não encontrada');
-        }
-        
-        console.log('✅ ESTRATÉGIA 2: Pasta REDE encontrada:', redeFolder.id);
-
-        // Buscar/Criar CheckingOOH dentro de REDE COMPARTILHADA
-        console.log('📁 Buscando/criando pasta CheckingOOH dentro de REDE COMPARTILHADA...');
-        const checkingFolder = await findOrCreateFolder('CheckingOOH', redeFolder.id, accessToken);
-        if (!checkingFolder) {
-            throw new Error('Falha ao criar pasta CheckingOOH dentro de REDE COMPARTILHADA');
-        }
-        console.log('✅ Pasta CheckingOOH:', checkingFolder.id);
-
-        // Continuar construindo estrutura
-        const result = await buildFolderStructureForUpload(checkingFolder.id, exibidora, tipo, databaseId, accessToken, 'REDE COMPARTILHADA E-RÁDIOS/CheckingOOH');
-        if (result) {
-            console.log('🎉 SUCESSO! Estrutura criada via REDE COMPARTILHADA E-RÁDIOS');
-            return result;
-        }
-
-        throw new Error('Falha ao criar estrutura de pastas');
+        throw new Error('Pasta raiz CheckingOOH não encontrada');
 
     } catch (error) {
         console.error('❌ Erro ao garantir estrutura de pastas:', error);
@@ -433,35 +408,32 @@ async function ensureFolderPathInSharedDrive(exibidora, tipo, databaseId, access
 // =============================================================================
 async function buildFolderStructureForUpload(checkingFolderId, exibidora, tipo, databaseId, accessToken, basePath) {
     try {
-        console.log(`🏗️ Construindo estrutura para upload a partir de ${basePath}...`);
+        console.log(`🏗️ Construindo estrutura a partir de ${basePath}...`);
 
-        // ETAPA 1: Buscar/Criar pasta da Exibidora
-        console.log(`📁 ETAPA 1: Buscando/criando pasta ${exibidora}...`);
+        console.log(`📁 Buscando/criando pasta ${exibidora}...`);
         const exibidoraFolder = await findOrCreateFolder(exibidora, checkingFolderId, accessToken);
         if (!exibidoraFolder) {
             throw new Error(`Falha ao criar pasta da exibidora: ${exibidora}`);
         }
-        console.log('✅ ETAPA 1 OK: Pasta da exibidora:', exibidoraFolder.id);
+        console.log('✅ Pasta da exibidora:', exibidoraFolder.id);
 
-        // ETAPA 2: Buscar/Criar pasta da Campanha (databaseId)
-        console.log(`📁 ETAPA 2: Buscando/criando pasta ${databaseId}...`);
+        console.log(`📁 Buscando/criando pasta ${databaseId}...`);
         const campanhaFolder = await findOrCreateFolder(databaseId, exibidoraFolder.id, accessToken);
         if (!campanhaFolder) {
             throw new Error(`Falha ao criar pasta da campanha: ${databaseId}`);
         }
-        console.log('✅ ETAPA 2 OK: Pasta da campanha:', campanhaFolder.id);
+        console.log('✅ Pasta da campanha:', campanhaFolder.id);
 
-        // ETAPA 3: Buscar/Criar pasta do tipo (Entrada/Saida)
         const tipoFolderName = tipo === 'entrada' ? 'Entrada' : 'Saida';
-        console.log(`📁 ETAPA 3: Buscando/criando pasta ${tipoFolderName}...`);
+        console.log(`📁 Buscando/criando pasta ${tipoFolderName}...`);
         const tipoFolder = await findOrCreateFolder(tipoFolderName, campanhaFolder.id, accessToken);
         if (!tipoFolder) {
             throw new Error(`Falha ao criar pasta do tipo: ${tipoFolderName}`);
         }
-        console.log('✅ ETAPA 3 OK: Pasta do tipo:', tipoFolder.id);
+        console.log('✅ Pasta do tipo:', tipoFolder.id);
         
         const fullPath = `${basePath}/${exibidora}/${databaseId}/${tipoFolderName}`;
-        console.log('📁 Caminho completo construído:', fullPath);
+        console.log('📁 Caminho completo:', fullPath);
 
         return {
             id: tipoFolder.id,
@@ -469,7 +441,7 @@ async function buildFolderStructureForUpload(checkingFolderId, exibidora, tipo, 
         };
 
     } catch (error) {
-        console.error('❌ Erro ao construir estrutura de pastas para upload:', error);
+        console.error('❌ Erro ao construir estrutura:', error);
         throw error;
     }
 }
@@ -479,7 +451,6 @@ async function buildFolderStructureForUpload(checkingFolderId, exibidora, tipo, 
 // =============================================================================
 async function findOrCreateFolder(folderName, parentId, accessToken) {
     try {
-        // Primeiro, tentar encontrar a pasta
         const query = `name='${folderName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
         
         const searchResponse = await fetch(
@@ -499,7 +470,6 @@ async function findOrCreateFolder(folderName, parentId, accessToken) {
             }
         }
 
-        // Se não encontrou, criar a pasta
         console.log(`📁 Criando pasta "${folderName}"...`);
         const createResponse = await fetch(
             'https://www.googleapis.com/drive/v3/files?supportsAllDrives=true',
@@ -533,13 +503,12 @@ async function findOrCreateFolder(folderName, parentId, accessToken) {
 }
 
 // =============================================================================
-// 🌐 ENCONTRAR PASTA EM TODOS OS DRIVES (MY DRIVE + SHARED DRIVES)
+// 🌐 ENCONTRAR PASTA EM TODOS OS DRIVES
 // =============================================================================
 async function findFolderInAllDrives(folderName, accessToken) {
     try {
-        console.log(`🌐 Buscando pasta "${folderName}" em My Drive e Shared Drives...`);
+        console.log(`🌐 Buscando pasta "${folderName}"...`);
         
-        // Query robusta para buscar pasta em todos os drives
         const query = `name='${folderName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
         
         const response = await fetch(
@@ -553,27 +522,20 @@ async function findFolderInAllDrives(folderName, accessToken) {
 
         if (!response.ok) {
             const errorText = await response.text();
-            console.error(`❌ Erro HTTP ao buscar pasta: ${response.status} - ${errorText}`);
-            throw new Error(`Erro ao buscar pasta em drives: ${response.status} - ${errorText}`);
+            throw new Error(`Erro ao buscar pasta: ${response.status} - ${errorText}`);
         }
 
         const result = await response.json();
         
         if (result.files && result.files.length > 0) {
-            // Se encontrou múltiplas pastas, priorizar Shared Drives
             const sharedDriveFolder = result.files.find(f => f.driveId);
             const selectedFolder = sharedDriveFolder || result.files[0];
             
-            console.log(`✅ Pasta "${folderName}" encontrada (total: ${result.files.length}):`, selectedFolder.id);
-            if (selectedFolder.driveId) {
-                console.log(`   📌 Encontrada em Shared Drive: ${selectedFolder.driveId}`);
-            } else {
-                console.log(`   📌 Encontrada em My Drive`);
-            }
+            console.log(`✅ Pasta "${folderName}" encontrada:`, selectedFolder.id);
             return selectedFolder;
         }
 
-        console.log(`❌ Pasta "${folderName}" NÃO encontrada em nenhum drive`);
+        console.log(`❌ Pasta "${folderName}" não encontrada`);
         return null;
 
     } catch (error) {
@@ -583,14 +545,7 @@ async function findFolderInAllDrives(folderName, accessToken) {
 }
 
 // =============================================================================
-// 🆔 GERAR DATABASE ID
-// =============================================================================
-function generateDatabaseId() {
-    return crypto.randomUUID();
-}
-
-// =============================================================================
-// 🔧 FUNÇÕES AUXILIARES PARA JWT
+// 🔧 FUNÇÕES AUXILIARES
 // =============================================================================
 function base64UrlEncode(data) {
     let base64;
