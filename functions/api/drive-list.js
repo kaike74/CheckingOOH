@@ -24,10 +24,16 @@ export async function onRequest(context) {
 
         // Obter parâmetros da URL
         const url = new URL(context.request.url);
-        const exibidora = url.searchParams.get('exibidora');
-        const pontoId = url.searchParams.get('pontoId');
-        const tipo = url.searchParams.get('tipo'); // 'entrada' ou 'saida'
-        const databaseId = url.searchParams.get('databaseId');
+        let exibidora = url.searchParams.get('exibidora');
+        let pontoId = url.searchParams.get('pontoId');
+        let tipo = url.searchParams.get('tipo');
+        let databaseId = url.searchParams.get('databaseId');
+
+        // ✅ CORREÇÃO 1: Sanitizar parâmetros para evitar "null" como string
+        exibidora = sanitizeParam(exibidora);
+        pontoId = sanitizeParam(pontoId);
+        tipo = sanitizeParam(tipo);
+        databaseId = sanitizeParam(databaseId);
 
         if (!exibidora || !pontoId || !tipo || !databaseId) {
             return new Response(JSON.stringify({ 
@@ -91,6 +97,16 @@ export async function onRequest(context) {
             headers
         });
     }
+}
+
+// =============================================================================
+// 🧹 SANITIZAR PARÂMETROS (NOVA FUNÇÃO)
+// =============================================================================
+function sanitizeParam(param) {
+    if (!param || param === 'null' || param === 'undefined' || param.trim() === '') {
+        return null;
+    }
+    return param.trim();
 }
 
 // =============================================================================
@@ -238,7 +254,7 @@ async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, ac
     try {
         console.log('📂 Listando arquivos...', { exibidora, pontoId, tipo, databaseId });
 
-        // ✅ NOVO: Encontrar ou criar pasta completa com estrutura
+        // Encontrar ou criar pasta completa com estrutura
         const folderPath = await findOrCreateFolderPath(exibidora, tipo, databaseId, accessToken, rootFolderId);
         
         if (!folderPath) {
@@ -256,7 +272,7 @@ async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, ac
         // Listar arquivos na pasta
         console.log('📋 Buscando arquivos na pasta:', folderPath.id);
         
-        // Query para buscar arquivos (não pastas) relacionados ao ponto
+        // ✅ CORREÇÃO 7: Query menos restritiva para listar TODOS os arquivos da pasta
         const query = `'${folderPath.id}' in parents and trashed=false and mimeType!='application/vnd.google-apps.folder'`;
         
         const response = await fetch(
@@ -278,10 +294,17 @@ async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, ac
 
         console.log(`📋 Encontrados ${allFiles.length} arquivos na pasta`);
 
-        // Filtrar arquivos por ponto (nome do arquivo contém pontoId)
-        const filteredFiles = allFiles.filter(file => 
-            file.name.includes(pontoId) || file.name.includes(`${tipo}_${pontoId}`)
-        );
+        // ✅ CORREÇÃO 7: Filtro mais flexível - inclui arquivos que contenham o pontoId OU arquivos sem pontoId específico
+        const filteredFiles = allFiles.filter(file => {
+            const fileName = file.name.toLowerCase();
+            const pontoIdLower = pontoId.toLowerCase();
+            
+            // Aceitar arquivos que contenham o pontoId no nome
+            // OU arquivos que estejam na pasta correta (já filtrados pela query)
+            return fileName.includes(pontoIdLower) || 
+                   fileName.includes(`${tipo}_${pontoIdLower}`) ||
+                   fileName.startsWith(tipo); // Aceita qualquer arquivo que comece com tipo (entrada/saida)
+        });
 
         console.log(`📋 Arquivos filtrados para o ponto: ${filteredFiles.length}`);
 
@@ -315,7 +338,7 @@ async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, ac
 }
 
 // =============================================================================
-// 🔍 ENCONTRAR OU CRIAR CAMINHO DA PASTA (NOVA FUNÇÃO)
+// 🔍 ENCONTRAR OU CRIAR CAMINHO DA PASTA
 // =============================================================================
 async function findOrCreateFolderPath(exibidora, tipo, databaseId, accessToken, rootFolderId) {
     try {
@@ -385,7 +408,7 @@ async function findOrCreateFolderPath(exibidora, tipo, databaseId, accessToken, 
 }
 
 // =============================================================================
-// 📁 CRIAR PASTA NO GOOGLE DRIVE (NOVA FUNÇÃO)
+// 📁 CRIAR PASTA NO GOOGLE DRIVE
 // =============================================================================
 async function createFolder(folderName, parentId, accessToken, driveId = null) {
     try {
@@ -468,7 +491,6 @@ async function findFolderInAllDrives(folderName, accessToken) {
     try {
         console.log(`🌐 Buscando pasta "${folderName}" em My Drive e Shared Drives...`);
         
-        // Query robusta para buscar pasta em todos os drives
         const query = `name='${folderName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
         
         const response = await fetch(
@@ -489,7 +511,6 @@ async function findFolderInAllDrives(folderName, accessToken) {
         const result = await response.json();
         
         if (result.files && result.files.length > 0) {
-            // Se encontrou múltiplas pastas, priorizar Shared Drives
             const sharedDriveFolder = result.files.find(f => f.driveId);
             const selectedFolder = sharedDriveFolder || result.files[0];
             
@@ -515,11 +536,10 @@ async function findFolderInAllDrives(folderName, accessToken) {
 // 🔗 OBTER URL DE VISUALIZAÇÃO DO ARQUIVO
 // =============================================================================
 function getFileViewUrl(file) {
-    // Para imagens e vídeos, usar URL de visualização direta
+    // ✅ CORREÇÃO 6: URLs corretas para visualização
     if (file.mimeType && (file.mimeType.startsWith('image/') || file.mimeType.startsWith('video/'))) {
-        return `https://drive.google.com/uc?id=${file.id}`;
+        return `https://drive.google.com/uc?export=view&id=${file.id}`;
     }
     
-    // Para outros tipos, usar URL de visualização
     return file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`;
 }
