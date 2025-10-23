@@ -650,12 +650,68 @@ function showCarouselMedia(index) {
     container.innerHTML = '';
 
     if (DriveAPI.isVideoFile(file.mimeType)) {
-        // Vídeo
+        // ✅ CORREÇÃO: Vídeo com botão de download (Google Drive não permite embed)
+        const downloadUrl = `https://drive.google.com/uc?export=download&id=${file.id}`;
+        const thumbnail = file.thumbnailUrl || `https://drive.google.com/thumbnail?id=${file.id}&sz=w800`;
+
         container.innerHTML = `
-            <video controls autoplay style="max-width: 90vw; max-height: 90vh;">
-                <source src="${file.url}" type="${file.mimeType}">
-                Seu navegador não suporta vídeos.
-            </video>
+            <div style="
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 30px;
+            ">
+                <div style="
+                    position: relative;
+                    width: 600px;
+                    max-width: 90vw;
+                    aspect-ratio: 16/9;
+                    background: url('${thumbnail}') center/cover no-repeat, #000;
+                    border-radius: 12px;
+                    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+                ">
+                    <div style="
+                        position: absolute;
+                        top: 50%;
+                        left: 50%;
+                        transform: translate(-50%, -50%);
+                        background: rgba(0,0,0,0.7);
+                        border-radius: 50%;
+                        width: 80px;
+                        height: 80px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        color: white;
+                        font-size: 40px;
+                    ">▶</div>
+                    <div style="
+                        position: absolute;
+                        top: 15px;
+                        right: 15px;
+                        background: rgba(0,0,0,0.8);
+                        color: white;
+                        padding: 8px 16px;
+                        border-radius: 8px;
+                        font-size: 14px;
+                        font-weight: bold;
+                    ">VÍDEO</div>
+                </div>
+                <a href="${downloadUrl}" class="btn btn-primary" style="
+                    padding: 16px 40px;
+                    font-size: 18px;
+                    text-decoration: none;
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 10px;
+                ">
+                    ▶ Baixar Vídeo
+                </a>
+                <p style="color: #94A3B8; font-size: 14px; margin: 0;">
+                    Google Drive não permite reprodução direta de vídeos
+                </p>
+            </div>
         `;
     } else {
         // Imagem
