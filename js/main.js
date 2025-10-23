@@ -18,15 +18,31 @@ const appData = {
 async function initApp() {
     try {
         Logger.info('Iniciando aplicação Checking OOH...');
-        
+
+        // Mostrar loading
+        showLoading();
+
         // Configurar interface inicial
         setupInterface();
-        
+
         // Detectar modo de acesso pela URL
         const urlParams = new URLSearchParams(window.location.search);
         const pontoId = urlParams.get('id');
         const clienteId = urlParams.get('idcliente');
-        
+        const exibidora = urlParams.get('exibidora');
+        const databaseId = urlParams.get('databaseId');
+
+        // ✅ CORREÇÃO 2: Armazenar databaseId e exibidora da URL
+        if (databaseId && databaseId !== 'null' && databaseId !== 'undefined') {
+            appData.databaseId = databaseId;
+            Logger.info('✅ Database ID obtido da URL:', databaseId);
+        }
+
+        if (exibidora && exibidora !== 'null' && exibidora !== 'undefined') {
+            appData.exibidora = exibidora;
+            Logger.info('✅ Exibidora obtida da URL:', exibidora);
+        }
+
         if (pontoId) {
             // Modo Exibidora
             appData.mode = 'exibidora';
@@ -37,16 +53,22 @@ async function initApp() {
             await loadClienteData(clienteId);
         } else {
             // Sem ID - Mostrar instruções
+            hideLoading();
             showWelcomeScreen();
+            return;
         }
-        
+
         // Configurar drag & drop após carregar dados
         setupDragAndDrop();
-        
+
+        // ✅ CORREÇÃO 3: Esconder loading após carregar tudo
+        hideLoading();
+
         Logger.success('Aplicação inicializada com sucesso');
-        
+
     } catch (error) {
         Logger.error('Erro ao inicializar aplicação', error);
+        hideLoading();
         showErrorScreen(error.message);
     }
 }
@@ -709,13 +731,13 @@ function showSuccessMessage(message) {
         transition: transform 0.3s ease;
     `;
     notification.textContent = message;
-    
+
     document.body.appendChild(notification);
-    
+
     setTimeout(() => {
         notification.style.transform = 'translateX(0)';
     }, 100);
-    
+
     setTimeout(() => {
         notification.style.transform = 'translateX(100%)';
         setTimeout(() => {
@@ -724,6 +746,30 @@ function showSuccessMessage(message) {
             }
         }, 300);
     }, 4000);
+}
+
+/**
+ * 🔄 MOSTRAR LOADING
+ * Exibe a tela de carregamento
+ */
+function showLoading() {
+    const loadingElement = document.getElementById('loading');
+    if (loadingElement) {
+        loadingElement.style.display = 'flex';
+        Logger.debug('Loading exibido');
+    }
+}
+
+/**
+ * 🔒 ESCONDER LOADING
+ * Oculta a tela de carregamento
+ */
+function hideLoading() {
+    const loadingElement = document.getElementById('loading');
+    if (loadingElement) {
+        loadingElement.style.display = 'none';
+        Logger.debug('Loading escondido');
+    }
 }
 
 // 🚀 EXPORTAR FUNÇÕES GLOBAIS

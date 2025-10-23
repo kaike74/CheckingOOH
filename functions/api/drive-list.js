@@ -294,19 +294,12 @@ async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, ac
 
         console.log(`📋 Encontrados ${allFiles.length} arquivos na pasta`);
 
-        // ✅ CORREÇÃO 7: Filtro mais flexível - inclui arquivos que contenham o pontoId OU arquivos sem pontoId específico
-        const filteredFiles = allFiles.filter(file => {
-            const fileName = file.name.toLowerCase();
-            const pontoIdLower = pontoId.toLowerCase();
-            
-            // Aceitar arquivos que contenham o pontoId no nome
-            // OU arquivos que estejam na pasta correta (já filtrados pela query)
-            return fileName.includes(pontoIdLower) || 
-                   fileName.includes(`${tipo}_${pontoIdLower}`) ||
-                   fileName.startsWith(tipo); // Aceita qualquer arquivo que comece com tipo (entrada/saida)
-        });
+        // ✅ CORREÇÃO 7: Filtro MUITO MAIS FLEXÍVEL - aceita TODOS os arquivos da pasta correta
+        // A pasta já é específica para o tipo (Entrada/Saída), então não precisa filtrar mais
+        // Isso permite que arquivos colocados manualmente no Drive sejam listados
+        const filteredFiles = allFiles; // Retorna TODOS os arquivos da pasta
 
-        console.log(`📋 Arquivos filtrados para o ponto: ${filteredFiles.length}`);
+        console.log(`📋 Arquivos na pasta ${tipo}: ${filteredFiles.length}`);
 
         // Processar arquivos para formato padronizado
         const processedFiles = filteredFiles.map(file => ({
@@ -536,10 +529,19 @@ async function findFolderInAllDrives(folderName, accessToken) {
 // 🔗 OBTER URL DE VISUALIZAÇÃO DO ARQUIVO
 // =============================================================================
 function getFileViewUrl(file) {
-    // ✅ CORREÇÃO 6: URLs corretas para visualização
-    if (file.mimeType && (file.mimeType.startsWith('image/') || file.mimeType.startsWith('video/'))) {
+    // ✅ CORREÇÃO 6 e 8: URLs otimizadas para evitar corrupção
+    // Usar diferentes formatos de URL dependendo do tipo de arquivo
+
+    if (file.mimeType && file.mimeType.startsWith('image/')) {
+        // Para imagens, usar o formato direto que evita processamento desnecessário
         return `https://drive.google.com/uc?export=view&id=${file.id}`;
     }
-    
+
+    if (file.mimeType && file.mimeType.startsWith('video/')) {
+        // Para vídeos, usar o formato de preview
+        return `https://drive.google.com/file/d/${file.id}/preview`;
+    }
+
+    // Para outros tipos, usar webViewLink ou fallback
     return file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`;
 }
