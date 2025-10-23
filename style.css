@@ -822,24 +822,50 @@ body {
     }
 }
 
+/* =============================================================================
+    ⏳ SKELETON LOADERS (OTIMIZAÇÃO)
+    ============================================================================= */
+.skeleton {
+    background: linear-gradient(90deg, #F1F5F9 25%, #E2E8F0 50%, #F1F5F9 75%);
+    background-size: 200% 100%;
+    animation: skeleton-loading 1.5s ease-in-out infinite;
+    border-radius: 8px;
+}
+
+@keyframes skeleton-loading {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+.skeleton-media-item {
+    aspect-ratio: 1;
+    border-radius: 8px;
+}
+
+.media-preview.loading {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    gap: 8px;
+}
+
 @media (max-width: 480px) {
     .header-title {
         font-size: 20px;
     }
-    
+
     .header-subtitle {
         font-size: 14px;
     }
-    
+
     .secao-actions {
         gap: 8px;
     }
-    
+
     .btn {
         font-size: 12px;
         padding: 8px 12px;
     }
-    
+
     .photos-grid {
         grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
     }

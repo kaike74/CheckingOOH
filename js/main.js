@@ -273,10 +273,19 @@ async function createSecaoElement(ponto, tipo, readOnly = false) {
     const previewDiv = document.createElement('div');
     previewDiv.className = 'media-preview';
     previewDiv.id = `preview-${ponto.id}-${tipo}`;
-    
-    // Carregar arquivos existentes
-    await loadMediaPreview(ponto, tipo, previewDiv, readOnly);
-    
+
+    // ✅ OTIMIZAÇÃO: Lazy loading - só carregar quando visível ou em modo cliente
+    if (readOnly) {
+        // Modo cliente: carregar imediatamente
+        await loadMediaPreview(ponto, tipo, previewDiv, readOnly);
+    } else {
+        // Modo exibidora: mostrar placeholder, carregar sob demanda
+        previewDiv.innerHTML = '<p style="text-align: center; color: #94A3B8; font-size: 11px; padding: 10px;">↓ Expanda para carregar ↓</p>';
+        previewDiv.dataset.pontoId = ponto.id;
+        previewDiv.dataset.tipo = tipo;
+        previewDiv.dataset.loaded = 'false';
+    }
+
     secaoDiv.appendChild(previewDiv);
     
     // Contador de mídia
@@ -415,16 +424,58 @@ function updateMediaCount(pontoId, tipo, count) {
  * 🔄 ALTERNAR CONTEÚDO DO PONTO
  * Expande/recolhe o conteúdo de um ponto
  */
-function togglePontoContent(pontoId) {
+async function togglePontoContent(pontoId) {
     const content = document.getElementById(`content-${pontoId}`);
     const icon = document.getElementById(`toggle-icon-${pontoId}`);
-    
+
     if (content && icon) {
         const isVisible = content.style.display !== 'none';
         content.style.display = isVisible ? 'none' : 'grid';
         icon.textContent = isVisible ? '▼' : '▲';
-        
+
+        // ✅ OTIMIZAÇÃO: Lazy load - carregar arquivos na primeira expansão
+        // ✅ OTIMIZAÇÃO: Carregar entrada e saída em PARALELO
+        if (!isVisible) {
+            const ponto = appData.pontos.find(p => p.id === pontoId);
+            if (ponto) {
+                await Promise.all([
+                    loadPontoMediaIfNeeded(ponto, 'entrada'),
+                    loadPontoMediaIfNeeded(ponto, 'saida')
+                ]);
+            }
+        }
+
         Logger.debug('Conteúdo do ponto alternado', { pontoId, visible: !isVisible });
+    }
+}
+
+/**
+ * 📥 CARREGAR MÍDIA SE NECESSÁRIO (LAZY LOADING)
+ * Carrega arquivos apenas se ainda não foram carregados
+ */
+async function loadPontoMediaIfNeeded(ponto, tipo) {
+    const previewDiv = document.getElementById(`preview-${ponto.id}-${tipo}`);
+
+    if (!previewDiv) return;
+
+    const isLoaded = previewDiv.dataset.loaded === 'true';
+
+    if (!isLoaded) {
+        console.log(`📥 Lazy loading: Carregando arquivos ${tipo} para ponto ${ponto.id}`);
+
+        // ✅ OTIMIZAÇÃO: Mostrar skeleton loaders durante carregamento
+        previewDiv.className = 'media-preview loading';
+        previewDiv.innerHTML = `
+            <div class="skeleton skeleton-media-item"></div>
+            <div class="skeleton skeleton-media-item"></div>
+            <div class="skeleton skeleton-media-item"></div>
+        `;
+
+        await loadMediaPreview(ponto, tipo, previewDiv, false);
+        previewDiv.className = 'media-preview'; // Remover classe loading
+        previewDiv.dataset.loaded = 'true';
+
+        Logger.info('Arquivos carregados via lazy loading', { pontoId: ponto.id, tipo });
     }
 }
 
