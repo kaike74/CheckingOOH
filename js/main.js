@@ -251,13 +251,10 @@ async function createSecaoElement(ponto, tipo, readOnly = false) {
     if (!readOnly) {
         const actionsDiv = document.createElement('div');
         actionsDiv.className = 'secao-actions';
-        // ✅ ALTERADO: Passar databaseId para openUploadModal
+        // ✅ MELHORIA: Botão unificado "Adicionar Mídia"
         actionsDiv.innerHTML = `
-            <button class="btn btn-camera btn-small" onclick="openUploadModal('${appData.exibidora}', '${ponto.id}', '${tipo}', '${appData.databaseId}')">
-                📷 Tirar Foto
-            </button>
-            <button class="btn btn-primary btn-small" onclick="openUploadModal('${appData.exibidora}', '${ponto.id}', '${tipo}', '${appData.databaseId}')">
-                📁 Upload
+            <button class="btn btn-primary btn-small" onclick="openMediaChoiceModal('${appData.exibidora}', '${ponto.id}', '${tipo}', '${appData.databaseId}')">
+                📎 Adicionar Mídia
             </button>
             <button class="btn btn-secondary btn-small" onclick="toggleEditMode('${ponto.id}', '${tipo}')" id="edit-btn-${ponto.id}-${tipo}">
                 ✏️ Editar
@@ -348,6 +345,7 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false) {
             // ✅ CORREÇÃO: Vídeo com thumbnail e ícone de play
             const videoThumb = file.thumbnailUrl || `https://drive.google.com/thumbnail?id=${file.id}&sz=w400`;
 
+            // ✅ MELHORIA: Removido timestamp conforme solicitado
             mediaItem.innerHTML = `
                 <div style="
                     position: relative;
@@ -412,24 +410,20 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false) {
             img.src = file.url;
             console.log(`🖼️ Tentando carregar imagem ${file.name} de: ${file.url}`);
 
-            const dateDiv = document.createElement('div');
-            dateDiv.className = 'photo-date';
-            dateDiv.textContent = DriveAPI.formatDate(file.createdTime);
-
+            // ✅ MELHORIA: Timestamp removido conforme solicitado
             mediaItem.appendChild(img);
-            mediaItem.appendChild(dateDiv);
         }
         
-        // Ações de edição (apenas para exibidora em modo edição)
+        // ✅ MELHORIA: Modo edição com "-" vermelho no canto
         if (!readOnly && isEditMode(pontoId, tipo)) {
-            const actionsDiv = document.createElement('div');
-            actionsDiv.className = 'photo-actions';
-            actionsDiv.innerHTML = `
-                <button class="btn btn-danger btn-small" onclick="deleteFile('${file.id}', '${file.name}', '${pontoId}', '${tipo}')" title="Excluir">
-                    🗑️
-                </button>
-            `;
-            mediaItem.appendChild(actionsDiv);
+            const deleteBtn = document.createElement('div');
+            deleteBtn.className = 'delete-badge';
+            deleteBtn.innerHTML = '−'; // Sinal de menos
+            deleteBtn.onclick = (e) => {
+                e.stopPropagation(); // Não abrir modal ao clicar no X
+                deleteFile(file.id, file.name, pontoId, tipo);
+            };
+            mediaItem.appendChild(deleteBtn);
         }
         
         container.appendChild(mediaItem);
@@ -978,9 +972,77 @@ function showImageErrorPlaceholder(imgElement) {
     }
 }
 
+/**
+ * 📎 ABRIR MODAL DE ESCOLHA DE MÍDIA
+ * Modal que permite escolher entre Tirar Foto ou fazer Upload
+ */
+function openMediaChoiceModal(exibidora, pontoId, tipo, databaseId) {
+    // Criar modal simples com as opções
+    const existingModal = document.getElementById('media-choice-modal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+
+    const modal = document.createElement('div');
+    modal.id = 'media-choice-modal';
+    modal.className = 'modal';
+    modal.style.display = 'flex';
+    modal.style.zIndex = '2100'; // Acima de outros modais
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3>📎 Adicionar Mídia</h3>
+                <button class="close-btn" onclick="closeMediaChoiceModal()">×</button>
+            </div>
+            <div class="modal-body" style="padding: 30px; text-align: center;">
+                <button class="btn btn-camera" style="width: 100%; margin-bottom: 15px; padding: 20px; font-size: 16px;" onclick="chooseCamera('${exibidora}', '${pontoId}', '${tipo}', '${databaseId}')">
+                    📷 Tirar Foto
+                </button>
+                <button class="btn btn-primary" style="width: 100%; padding: 20px; font-size: 16px;" onclick="chooseUpload('${exibidora}', '${pontoId}', '${tipo}', '${databaseId}')">
+                    📁 Fazer Upload
+                </button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+}
+
+/**
+ * 🔒 FECHAR MODAL DE ESCOLHA
+ */
+function closeMediaChoiceModal() {
+    const modal = document.getElementById('media-choice-modal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+/**
+ * 📷 ESCOLHER CÂMERA
+ */
+function chooseCamera(exibidora, pontoId, tipo, databaseId) {
+    closeMediaChoiceModal();
+    CameraManager.setCameraContext(exibidora, pontoId, tipo, databaseId);
+    CameraManager.openCamera();
+}
+
+/**
+ * 📁 ESCOLHER UPLOAD
+ */
+function chooseUpload(exibidora, pontoId, tipo, databaseId) {
+    closeMediaChoiceModal();
+    openUploadModal(exibidora, pontoId, tipo, databaseId);
+}
+
 // 🚀 EXPORTAR FUNÇÕES GLOBAIS
 window.togglePontoContent = togglePontoContent;
 window.toggleEditMode = toggleEditMode;
+window.openMediaChoiceModal = openMediaChoiceModal;
+window.closeMediaChoiceModal = closeMediaChoiceModal;
+window.chooseCamera = chooseCamera;
+window.chooseUpload = chooseUpload;
 window.deleteFile = deleteFile;
 window.openPhotoModal = openPhotoModal;
 window.closePhotoModal = closePhotoModal;
