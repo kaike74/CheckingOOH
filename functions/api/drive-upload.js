@@ -356,8 +356,18 @@ async function uploadToGoogleDrive(file, folderId, pontoId, tipo, accessToken) {
         }
 
         const uploadResult = await uploadResponse.json();
-        
+
         console.log('✅ Arquivo enviado com sucesso!');
+
+        // ✅ CORREÇÃO: Tornar arquivo público/compartilhável para visualização
+        console.log('🔓 Configurando permissões do arquivo...');
+        try {
+            await makeFileViewable(uploadResult.id, accessToken);
+            console.log('✅ Permissões configuradas com sucesso!');
+        } catch (permError) {
+            console.warn('⚠️ Aviso: Não foi possível configurar permissões públicas:', permError.message);
+            // Não falhar o upload por causa disso, arquivo pode já ter permissões via pasta compartilhada
+        }
 
         return {
             success: true,
@@ -372,6 +382,45 @@ async function uploadToGoogleDrive(file, folderId, pontoId, tipo, accessToken) {
             success: false, 
             error: error.message 
         };
+    }
+}
+
+// =============================================================================
+// 🔓 TORNAR ARQUIVO VISUALIZÁVEL (PERMISSÕES)
+// =============================================================================
+async function makeFileViewable(fileId, accessToken) {
+    try {
+        console.log(`🔓 Configurando permissões para o arquivo ${fileId}...`);
+
+        // Adicionar permissão de leitura para qualquer pessoa com o link
+        const permissionResponse = await fetch(
+            `https://www.googleapis.com/drive/v3/files/${fileId}/permissions?supportsAllDrives=true`,
+            {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    role: 'reader',
+                    type: 'anyone'
+                })
+            }
+        );
+
+        if (!permissionResponse.ok) {
+            const errorText = await permissionResponse.text();
+            console.warn(`⚠️ Aviso ao configurar permissões: ${permissionResponse.status} - ${errorText}`);
+            // Não lançar erro, apenas avisar
+            return false;
+        }
+
+        console.log('✅ Arquivo configurado como público (visualizável por qualquer pessoa com o link)');
+        return true;
+
+    } catch (error) {
+        console.warn('⚠️ Erro ao configurar permissões:', error.message);
+        return false;
     }
 }
 

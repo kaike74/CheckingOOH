@@ -224,38 +224,46 @@ async function startUpload() {
         
         // Atualizar progresso final
         updateUploadProgress(100);
-        
+
         console.log('📊 Resultado final do upload:', {
             total: totalFiles,
             enviados: uploadedFiles,
             falhas: failedFiles
         });
-        
+
         // Limpar fila
         uploadQueue = [];
-        
+
+        // ✅ CORREÇÃO: Salvar contexto ANTES de fechar modal
+        const savedContext = {
+            exibidora: currentUploadContext.exibidora,
+            pontoId: currentUploadContext.pontoId,
+            tipo: currentUploadContext.tipo,
+            databaseId: currentUploadContext.databaseId
+        };
+
+        // Recarregar lista de arquivos ANTES de fechar modal
+        console.log('🔄 Recarregando lista de arquivos com contexto:', savedContext);
+        await refreshFilesList(
+            savedContext.exibidora,
+            savedContext.pontoId,
+            savedContext.tipo,
+            savedContext.databaseId
+        );
+
         // Fechar modal após pequeno delay
         setTimeout(() => {
             closeUploadModal();
-            
+
             // Mostrar mensagem de sucesso
             if (uploadedFiles > 0) {
-                const message = failedFiles > 0 
+                const message = failedFiles > 0
                     ? `✅ ${uploadedFiles} arquivo(s) enviado(s) • ❌ ${failedFiles} falhou(aram)`
                     : `✅ ${uploadedFiles} arquivo(s) enviado(s) com sucesso!`;
                 console.log('🎉', message);
                 showSuccessMessage(message);
             }
-            
-            // Recarregar lista de arquivos
-            console.log('🔄 Recarregando lista de arquivos...');
-            refreshFilesList(
-                currentUploadContext.exibidora,
-                currentUploadContext.pontoId,
-                currentUploadContext.tipo,
-                currentUploadContext.databaseId
-            );
-            
+
         }, 500);
         
     } catch (error) {
