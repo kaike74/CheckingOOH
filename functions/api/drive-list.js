@@ -294,12 +294,23 @@ async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, ac
 
         console.log(`📋 Encontrados ${allFiles.length} arquivos na pasta`);
 
-        // ✅ CORREÇÃO 7: Filtro MUITO MAIS FLEXÍVEL - aceita TODOS os arquivos da pasta correta
-        // A pasta já é específica para o tipo (Entrada/Saída), então não precisa filtrar mais
-        // Isso permite que arquivos colocados manualmente no Drive sejam listados
-        const filteredFiles = allFiles; // Retorna TODOS os arquivos da pasta
+        // ✅ CORREÇÃO CRÍTICA: Filtro inteligente que aceita:
+        // 1. Arquivos do sistema com pontoId no nome (tipo_pontoId_timestamp.ext)
+        // 2. Arquivos manuais que contenham o pontoId em qualquer parte do nome
+        // Isso resolve o bug de mostrar mesmos arquivos para todos os pontos
+        const filteredFiles = allFiles.filter(file => {
+            const fileName = file.name.toLowerCase();
+            const pontoIdLower = pontoId.toLowerCase();
 
-        console.log(`📋 Arquivos na pasta ${tipo}: ${filteredFiles.length}`);
+            // Aceitar se o nome contém o pontoId
+            // Exemplos que passam:
+            // - entrada_29520b549cf58127b54be74ba75b1561_2025-10-23.jpg (sistema)
+            // - foto_29520b549cf58127b54be74ba75b1561.jpg (manual)
+            // - 29520b549cf58127b54be74ba75b1561.jpg (manual simples)
+            return fileName.includes(pontoIdLower);
+        });
+
+        console.log(`📋 Arquivos filtrados para ponto ${pontoId}: ${filteredFiles.length} de ${allFiles.length}`);
 
         // Processar arquivos para formato padronizado
         const processedFiles = filteredFiles.map(file => {
@@ -313,6 +324,11 @@ async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, ac
                 alternativeUrls.push(`https://drive.google.com/uc?export=download&id=${file.id}`);
                 alternativeUrls.push(`https://drive.google.com/thumbnail?id=${file.id}&sz=w1000`);
                 if (file.thumbnailLink) alternativeUrls.push(file.thumbnailLink);
+            } else if (isVideo) {
+                // ✅ CORREÇÃO: Adicionar URLs alternativas para vídeos também
+                alternativeUrls.push(`https://drive.google.com/file/d/${file.id}/preview`);
+                alternativeUrls.push(`https://drive.google.com/uc?id=${file.id}&export=download`);
+                alternativeUrls.push(file.webContentLink);
             }
 
             return {

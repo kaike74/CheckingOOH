@@ -345,12 +345,44 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false) {
         mediaItem.onclick = () => openPhotoModal(pontoId, tipo);
         
         if (DriveAPI.isVideoFile(file.mimeType)) {
-            // Vídeo
+            // ✅ CORREÇÃO: Vídeo com thumbnail e ícone de play
+            const videoThumb = file.thumbnailUrl || `https://drive.google.com/thumbnail?id=${file.id}&sz=w400`;
+
             mediaItem.innerHTML = `
-                <video>
-                    <source src="${file.url}" type="${file.mimeType}">
-                </video>
-                <div class="photo-date">${DriveAPI.formatDate(file.createdTime)}</div>
+                <div style="
+                    position: relative;
+                    width: 100%;
+                    height: 100%;
+                    background: url('${videoThumb}') center/cover no-repeat, #000;
+                    cursor: pointer;
+                ">
+                    <div style="
+                        position: absolute;
+                        top: 50%;
+                        left: 50%;
+                        transform: translate(-50%, -50%);
+                        background: rgba(0,0,0,0.7);
+                        border-radius: 50%;
+                        width: 40px;
+                        height: 40px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        color: white;
+                        font-size: 20px;
+                    ">▶</div>
+                    <div style="
+                        position: absolute;
+                        top: 4px;
+                        right: 4px;
+                        background: rgba(0,0,0,0.7);
+                        color: white;
+                        padding: 2px 6px;
+                        border-radius: 4px;
+                        font-size: 9px;
+                        font-weight: bold;
+                    ">VÍDEO</div>
+                </div>
             `;
         } else {
             // Imagem com fallback

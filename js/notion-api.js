@@ -47,11 +47,13 @@ async function fetchPontoForCliente(clienteId) {
         if (CONFIG.DEMO.ENABLED) {
             const allSampleData = CONFIG.DEMO.SAMPLE_DATA;
             const ponto = allSampleData.find(p => p.id === clienteId) || allSampleData[0];
-            
+
             return {
                 mode: 'cliente',
                 ponto: ponto,
-                pontos: [ponto] // Cliente vê apenas seu ponto
+                pontos: [ponto], // Cliente vê apenas seu ponto
+                databaseId: 'demo-database-id-12345', // ✅ CORREÇÃO: Adicionar databaseId para modo demo cliente
+                exibidora: ponto.exibidora
             };
         }
         
@@ -91,18 +93,20 @@ function mockNotionResponse(pontoId) {
             mode: 'exibidora',
             exibidora: firstPonto.exibidora,
             ponto: firstPonto,
-            pontos: allSampleData.filter(p => p.exibidora === firstPonto.exibidora)
+            pontos: allSampleData.filter(p => p.exibidora === firstPonto.exibidora),
+            databaseId: 'demo-database-id-12345' // ✅ CORREÇÃO: Adicionar databaseId
         };
     }
-    
+
     // Filtrar pontos da mesma exibidora
     const pontosDaExibidora = allSampleData.filter(p => p.exibidora === pontoEspecifico.exibidora);
-    
+
     return {
         mode: 'exibidora',
         exibidora: pontoEspecifico.exibidora,
         ponto: pontoEspecifico,
-        pontos: pontosDaExibidora
+        pontos: pontosDaExibidora,
+        databaseId: 'demo-database-id-12345' // ✅ CORREÇÃO: Adicionar databaseId
     };
 }
 
