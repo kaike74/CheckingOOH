@@ -246,12 +246,13 @@ async function createSecaoElement(ponto, tipo, readOnly = false) {
     titleDiv.innerHTML = `${emoji} ${titulo}`;
     
     secaoDiv.appendChild(titleDiv);
-    
-    // Ações (apenas para exibidora)
+
+    // Ações
+    const actionsDiv = document.createElement('div');
+    actionsDiv.className = 'secao-actions';
+
     if (!readOnly) {
-        const actionsDiv = document.createElement('div');
-        actionsDiv.className = 'secao-actions';
-        // ✅ MELHORIA: Removido botão "Ver Fotos" - clique direto nas imagens abre carrossel
+        // Modo Exibidora
         actionsDiv.innerHTML = `
             <button class="btn btn-primary btn-small" onclick="openMediaChoiceModal('${appData.exibidora}', '${ponto.id}', '${tipo}', '${appData.databaseId}')">
                 📎 Adicionar Mídia
@@ -260,12 +261,21 @@ async function createSecaoElement(ponto, tipo, readOnly = false) {
                 ✏️ Editar
             </button>
         `;
-        secaoDiv.appendChild(actionsDiv);
+    } else {
+        // ✅ MELHORIA: Modo Cliente - Botão "Baixar Todos"
+        actionsDiv.innerHTML = `
+            <button class="btn btn-success btn-small" onclick="downloadAllFiles('${ponto.id}', '${tipo}')">
+                📥 Baixar Todos
+            </button>
+        `;
     }
+
+    secaoDiv.appendChild(actionsDiv);
     
     // Preview de mídia
     const previewDiv = document.createElement('div');
-    previewDiv.className = 'media-preview';
+    // ✅ MELHORIA: Grid maior no modo cliente (fotos maiores)
+    previewDiv.className = readOnly ? 'media-preview media-preview-large' : 'media-preview';
     previewDiv.id = `preview-${ponto.id}-${tipo}`;
 
     // ✅ OTIMIZAÇÃO: Lazy loading - só carregar quando visível ou em modo cliente
@@ -412,7 +422,7 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false) {
             mediaItem.appendChild(img);
         }
         
-        // ✅ CORREÇÃO: Badge de delete sempre criado, mas inicialmente escondido
+        // ✅ CORREÇÃO: Badge de delete sempre criado, mas inicialmente escondido (modo exibidora)
         if (!readOnly) {
             const deleteBtn = document.createElement('div');
             deleteBtn.className = 'delete-badge';
@@ -424,7 +434,20 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false) {
             };
             mediaItem.appendChild(deleteBtn);
         }
-        
+
+        // ✅ MELHORIA: Botão de download individual (modo cliente)
+        if (readOnly) {
+            const downloadBtn = document.createElement('a');
+            downloadBtn.href = `https://drive.google.com/uc?export=download&id=${file.id}`;
+            downloadBtn.className = 'download-badge';
+            downloadBtn.innerHTML = '⬇';
+            downloadBtn.title = 'Baixar arquivo';
+            downloadBtn.onclick = (e) => {
+                e.stopPropagation(); // Não abrir carrossel ao clicar no download
+            };
+            mediaItem.appendChild(downloadBtn);
+        }
+
         container.appendChild(mediaItem);
     });
     
@@ -1180,6 +1203,43 @@ function showImageErrorPlaceholder(imgElement) {
 }
 
 /**
+ * 📥 BAIXAR TODOS OS ARQUIVOS (MODO CLIENTE)
+ * Abre todos os arquivos em novas abas para download
+ */
+async function downloadAllFiles(pontoId, tipo) {
+    try {
+        Logger.info('Baixando todos os arquivos', { pontoId, tipo });
+
+        // Buscar arquivos
+        const result = await DriveAPI.listDriveFiles(appData.exibidora, pontoId, tipo, appData.databaseId);
+
+        if (!result.success || result.files.length === 0) {
+            alert('Nenhum arquivo para baixar');
+            return;
+        }
+
+        const confirmMsg = `Deseja baixar ${result.files.length} arquivo(s)?\n\nOs downloads serão iniciados em novas abas.`;
+        if (!confirm(confirmMsg)) {
+            return;
+        }
+
+        // Abrir cada arquivo em uma nova aba
+        result.files.forEach((file, index) => {
+            const downloadUrl = `https://drive.google.com/uc?export=download&id=${file.id}`;
+            setTimeout(() => {
+                window.open(downloadUrl, '_blank');
+            }, index * 300); // Delay de 300ms entre cada download
+        });
+
+        showSuccessMessage(`📥 ${result.files.length} download(s) iniciado(s)!`);
+
+    } catch (error) {
+        Logger.error('Erro ao baixar arquivos', error);
+        alert('Erro ao iniciar downloads: ' + error.message);
+    }
+}
+
+/**
  * 📎 ABRIR MODAL DE ESCOLHA DE MÍDIA
  * Modal que permite escolher entre Tirar Foto ou fazer Upload
  */
@@ -1251,6 +1311,7 @@ window.closeMediaChoiceModal = closeMediaChoiceModal;
 window.chooseCamera = chooseCamera;
 window.chooseUpload = chooseUpload;
 window.deleteFile = deleteFile;
+window.downloadAllFiles = downloadAllFiles;
 window.openPhotoModal = openPhotoModal;
 window.closePhotoModal = closePhotoModal;
 window.openFullImage = openFullImage;
