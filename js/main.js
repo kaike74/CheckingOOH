@@ -251,19 +251,13 @@ async function createSecaoElement(ponto, tipo, readOnly = false) {
     if (!readOnly) {
         const actionsDiv = document.createElement('div');
         actionsDiv.className = 'secao-actions';
-        // ✅ ALTERADO: Passar databaseId para openUploadModal
+        // ✅ MELHORIA: Removido botão "Ver Fotos" - clique direto nas imagens abre carrossel
         actionsDiv.innerHTML = `
-            <button class="btn btn-camera btn-small" onclick="openUploadModal('${appData.exibidora}', '${ponto.id}', '${tipo}', '${appData.databaseId}')">
-                📷 Tirar Foto
-            </button>
-            <button class="btn btn-primary btn-small" onclick="openUploadModal('${appData.exibidora}', '${ponto.id}', '${tipo}', '${appData.databaseId}')">
-                📁 Upload
+            <button class="btn btn-primary btn-small" onclick="openMediaChoiceModal('${appData.exibidora}', '${ponto.id}', '${tipo}', '${appData.databaseId}')">
+                📎 Adicionar Mídia
             </button>
             <button class="btn btn-secondary btn-small" onclick="toggleEditMode('${ponto.id}', '${tipo}')" id="edit-btn-${ponto.id}-${tipo}">
                 ✏️ Editar
-            </button>
-            <button class="btn btn-primary btn-small" onclick="openPhotoModal('${ponto.id}', '${tipo}')">
-                👁️ Ver Fotos
             </button>
         `;
         secaoDiv.appendChild(actionsDiv);
@@ -342,15 +336,49 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false) {
     files.forEach(file => {
         const mediaItem = document.createElement('div');
         mediaItem.className = 'media-item';
-        mediaItem.onclick = () => openPhotoModal(pontoId, tipo);
+        // ✅ MELHORIA: Abrir carousel fullscreen em vez de modal grid
+        mediaItem.onclick = () => openMediaCarousel(pontoId, tipo, container.children.length - 1);
         
         if (DriveAPI.isVideoFile(file.mimeType)) {
-            // Vídeo
+            // ✅ CORREÇÃO: Vídeo com thumbnail e ícone de play
+            const videoThumb = file.thumbnailUrl || `https://drive.google.com/thumbnail?id=${file.id}&sz=w400`;
+
+            // ✅ MELHORIA: Removido timestamp conforme solicitado
             mediaItem.innerHTML = `
-                <video>
-                    <source src="${file.url}" type="${file.mimeType}">
-                </video>
-                <div class="photo-date">${DriveAPI.formatDate(file.createdTime)}</div>
+                <div style="
+                    position: relative;
+                    width: 100%;
+                    height: 100%;
+                    background: url('${videoThumb}') center/cover no-repeat, #000;
+                    cursor: pointer;
+                ">
+                    <div style="
+                        position: absolute;
+                        top: 50%;
+                        left: 50%;
+                        transform: translate(-50%, -50%);
+                        background: rgba(0,0,0,0.7);
+                        border-radius: 50%;
+                        width: 40px;
+                        height: 40px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        color: white;
+                        font-size: 20px;
+                    ">▶</div>
+                    <div style="
+                        position: absolute;
+                        top: 4px;
+                        right: 4px;
+                        background: rgba(0,0,0,0.7);
+                        color: white;
+                        padding: 2px 6px;
+                        border-radius: 4px;
+                        font-size: 9px;
+                        font-weight: bold;
+                    ">VÍDEO</div>
+                </div>
             `;
         } else {
             // Imagem com fallback
@@ -380,24 +408,20 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false) {
             img.src = file.url;
             console.log(`🖼️ Tentando carregar imagem ${file.name} de: ${file.url}`);
 
-            const dateDiv = document.createElement('div');
-            dateDiv.className = 'photo-date';
-            dateDiv.textContent = DriveAPI.formatDate(file.createdTime);
-
+            // ✅ MELHORIA: Timestamp removido conforme solicitado
             mediaItem.appendChild(img);
-            mediaItem.appendChild(dateDiv);
         }
         
-        // Ações de edição (apenas para exibidora em modo edição)
+        // ✅ MELHORIA: Modo edição com "-" vermelho no canto
         if (!readOnly && isEditMode(pontoId, tipo)) {
-            const actionsDiv = document.createElement('div');
-            actionsDiv.className = 'photo-actions';
-            actionsDiv.innerHTML = `
-                <button class="btn btn-danger btn-small" onclick="deleteFile('${file.id}', '${file.name}', '${pontoId}', '${tipo}')" title="Excluir">
-                    🗑️
-                </button>
-            `;
-            mediaItem.appendChild(actionsDiv);
+            const deleteBtn = document.createElement('div');
+            deleteBtn.className = 'delete-badge';
+            deleteBtn.innerHTML = '−'; // Sinal de menos
+            deleteBtn.onclick = (e) => {
+                e.stopPropagation(); // Não abrir modal ao clicar no X
+                deleteFile(file.id, file.name, pontoId, tipo);
+            };
+            mediaItem.appendChild(deleteBtn);
         }
         
         container.appendChild(mediaItem);
@@ -558,7 +582,159 @@ async function deleteFile(fileId, fileName, pontoId, tipo) {
 }
 
 /**
- * 👁️ ABRIR MODAL DE FOTOS
+ * 🎠 ABRIR CARROSSEL DE MÍDIA (NOVO)
+ * Visualizador fullscreen com navegação por setas
+ */
+async function openMediaCarousel(pontoId, tipo, startIndex = 0) {
+    try {
+        Logger.info('Abrindo carrossel de mídia', { pontoId, tipo, startIndex });
+
+        // Buscar arquivos
+        const result = await DriveAPI.listDriveFiles(appData.exibidora, pontoId, tipo, appData.databaseId);
+
+        if (!result.success || result.files.length === 0) {
+            alert('Nenhuma mídia encontrada');
+            return;
+        }
+
+        // Criar overlay fullscreen
+        const carousel = document.createElement('div');
+        carousel.id = 'media-carousel';
+        carousel.className = 'media-carousel';
+        carousel.innerHTML = `
+            <div class="carousel-overlay" onclick="closeMediaCarousel()"></div>
+            <div class="carousel-content">
+                <button class="carousel-close" onclick="closeMediaCarousel()">×</button>
+                <button class="carousel-nav carousel-prev" onclick="carouselPrev()">‹</button>
+                <button class="carousel-nav carousel-next" onclick="carouselNext()">›</button>
+                <div class="carousel-counter"><span id="carousel-current">1</span> / <span id="carousel-total">${result.files.length}</span></div>
+                <div class="carousel-media" id="carousel-media"></div>
+            </div>
+        `;
+
+        document.body.appendChild(carousel);
+
+        // Armazenar dados para navegação
+        window.carouselData = {
+            files: result.files,
+            currentIndex: Math.min(startIndex, result.files.length - 1),
+            pontoId: pontoId,
+            tipo: tipo
+        };
+
+        // Mostrar primeira mídia
+        showCarouselMedia(window.carouselData.currentIndex);
+
+        // Adicionar controle por teclado
+        document.addEventListener('keydown', handleCarouselKeyboard);
+
+    } catch (error) {
+        Logger.error('Erro ao abrir carrossel', error);
+        alert('Erro ao carregar mídia: ' + error.message);
+    }
+}
+
+/**
+ * 🖼️ MOSTRAR MÍDIA NO CARROSSEL
+ */
+function showCarouselMedia(index) {
+    const data = window.carouselData;
+    const file = data.files[index];
+    const container = document.getElementById('carousel-media');
+
+    // Atualizar contador
+    document.getElementById('carousel-current').textContent = index + 1;
+
+    // Limpar conteúdo anterior
+    container.innerHTML = '';
+
+    if (DriveAPI.isVideoFile(file.mimeType)) {
+        // Vídeo
+        container.innerHTML = `
+            <video controls autoplay style="max-width: 90vw; max-height: 90vh;">
+                <source src="${file.url}" type="${file.mimeType}">
+                Seu navegador não suporta vídeos.
+            </video>
+        `;
+    } else {
+        // Imagem
+        const img = document.createElement('img');
+        img.src = file.url;
+        img.alt = file.name;
+        img.style.maxWidth = '90vw';
+        img.style.maxHeight = '90vh';
+        img.style.objectFit = 'contain';
+
+        // Fallback de erro
+        if (file.alternativeUrls && file.alternativeUrls.length > 0) {
+            img.dataset.alternativeUrls = JSON.stringify(file.alternativeUrls);
+            img.dataset.currentUrlIndex = '0';
+            img.dataset.fileId = file.id;
+            img.dataset.fileName = file.name;
+            img.onerror = function() {
+                handleImageError(this);
+            };
+        }
+
+        container.appendChild(img);
+    }
+
+    data.currentIndex = index;
+}
+
+/**
+ * ◀️ NAVEGAR PARA ANTERIOR
+ */
+function carouselPrev() {
+    const data = window.carouselData;
+    if (data.currentIndex > 0) {
+        showCarouselMedia(data.currentIndex - 1);
+    }
+}
+
+/**
+ * ▶️ NAVEGAR PARA PRÓXIMO
+ */
+function carouselNext() {
+    const data = window.carouselData;
+    if (data.currentIndex < data.files.length - 1) {
+        showCarouselMedia(data.currentIndex + 1);
+    }
+}
+
+/**
+ * ⌨️ CONTROLE POR TECLADO
+ */
+function handleCarouselKeyboard(e) {
+    if (!document.getElementById('media-carousel')) return;
+
+    switch(e.key) {
+        case 'ArrowLeft':
+            carouselPrev();
+            break;
+        case 'ArrowRight':
+            carouselNext();
+            break;
+        case 'Escape':
+            closeMediaCarousel();
+            break;
+    }
+}
+
+/**
+ * 🔒 FECHAR CARROSSEL
+ */
+function closeMediaCarousel() {
+    const carousel = document.getElementById('media-carousel');
+    if (carousel) {
+        carousel.remove();
+    }
+    window.carouselData = null;
+    document.removeEventListener('keydown', handleCarouselKeyboard);
+}
+
+/**
+ * 👁️ ABRIR MODAL DE FOTOS (ANTIGO - mantido para compatibilidade)
  * Abre o modal para visualizar todas as fotos
  */
 async function openPhotoModal(pontoId, tipo) {
@@ -946,13 +1122,85 @@ function showImageErrorPlaceholder(imgElement) {
     }
 }
 
+/**
+ * 📎 ABRIR MODAL DE ESCOLHA DE MÍDIA
+ * Modal que permite escolher entre Tirar Foto ou fazer Upload
+ */
+function openMediaChoiceModal(exibidora, pontoId, tipo, databaseId) {
+    // Criar modal simples com as opções
+    const existingModal = document.getElementById('media-choice-modal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+
+    const modal = document.createElement('div');
+    modal.id = 'media-choice-modal';
+    modal.className = 'modal';
+    modal.style.display = 'flex';
+    modal.style.zIndex = '2100'; // Acima de outros modais
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3>📎 Adicionar Mídia</h3>
+                <button class="close-btn" onclick="closeMediaChoiceModal()">×</button>
+            </div>
+            <div class="modal-body" style="padding: 30px; text-align: center;">
+                <button class="btn btn-camera" style="width: 100%; margin-bottom: 15px; padding: 20px; font-size: 16px;" onclick="chooseCamera('${exibidora}', '${pontoId}', '${tipo}', '${databaseId}')">
+                    📷 Tirar Foto
+                </button>
+                <button class="btn btn-primary" style="width: 100%; padding: 20px; font-size: 16px;" onclick="chooseUpload('${exibidora}', '${pontoId}', '${tipo}', '${databaseId}')">
+                    📁 Fazer Upload
+                </button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+}
+
+/**
+ * 🔒 FECHAR MODAL DE ESCOLHA
+ */
+function closeMediaChoiceModal() {
+    const modal = document.getElementById('media-choice-modal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+/**
+ * 📷 ESCOLHER CÂMERA
+ */
+function chooseCamera(exibidora, pontoId, tipo, databaseId) {
+    closeMediaChoiceModal();
+    CameraManager.setCameraContext(exibidora, pontoId, tipo, databaseId);
+    CameraManager.openCamera();
+}
+
+/**
+ * 📁 ESCOLHER UPLOAD
+ */
+function chooseUpload(exibidora, pontoId, tipo, databaseId) {
+    closeMediaChoiceModal();
+    openUploadModal(exibidora, pontoId, tipo, databaseId);
+}
+
 // 🚀 EXPORTAR FUNÇÕES GLOBAIS
 window.togglePontoContent = togglePontoContent;
 window.toggleEditMode = toggleEditMode;
+window.openMediaChoiceModal = openMediaChoiceModal;
+window.closeMediaChoiceModal = closeMediaChoiceModal;
+window.chooseCamera = chooseCamera;
+window.chooseUpload = chooseUpload;
 window.deleteFile = deleteFile;
 window.openPhotoModal = openPhotoModal;
 window.closePhotoModal = closePhotoModal;
 window.openFullImage = openFullImage;
+window.openMediaCarousel = openMediaCarousel;
+window.closeMediaCarousel = closeMediaCarousel;
+window.carouselPrev = carouselPrev;
+window.carouselNext = carouselNext;
 window.hideDemoWarning = hideDemoWarning;
 window.updateMediaPreview = updateMediaPreview;
 window.showSuccessMessage = showSuccessMessage;
