@@ -412,13 +412,14 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false) {
             mediaItem.appendChild(img);
         }
         
-        // ✅ MELHORIA: Modo edição com "-" vermelho no canto
-        if (!readOnly && isEditMode(pontoId, tipo)) {
+        // ✅ CORREÇÃO: Badge de delete sempre criado, mas inicialmente escondido
+        if (!readOnly) {
             const deleteBtn = document.createElement('div');
             deleteBtn.className = 'delete-badge';
             deleteBtn.innerHTML = '−'; // Sinal de menos
+            deleteBtn.style.display = isEditMode(pontoId, tipo) ? 'flex' : 'none';
             deleteBtn.onclick = (e) => {
-                e.stopPropagation(); // Não abrir modal ao clicar no X
+                e.stopPropagation(); // Não abrir carrossel ao clicar no -
                 deleteFile(file.id, file.name, pontoId, tipo);
             };
             mediaItem.appendChild(deleteBtn);
@@ -519,15 +520,15 @@ function toggleEditMode(pontoId, tipo) {
         editBtn.className = appData.editMode[key] ? 'btn btn-success btn-small' : 'btn btn-secondary btn-small';
     }
     
-    // Recarregar preview para mostrar/ocultar botões de delete
-    const ponto = appData.pontos.find(p => p.id === pontoId);
-    if (ponto) {
-        const container = document.getElementById(`preview-${pontoId}-${tipo}`);
-        if (container) {
-            loadMediaPreview(ponto, tipo, container, false);
-        }
+    // ✅ CORREÇÃO: Apenas mostrar/ocultar badges de delete SEM recarregar (remove delay)
+    const container = document.getElementById(`preview-${pontoId}-${tipo}`);
+    if (container) {
+        const deleteButtons = container.querySelectorAll('.delete-badge');
+        deleteButtons.forEach(badge => {
+            badge.style.display = appData.editMode[key] ? 'flex' : 'none';
+        });
     }
-    
+
     Logger.debug('Modo edição alternado', { pontoId, tipo, editMode: appData.editMode[key] });
 }
 

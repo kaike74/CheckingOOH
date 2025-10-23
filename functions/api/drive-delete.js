@@ -162,20 +162,54 @@ async function getServiceAccountToken(serviceAccountKeyJson) {
 }
 
 // =============================================================================
-// 🔧 CRIAR JWT SIMPLIFICADO (REUTILIZADO)
+// 🔧 CRIAR JWT (CORREÇÃO CRÍTICA)
 // =============================================================================
 async function createJWT(header, payload, privateKey) {
-    const encoder = new TextEncoder();
-    
-    const headerB64 = btoa(JSON.stringify(header));
-    const payloadB64 = btoa(JSON.stringify(payload));
-    
-    const message = `${headerB64}.${payloadB64}`;
-    
-    // Simplificado para demonstração - em produção usar biblioteca JWT
-    const signature = btoa(message);
-    
-    return `${message}.${signature}`;
+    const headerB64 = base64UrlEncode(JSON.stringify(header));
+    const payloadB64 = base64UrlEncode(JSON.stringify(payload));
+    const signingInput = `${headerB64}.${payloadB64}`;
+
+    // Importar chave privada
+    const key = await crypto.subtle.importKey(
+        'pkcs8',
+        pemToBinary(privateKey),
+        { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+        false,
+        ['sign']
+    );
+
+    // Assinar
+    const signature = await crypto.subtle.sign(
+        'RSASSA-PKCS1-v1_5',
+        key,
+        new TextEncoder().encode(signingInput)
+    );
+
+    return `${signingInput}.${base64UrlEncode(signature)}`;
+}
+
+// =============================================================================
+// 🔧 FUNÇÕES AUXILIARES
+// =============================================================================
+function base64UrlEncode(data) {
+    let base64;
+    if (typeof data === 'string') {
+        base64 = btoa(data);
+    } else {
+        base64 = btoa(String.fromCharCode(...new Uint8Array(data)));
+    }
+    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+function pemToBinary(pem) {
+    const lines = pem.split('\n');
+    const encoded = lines.filter(line => !line.includes('-----')).join('');
+    const binary = atob(encoded);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes.buffer;
 }
 
 // =============================================================================
@@ -202,8 +236,8 @@ async function deleteFileFromGoogleDrive(fileId, fileName, accessToken) {
             mimeType: fileInfo.mimeType
         });
 
-        // Executar exclusão
-        const deleteResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
+        // ✅ CORREÇÃO: Executar exclusão com suporte a Shared Drives
+        const deleteResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?supportsAllDrives=true`, {
             method: 'DELETE',
             headers: {
                 'Authorization': `Bearer ${accessToken}`
@@ -255,7 +289,7 @@ async function getFileInfo(fileId, accessToken) {
         console.log('ℹ️ Obtendo informações do arquivo:', fileId);
 
         const response = await fetch(
-            `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType,size,createdTime,modifiedTime,parents`,
+            `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType,size,createdTime,modifiedTime,parents&supportsAllDrives=true`,
             {
                 headers: {
                     'Authorization': `Bearer ${accessToken}`
