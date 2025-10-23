@@ -246,12 +246,13 @@ async function createSecaoElement(ponto, tipo, readOnly = false) {
     titleDiv.innerHTML = `${emoji} ${titulo}`;
     
     secaoDiv.appendChild(titleDiv);
-    
-    // Ações (apenas para exibidora)
+
+    // Ações
+    const actionsDiv = document.createElement('div');
+    actionsDiv.className = 'secao-actions';
+
     if (!readOnly) {
-        const actionsDiv = document.createElement('div');
-        actionsDiv.className = 'secao-actions';
-        // ✅ MELHORIA: Removido botão "Ver Fotos" - clique direto nas imagens abre carrossel
+        // Modo Exibidora
         actionsDiv.innerHTML = `
             <button class="btn btn-primary btn-small" onclick="openMediaChoiceModal('${appData.exibidora}', '${ponto.id}', '${tipo}', '${appData.databaseId}')">
                 📎 Adicionar Mídia
@@ -260,12 +261,21 @@ async function createSecaoElement(ponto, tipo, readOnly = false) {
                 ✏️ Editar
             </button>
         `;
-        secaoDiv.appendChild(actionsDiv);
+    } else {
+        // ✅ MELHORIA: Modo Cliente - Botão "Baixar Todos"
+        actionsDiv.innerHTML = `
+            <button class="btn btn-success btn-small" onclick="downloadAllFiles('${ponto.id}', '${tipo}')">
+                📥 Baixar Todos
+            </button>
+        `;
     }
+
+    secaoDiv.appendChild(actionsDiv);
     
     // Preview de mídia
     const previewDiv = document.createElement('div');
-    previewDiv.className = 'media-preview';
+    // ✅ MELHORIA: Grid maior no modo cliente (fotos maiores)
+    previewDiv.className = readOnly ? 'media-preview media-preview-large' : 'media-preview';
     previewDiv.id = `preview-${ponto.id}-${tipo}`;
 
     // ✅ OTIMIZAÇÃO: Lazy loading - só carregar quando visível ou em modo cliente
@@ -412,18 +422,32 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false) {
             mediaItem.appendChild(img);
         }
         
-        // ✅ MELHORIA: Modo edição com "-" vermelho no canto
-        if (!readOnly && isEditMode(pontoId, tipo)) {
+        // ✅ CORREÇÃO: Badge de delete sempre criado, mas inicialmente escondido (modo exibidora)
+        if (!readOnly) {
             const deleteBtn = document.createElement('div');
             deleteBtn.className = 'delete-badge';
             deleteBtn.innerHTML = '−'; // Sinal de menos
+            deleteBtn.style.display = isEditMode(pontoId, tipo) ? 'flex' : 'none';
             deleteBtn.onclick = (e) => {
-                e.stopPropagation(); // Não abrir modal ao clicar no X
+                e.stopPropagation(); // Não abrir carrossel ao clicar no -
                 deleteFile(file.id, file.name, pontoId, tipo);
             };
             mediaItem.appendChild(deleteBtn);
         }
-        
+
+        // ✅ MELHORIA: Botão de download individual (modo cliente)
+        if (readOnly) {
+            const downloadBtn = document.createElement('a');
+            downloadBtn.href = `https://drive.google.com/uc?export=download&id=${file.id}`;
+            downloadBtn.className = 'download-badge';
+            downloadBtn.innerHTML = '⬇';
+            downloadBtn.title = 'Baixar arquivo';
+            downloadBtn.onclick = (e) => {
+                e.stopPropagation(); // Não abrir carrossel ao clicar no download
+            };
+            mediaItem.appendChild(downloadBtn);
+        }
+
         container.appendChild(mediaItem);
     });
     
@@ -519,15 +543,15 @@ function toggleEditMode(pontoId, tipo) {
         editBtn.className = appData.editMode[key] ? 'btn btn-success btn-small' : 'btn btn-secondary btn-small';
     }
     
-    // Recarregar preview para mostrar/ocultar botões de delete
-    const ponto = appData.pontos.find(p => p.id === pontoId);
-    if (ponto) {
-        const container = document.getElementById(`preview-${pontoId}-${tipo}`);
-        if (container) {
-            loadMediaPreview(ponto, tipo, container, false);
-        }
+    // ✅ CORREÇÃO: Apenas mostrar/ocultar badges de delete SEM recarregar (remove delay)
+    const container = document.getElementById(`preview-${pontoId}-${tipo}`);
+    if (container) {
+        const deleteButtons = container.querySelectorAll('.delete-badge');
+        deleteButtons.forEach(badge => {
+            badge.style.display = appData.editMode[key] ? 'flex' : 'none';
+        });
     }
-    
+
     Logger.debug('Modo edição alternado', { pontoId, tipo, editMode: appData.editMode[key] });
 }
 
@@ -649,12 +673,68 @@ function showCarouselMedia(index) {
     container.innerHTML = '';
 
     if (DriveAPI.isVideoFile(file.mimeType)) {
-        // Vídeo
+        // ✅ CORREÇÃO: Vídeo com botão de download (Google Drive não permite embed)
+        const downloadUrl = `https://drive.google.com/uc?export=download&id=${file.id}`;
+        const thumbnail = file.thumbnailUrl || `https://drive.google.com/thumbnail?id=${file.id}&sz=w800`;
+
         container.innerHTML = `
-            <video controls autoplay style="max-width: 90vw; max-height: 90vh;">
-                <source src="${file.url}" type="${file.mimeType}">
-                Seu navegador não suporta vídeos.
-            </video>
+            <div style="
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 30px;
+            ">
+                <div style="
+                    position: relative;
+                    width: 600px;
+                    max-width: 90vw;
+                    aspect-ratio: 16/9;
+                    background: url('${thumbnail}') center/cover no-repeat, #000;
+                    border-radius: 12px;
+                    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+                ">
+                    <div style="
+                        position: absolute;
+                        top: 50%;
+                        left: 50%;
+                        transform: translate(-50%, -50%);
+                        background: rgba(0,0,0,0.7);
+                        border-radius: 50%;
+                        width: 80px;
+                        height: 80px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        color: white;
+                        font-size: 40px;
+                    ">▶</div>
+                    <div style="
+                        position: absolute;
+                        top: 15px;
+                        right: 15px;
+                        background: rgba(0,0,0,0.8);
+                        color: white;
+                        padding: 8px 16px;
+                        border-radius: 8px;
+                        font-size: 14px;
+                        font-weight: bold;
+                    ">VÍDEO</div>
+                </div>
+                <a href="${downloadUrl}" class="btn btn-primary" style="
+                    padding: 16px 40px;
+                    font-size: 18px;
+                    text-decoration: none;
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 10px;
+                ">
+                    ▶ Baixar Vídeo
+                </a>
+                <p style="color: #94A3B8; font-size: 14px; margin: 0;">
+                    Google Drive não permite reprodução direta de vídeos
+                </p>
+            </div>
         `;
     } else {
         // Imagem
@@ -1123,6 +1203,43 @@ function showImageErrorPlaceholder(imgElement) {
 }
 
 /**
+ * 📥 BAIXAR TODOS OS ARQUIVOS (MODO CLIENTE)
+ * Abre todos os arquivos em novas abas para download
+ */
+async function downloadAllFiles(pontoId, tipo) {
+    try {
+        Logger.info('Baixando todos os arquivos', { pontoId, tipo });
+
+        // Buscar arquivos
+        const result = await DriveAPI.listDriveFiles(appData.exibidora, pontoId, tipo, appData.databaseId);
+
+        if (!result.success || result.files.length === 0) {
+            alert('Nenhum arquivo para baixar');
+            return;
+        }
+
+        const confirmMsg = `Deseja baixar ${result.files.length} arquivo(s)?\n\nOs downloads serão iniciados em novas abas.`;
+        if (!confirm(confirmMsg)) {
+            return;
+        }
+
+        // Abrir cada arquivo em uma nova aba
+        result.files.forEach((file, index) => {
+            const downloadUrl = `https://drive.google.com/uc?export=download&id=${file.id}`;
+            setTimeout(() => {
+                window.open(downloadUrl, '_blank');
+            }, index * 300); // Delay de 300ms entre cada download
+        });
+
+        showSuccessMessage(`📥 ${result.files.length} download(s) iniciado(s)!`);
+
+    } catch (error) {
+        Logger.error('Erro ao baixar arquivos', error);
+        alert('Erro ao iniciar downloads: ' + error.message);
+    }
+}
+
+/**
  * 📎 ABRIR MODAL DE ESCOLHA DE MÍDIA
  * Modal que permite escolher entre Tirar Foto ou fazer Upload
  */
@@ -1194,6 +1311,7 @@ window.closeMediaChoiceModal = closeMediaChoiceModal;
 window.chooseCamera = chooseCamera;
 window.chooseUpload = chooseUpload;
 window.deleteFile = deleteFile;
+window.downloadAllFiles = downloadAllFiles;
 window.openPhotoModal = openPhotoModal;
 window.closePhotoModal = closePhotoModal;
 window.openFullImage = openFullImage;

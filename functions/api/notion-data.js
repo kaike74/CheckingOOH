@@ -169,9 +169,16 @@ async function fetchPontoForCliente(clienteId, notionToken) {
         const pontoData = await pontoResponse.json();
         const pontoExtraido = extractPontoData(pontoData);
 
-        console.log('✅ Ponto do cliente encontrado:', { 
-            id: pontoExtraido.id, 
-            endereco: pontoExtraido.endereco 
+        // ✅ CORREÇÃO: Obter databaseId do parent (igual modo exibidora)
+        const databaseId = pontoData.parent?.database_id;
+        if (!databaseId) {
+            throw new Error('Não foi possível determinar o database deste ponto');
+        }
+
+        console.log('✅ Ponto do cliente encontrado:', {
+            id: pontoExtraido.id,
+            endereco: pontoExtraido.endereco,
+            databaseId: databaseId
         });
 
         return {
@@ -179,6 +186,8 @@ async function fetchPontoForCliente(clienteId, notionToken) {
             mode: 'cliente',
             ponto: pontoExtraido,
             pontos: [pontoExtraido],
+            databaseId: databaseId, // ✅ CORREÇÃO: Adicionar databaseId
+            exibidora: pontoExtraido.exibidora, // ✅ CORREÇÃO: Adicionar exibidora
             totalPontos: 1
         };
 
