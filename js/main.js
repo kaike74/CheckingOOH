@@ -273,10 +273,19 @@ async function createSecaoElement(ponto, tipo, readOnly = false) {
     const previewDiv = document.createElement('div');
     previewDiv.className = 'media-preview';
     previewDiv.id = `preview-${ponto.id}-${tipo}`;
-    
-    // Carregar arquivos existentes
-    await loadMediaPreview(ponto, tipo, previewDiv, readOnly);
-    
+
+    // ✅ OTIMIZAÇÃO: Lazy loading - só carregar quando visível ou em modo cliente
+    if (readOnly) {
+        // Modo cliente: carregar imediatamente
+        await loadMediaPreview(ponto, tipo, previewDiv, readOnly);
+    } else {
+        // Modo exibidora: mostrar placeholder, carregar sob demanda
+        previewDiv.innerHTML = '<p style="text-align: center; color: #94A3B8; font-size: 11px; padding: 10px;">↓ Expanda para carregar ↓</p>';
+        previewDiv.dataset.pontoId = ponto.id;
+        previewDiv.dataset.tipo = tipo;
+        previewDiv.dataset.loaded = 'false';
+    }
+
     secaoDiv.appendChild(previewDiv);
     
     // Contador de mídia
@@ -344,11 +353,39 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false) {
                 <div class="photo-date">${DriveAPI.formatDate(file.createdTime)}</div>
             `;
         } else {
-            // Imagem
-            mediaItem.innerHTML = `
-                <img src="${file.url}" alt="${file.name}" loading="lazy">
-                <div class="photo-date">${DriveAPI.formatDate(file.createdTime)}</div>
-            `;
+            // Imagem com fallback
+            const img = document.createElement('img');
+            img.alt = file.name;
+            img.loading = 'lazy';
+            img.dataset.fileId = file.id;
+            img.dataset.fileName = file.name;
+
+            // ✅ NOVO: Adicionar URLs alternativas como data attributes
+            if (file.alternativeUrls && file.alternativeUrls.length > 0) {
+                img.dataset.alternativeUrls = JSON.stringify(file.alternativeUrls);
+                img.dataset.currentUrlIndex = '0';
+            }
+
+            // ✅ NOVO: Handler de erro com fallback automático
+            img.onerror = function() {
+                console.warn(`⚠️ Erro ao carregar imagem: ${this.src}`);
+                handleImageError(this);
+            };
+
+            // ✅ NOVO: Log quando carrega com sucesso
+            img.onload = function() {
+                console.log(`✅ Imagem carregada: ${this.dataset.fileName}`);
+            };
+
+            img.src = file.url;
+            console.log(`🖼️ Tentando carregar imagem ${file.name} de: ${file.url}`);
+
+            const dateDiv = document.createElement('div');
+            dateDiv.className = 'photo-date';
+            dateDiv.textContent = DriveAPI.formatDate(file.createdTime);
+
+            mediaItem.appendChild(img);
+            mediaItem.appendChild(dateDiv);
         }
         
         // Ações de edição (apenas para exibidora em modo edição)
@@ -387,16 +424,58 @@ function updateMediaCount(pontoId, tipo, count) {
  * 🔄 ALTERNAR CONTEÚDO DO PONTO
  * Expande/recolhe o conteúdo de um ponto
  */
-function togglePontoContent(pontoId) {
+async function togglePontoContent(pontoId) {
     const content = document.getElementById(`content-${pontoId}`);
     const icon = document.getElementById(`toggle-icon-${pontoId}`);
-    
+
     if (content && icon) {
         const isVisible = content.style.display !== 'none';
         content.style.display = isVisible ? 'none' : 'grid';
         icon.textContent = isVisible ? '▼' : '▲';
-        
+
+        // ✅ OTIMIZAÇÃO: Lazy load - carregar arquivos na primeira expansão
+        // ✅ OTIMIZAÇÃO: Carregar entrada e saída em PARALELO
+        if (!isVisible) {
+            const ponto = appData.pontos.find(p => p.id === pontoId);
+            if (ponto) {
+                await Promise.all([
+                    loadPontoMediaIfNeeded(ponto, 'entrada'),
+                    loadPontoMediaIfNeeded(ponto, 'saida')
+                ]);
+            }
+        }
+
         Logger.debug('Conteúdo do ponto alternado', { pontoId, visible: !isVisible });
+    }
+}
+
+/**
+ * 📥 CARREGAR MÍDIA SE NECESSÁRIO (LAZY LOADING)
+ * Carrega arquivos apenas se ainda não foram carregados
+ */
+async function loadPontoMediaIfNeeded(ponto, tipo) {
+    const previewDiv = document.getElementById(`preview-${ponto.id}-${tipo}`);
+
+    if (!previewDiv) return;
+
+    const isLoaded = previewDiv.dataset.loaded === 'true';
+
+    if (!isLoaded) {
+        console.log(`📥 Lazy loading: Carregando arquivos ${tipo} para ponto ${ponto.id}`);
+
+        // ✅ OTIMIZAÇÃO: Mostrar skeleton loaders durante carregamento
+        previewDiv.className = 'media-preview loading';
+        previewDiv.innerHTML = `
+            <div class="skeleton skeleton-media-item"></div>
+            <div class="skeleton skeleton-media-item"></div>
+            <div class="skeleton skeleton-media-item"></div>
+        `;
+
+        await loadMediaPreview(ponto, tipo, previewDiv, false);
+        previewDiv.className = 'media-preview'; // Remover classe loading
+        previewDiv.dataset.loaded = 'true';
+
+        Logger.info('Arquivos carregados via lazy loading', { pontoId: ponto.id, tipo });
     }
 }
 
@@ -515,10 +594,38 @@ async function openPhotoModal(pontoId, tipo) {
                         <div class="photo-date">${DriveAPI.formatDate(file.createdTime)}</div>
                     `;
                 } else {
-                    photoItem.innerHTML = `
-                        <img src="${file.url}" alt="${file.name}" onclick="openFullImage('${file.url}')">
-                        <div class="photo-date">${DriveAPI.formatDate(file.createdTime)}</div>
-                    `;
+                    // ✅ Imagem com fallback (mesmo tratamento do preview)
+                    const img = document.createElement('img');
+                    img.alt = file.name;
+                    img.dataset.fileId = file.id;
+                    img.dataset.fileName = file.name;
+                    img.onclick = () => openFullImage(file.url);
+
+                    // Adicionar URLs alternativas
+                    if (file.alternativeUrls && file.alternativeUrls.length > 0) {
+                        img.dataset.alternativeUrls = JSON.stringify(file.alternativeUrls);
+                        img.dataset.currentUrlIndex = '0';
+                    }
+
+                    // Handler de erro com fallback
+                    img.onerror = function() {
+                        console.warn(`⚠️ Erro ao carregar imagem no modal: ${this.src}`);
+                        handleImageError(this);
+                    };
+
+                    img.onload = function() {
+                        console.log(`✅ Imagem carregada no modal: ${this.dataset.fileName}`);
+                    };
+
+                    img.src = file.url;
+                    console.log(`🖼️ Modal: Carregando ${file.name} de: ${file.url}`);
+
+                    const dateDiv = document.createElement('div');
+                    dateDiv.className = 'photo-date';
+                    dateDiv.textContent = DriveAPI.formatDate(file.createdTime);
+
+                    photoItem.appendChild(img);
+                    photoItem.appendChild(dateDiv);
                 }
                 
                 // Ações para exibidora em modo edição
@@ -769,6 +876,73 @@ function hideLoading() {
     if (loadingElement) {
         loadingElement.style.display = 'none';
         Logger.debug('Loading escondido');
+    }
+}
+
+/**
+ * ⚠️ TRATAR ERRO DE IMAGEM COM FALLBACK
+ * Tenta URLs alternativas quando a principal falha
+ */
+function handleImageError(imgElement) {
+    const alternativeUrls = imgElement.dataset.alternativeUrls;
+
+    if (!alternativeUrls) {
+        console.error(`❌ Sem URLs alternativas para ${imgElement.dataset.fileName}`);
+        showImageErrorPlaceholder(imgElement);
+        return;
+    }
+
+    try {
+        const urls = JSON.parse(alternativeUrls);
+        let currentIndex = parseInt(imgElement.dataset.currentUrlIndex || '0');
+
+        currentIndex++;
+
+        if (currentIndex < urls.length) {
+            console.log(`🔄 Tentando URL alternativa ${currentIndex + 1}/${urls.length}: ${urls[currentIndex]}`);
+            imgElement.dataset.currentUrlIndex = currentIndex.toString();
+            imgElement.src = urls[currentIndex];
+        } else {
+            console.error(`❌ Todas as URLs falharam para ${imgElement.dataset.fileName}`);
+            showImageErrorPlaceholder(imgElement);
+        }
+    } catch (error) {
+        console.error('❌ Erro ao processar URLs alternativas:', error);
+        showImageErrorPlaceholder(imgElement);
+    }
+}
+
+/**
+ * 🖼️ MOSTRAR PLACEHOLDER DE ERRO
+ * Exibe um ícone quando todas as URLs falham
+ */
+function showImageErrorPlaceholder(imgElement) {
+    imgElement.style.display = 'none';
+
+    const parent = imgElement.parentElement;
+    if (parent && !parent.querySelector('.image-error-placeholder')) {
+        const placeholder = document.createElement('div');
+        placeholder.className = 'image-error-placeholder';
+        placeholder.innerHTML = `
+            <div style="
+                width: 100%;
+                height: 100%;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                background: #F1F5F9;
+                color: #64748B;
+                font-size: 24px;
+                padding: 10px;
+                text-align: center;
+            ">
+                <div style="font-size: 32px; margin-bottom: 8px;">⚠️</div>
+                <div style="font-size: 10px;">Erro ao carregar</div>
+                <div style="font-size: 9px; margin-top: 4px;">ID: ${imgElement.dataset.fileId || '?'}</div>
+            </div>
+        `;
+        parent.insertBefore(placeholder, imgElement);
     }
 }
 

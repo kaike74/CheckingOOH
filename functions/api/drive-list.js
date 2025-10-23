@@ -302,19 +302,34 @@ async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, ac
         console.log(`📋 Arquivos na pasta ${tipo}: ${filteredFiles.length}`);
 
         // Processar arquivos para formato padronizado
-        const processedFiles = filteredFiles.map(file => ({
-            id: file.id,
-            name: file.name,
-            url: getFileViewUrl(file),
-            downloadUrl: file.webContentLink,
-            thumbnailUrl: file.thumbnailLink,
-            mimeType: file.mimeType,
-            size: parseInt(file.size) || 0,
-            createdTime: file.createdTime,
-            modifiedTime: file.modifiedTime,
-            isVideo: file.mimeType && file.mimeType.startsWith('video/'),
-            isImage: file.mimeType && file.mimeType.startsWith('image/')
-        }));
+        const processedFiles = filteredFiles.map(file => {
+            const isImage = file.mimeType && file.mimeType.startsWith('image/');
+            const isVideo = file.mimeType && file.mimeType.startsWith('video/');
+
+            // ✅ Adicionar URLs alternativas para fallback
+            const alternativeUrls = [];
+            if (isImage) {
+                alternativeUrls.push(`https://drive.google.com/uc?id=${file.id}`);
+                alternativeUrls.push(`https://drive.google.com/uc?export=download&id=${file.id}`);
+                alternativeUrls.push(`https://drive.google.com/thumbnail?id=${file.id}&sz=w1000`);
+                if (file.thumbnailLink) alternativeUrls.push(file.thumbnailLink);
+            }
+
+            return {
+                id: file.id,
+                name: file.name,
+                url: getFileViewUrl(file),
+                alternativeUrls: alternativeUrls, // ✅ NOVO: URLs de fallback
+                downloadUrl: file.webContentLink,
+                thumbnailUrl: file.thumbnailLink,
+                mimeType: file.mimeType,
+                size: parseInt(file.size) || 0,
+                createdTime: file.createdTime,
+                modifiedTime: file.modifiedTime,
+                isVideo: isVideo,
+                isImage: isImage
+            };
+        });
 
         return {
             success: true,
@@ -529,19 +544,24 @@ async function findFolderInAllDrives(folderName, accessToken) {
 // 🔗 OBTER URL DE VISUALIZAÇÃO DO ARQUIVO
 // =============================================================================
 function getFileViewUrl(file) {
-    // ✅ CORREÇÃO 6 e 8: URLs otimizadas para evitar corrupção
-    // Usar diferentes formatos de URL dependendo do tipo de arquivo
+    // ✅ CORREÇÃO CRÍTICA: URLs otimizadas para visualização direta
 
     if (file.mimeType && file.mimeType.startsWith('image/')) {
-        // Para imagens, usar o formato direto que evita processamento desnecessário
-        return `https://drive.google.com/uc?export=view&id=${file.id}`;
+        // Para imagens: formato mais direto sem export=view
+        const url = `https://drive.google.com/uc?id=${file.id}`;
+        console.log(`🖼️ URL gerada para imagem ${file.name}: ${url}`);
+        return url;
     }
 
     if (file.mimeType && file.mimeType.startsWith('video/')) {
-        // Para vídeos, usar o formato de preview
-        return `https://drive.google.com/file/d/${file.id}/preview`;
+        // Para vídeos: formato de preview
+        const url = `https://drive.google.com/file/d/${file.id}/preview`;
+        console.log(`🎥 URL gerada para vídeo ${file.name}: ${url}`);
+        return url;
     }
 
-    // Para outros tipos, usar webViewLink ou fallback
-    return file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`;
+    // Para outros tipos: webViewLink ou fallback
+    const url = file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`;
+    console.log(`📄 URL gerada para arquivo ${file.name}: ${url}`);
+    return url;
 }
