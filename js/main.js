@@ -251,16 +251,13 @@ async function createSecaoElement(ponto, tipo, readOnly = false) {
     if (!readOnly) {
         const actionsDiv = document.createElement('div');
         actionsDiv.className = 'secao-actions';
-        // ✅ MELHORIA: Botão unificado "Adicionar Mídia"
+        // ✅ MELHORIA: Removido botão "Ver Fotos" - clique direto nas imagens abre carrossel
         actionsDiv.innerHTML = `
             <button class="btn btn-primary btn-small" onclick="openMediaChoiceModal('${appData.exibidora}', '${ponto.id}', '${tipo}', '${appData.databaseId}')">
                 📎 Adicionar Mídia
             </button>
             <button class="btn btn-secondary btn-small" onclick="toggleEditMode('${ponto.id}', '${tipo}')" id="edit-btn-${ponto.id}-${tipo}">
                 ✏️ Editar
-            </button>
-            <button class="btn btn-primary btn-small" onclick="openPhotoModal('${ponto.id}', '${tipo}')">
-                👁️ Ver Fotos
             </button>
         `;
         secaoDiv.appendChild(actionsDiv);
@@ -339,7 +336,8 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false) {
     files.forEach(file => {
         const mediaItem = document.createElement('div');
         mediaItem.className = 'media-item';
-        mediaItem.onclick = () => openPhotoModal(pontoId, tipo);
+        // ✅ MELHORIA: Abrir carousel fullscreen em vez de modal grid
+        mediaItem.onclick = () => openMediaCarousel(pontoId, tipo, container.children.length - 1);
         
         if (DriveAPI.isVideoFile(file.mimeType)) {
             // ✅ CORREÇÃO: Vídeo com thumbnail e ícone de play
@@ -584,7 +582,159 @@ async function deleteFile(fileId, fileName, pontoId, tipo) {
 }
 
 /**
- * 👁️ ABRIR MODAL DE FOTOS
+ * 🎠 ABRIR CARROSSEL DE MÍDIA (NOVO)
+ * Visualizador fullscreen com navegação por setas
+ */
+async function openMediaCarousel(pontoId, tipo, startIndex = 0) {
+    try {
+        Logger.info('Abrindo carrossel de mídia', { pontoId, tipo, startIndex });
+
+        // Buscar arquivos
+        const result = await DriveAPI.listDriveFiles(appData.exibidora, pontoId, tipo, appData.databaseId);
+
+        if (!result.success || result.files.length === 0) {
+            alert('Nenhuma mídia encontrada');
+            return;
+        }
+
+        // Criar overlay fullscreen
+        const carousel = document.createElement('div');
+        carousel.id = 'media-carousel';
+        carousel.className = 'media-carousel';
+        carousel.innerHTML = `
+            <div class="carousel-overlay" onclick="closeMediaCarousel()"></div>
+            <div class="carousel-content">
+                <button class="carousel-close" onclick="closeMediaCarousel()">×</button>
+                <button class="carousel-nav carousel-prev" onclick="carouselPrev()">‹</button>
+                <button class="carousel-nav carousel-next" onclick="carouselNext()">›</button>
+                <div class="carousel-counter"><span id="carousel-current">1</span> / <span id="carousel-total">${result.files.length}</span></div>
+                <div class="carousel-media" id="carousel-media"></div>
+            </div>
+        `;
+
+        document.body.appendChild(carousel);
+
+        // Armazenar dados para navegação
+        window.carouselData = {
+            files: result.files,
+            currentIndex: Math.min(startIndex, result.files.length - 1),
+            pontoId: pontoId,
+            tipo: tipo
+        };
+
+        // Mostrar primeira mídia
+        showCarouselMedia(window.carouselData.currentIndex);
+
+        // Adicionar controle por teclado
+        document.addEventListener('keydown', handleCarouselKeyboard);
+
+    } catch (error) {
+        Logger.error('Erro ao abrir carrossel', error);
+        alert('Erro ao carregar mídia: ' + error.message);
+    }
+}
+
+/**
+ * 🖼️ MOSTRAR MÍDIA NO CARROSSEL
+ */
+function showCarouselMedia(index) {
+    const data = window.carouselData;
+    const file = data.files[index];
+    const container = document.getElementById('carousel-media');
+
+    // Atualizar contador
+    document.getElementById('carousel-current').textContent = index + 1;
+
+    // Limpar conteúdo anterior
+    container.innerHTML = '';
+
+    if (DriveAPI.isVideoFile(file.mimeType)) {
+        // Vídeo
+        container.innerHTML = `
+            <video controls autoplay style="max-width: 90vw; max-height: 90vh;">
+                <source src="${file.url}" type="${file.mimeType}">
+                Seu navegador não suporta vídeos.
+            </video>
+        `;
+    } else {
+        // Imagem
+        const img = document.createElement('img');
+        img.src = file.url;
+        img.alt = file.name;
+        img.style.maxWidth = '90vw';
+        img.style.maxHeight = '90vh';
+        img.style.objectFit = 'contain';
+
+        // Fallback de erro
+        if (file.alternativeUrls && file.alternativeUrls.length > 0) {
+            img.dataset.alternativeUrls = JSON.stringify(file.alternativeUrls);
+            img.dataset.currentUrlIndex = '0';
+            img.dataset.fileId = file.id;
+            img.dataset.fileName = file.name;
+            img.onerror = function() {
+                handleImageError(this);
+            };
+        }
+
+        container.appendChild(img);
+    }
+
+    data.currentIndex = index;
+}
+
+/**
+ * ◀️ NAVEGAR PARA ANTERIOR
+ */
+function carouselPrev() {
+    const data = window.carouselData;
+    if (data.currentIndex > 0) {
+        showCarouselMedia(data.currentIndex - 1);
+    }
+}
+
+/**
+ * ▶️ NAVEGAR PARA PRÓXIMO
+ */
+function carouselNext() {
+    const data = window.carouselData;
+    if (data.currentIndex < data.files.length - 1) {
+        showCarouselMedia(data.currentIndex + 1);
+    }
+}
+
+/**
+ * ⌨️ CONTROLE POR TECLADO
+ */
+function handleCarouselKeyboard(e) {
+    if (!document.getElementById('media-carousel')) return;
+
+    switch(e.key) {
+        case 'ArrowLeft':
+            carouselPrev();
+            break;
+        case 'ArrowRight':
+            carouselNext();
+            break;
+        case 'Escape':
+            closeMediaCarousel();
+            break;
+    }
+}
+
+/**
+ * 🔒 FECHAR CARROSSEL
+ */
+function closeMediaCarousel() {
+    const carousel = document.getElementById('media-carousel');
+    if (carousel) {
+        carousel.remove();
+    }
+    window.carouselData = null;
+    document.removeEventListener('keydown', handleCarouselKeyboard);
+}
+
+/**
+ * 👁️ ABRIR MODAL DE FOTOS (ANTIGO - mantido para compatibilidade)
  * Abre o modal para visualizar todas as fotos
  */
 async function openPhotoModal(pontoId, tipo) {
@@ -1047,6 +1197,10 @@ window.deleteFile = deleteFile;
 window.openPhotoModal = openPhotoModal;
 window.closePhotoModal = closePhotoModal;
 window.openFullImage = openFullImage;
+window.openMediaCarousel = openMediaCarousel;
+window.closeMediaCarousel = closeMediaCarousel;
+window.carouselPrev = carouselPrev;
+window.carouselNext = carouselNext;
 window.hideDemoWarning = hideDemoWarning;
 window.updateMediaPreview = updateMediaPreview;
 window.showSuccessMessage = showSuccessMessage;
