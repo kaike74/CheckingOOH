@@ -18,25 +18,28 @@ export async function onRequest(context) {
         const url = new URL(context.request.url);
         const pontoId = url.searchParams.get('id');
         const clienteId = url.searchParams.get('idcliente');
-        
-        if (!pontoId && !clienteId) {
-            return new Response(JSON.stringify({ 
-                error: 'ID do ponto ou cliente é obrigatório' 
+        const campanhaId = url.searchParams.get('campanha');
+
+        if (!pontoId && !clienteId && !campanhaId) {
+            return new Response(JSON.stringify({
+                error: 'ID do ponto, cliente ou campanha é obrigatório'
             }), { status: 400, headers });
         }
 
         const notionToken = context.env.NOTION_TOKEN;
         if (!notionToken) {
-            return new Response(JSON.stringify({ 
-                error: 'Token do Notion não configurado' 
+            return new Response(JSON.stringify({
+                error: 'Token do Notion não configurado'
             }), { status: 500, headers });
         }
 
-        console.log('🔍 Buscando dados no Notion...', { pontoId, clienteId });
+        console.log('🔍 Buscando dados no Notion...', { pontoId, clienteId, campanhaId });
 
         let responseData;
 
-        if (clienteId) {
+        if (campanhaId) {
+            responseData = await fetchPontosByCampanha(campanhaId, notionToken);
+        } else if (clienteId) {
             responseData = await fetchPontoForCliente(clienteId, notionToken);
         } else {
             responseData = await fetchPontosForExibidora(pontoId, notionToken);
@@ -198,17 +201,64 @@ async function fetchPontoForCliente(clienteId, notionToken) {
 }
 
 // =============================================================================
+// 📋 BUSCAR TODOS OS PONTOS DE UMA CAMPANHA
+// =============================================================================
+async function fetchPontosByCampanha(campanhaId, notionToken) {
+    try {
+        console.log('📋 Buscando todos os pontos da campanha:', campanhaId);
+
+        const normalizedId = normalizeNotionId(campanhaId);
+        console.log('🔧 Database ID normalizado:', normalizedId);
+
+        // Buscar TODOS os pontos do database (sem filtro)
+        const queryResponse = await fetch(`https://api.notion.com/v1/databases/${normalizedId}/query`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${notionToken}`,
+                'Notion-Version': '2022-06-28',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                page_size: 100 // Buscar até 100 pontos
+            })
+        });
+
+        if (!queryResponse.ok) {
+            const errorText = await queryResponse.text();
+            throw new Error(`Erro ao buscar pontos da campanha: ${queryResponse.status} - ${errorText}`);
+        }
+
+        const queryData = await queryResponse.json();
+        const pontos = queryData.results.map(extractPontoData);
+
+        console.log('✅ Pontos da campanha encontrados:', pontos.length);
+
+        return {
+            success: true,
+            mode: 'campanha',
+            pontos: pontos,
+            databaseId: campanhaId,
+            totalPontos: pontos.length
+        };
+
+    } catch (error) {
+        console.error('❌ Erro ao buscar pontos da campanha:', error);
+        throw error;
+    }
+}
+
+// =============================================================================
 // 🔧 NORMALIZAR ID DO NOTION
 // =============================================================================
 function normalizeNotionId(id) {
     if (!id) return id;
-    
+
     const cleanId = id.replace(/-/g, '');
-    
+
     if (cleanId.length === 32) {
         return `${cleanId.slice(0, 8)}-${cleanId.slice(8, 12)}-${cleanId.slice(12, 16)}-${cleanId.slice(16, 20)}-${cleanId.slice(20, 32)}`;
     }
-    
+
     return id;
 }
 
