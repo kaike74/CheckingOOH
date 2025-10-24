@@ -12,29 +12,27 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <!-- ✅ V10.2: TELA DE CARREGAMENTO OOH -->
-    <div id="loading-screen" class="loading-screen">
+    <!-- ✅ V10.4: TELA DE CARREGAMENTO OOH - MODELO PIXEL-PERFECT -->
+    <div id="loading-proposta" class="loading-screen" style="display: flex;">
         <div class="loading-content">
-            <!-- Logo E-MÍDIAS -->
-            <img src="https://raw.githubusercontent.com/kaike74/distribuicaoemidias/main/logo%20E-MIDIAS%20png%20fundo%20escuro%20HORIZONTAL%20(1).png"
-                 alt="E-MÍDIAS"
-                 class="loading-logo"
-                 onerror="this.style.display='none'">
-
-            <!-- Spinner animado -->
-            <div class="loading-spinner"></div>
-
-            <!-- Texto que muda -->
-            <p id="loading-text" class="loading-text">
-                Carregando sistema...
-            </p>
+            <div class="loading-logo-container">
+                <img src="./LogoEmidias.png"
+                     alt="E-MÍDIAS Logo"
+                     class="loading-logo"
+                     onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgZmlsbD0iIzA2MDU1QiIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LXNpemU9IjIwIiBmaWxsPSIjRkZGIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+RS1Nw41ESUFTPC90ZXh0Pjwvc3ZnPg=='">
+            </div>
+            <h1 class="loading-title" id="loading-title">📸 CheckingOOH</h1>
+            <p class="loading-text" id="loading-text">Carregando...</p>
+            <div class="loading-progress">
+                <div class="loading-bar"></div>
+            </div>
         </div>
     </div>
 
     <!-- CABEÇALHO SUPERIOR COM LOGO -->
     <div class="top-header">
-        <img src="https://raw.githubusercontent.com/kaike74/distribuicaoemidias/main/logo%20E-MIDIAS%20png%20fundo%20escuro%20HORIZONTAL%20(1).png" 
-             alt="E-MÍDIAS Logo" 
+        <img src="./LogoEmidias.png"
+             alt="E-MÍDIAS Logo"
              class="top-logo"
              onerror="this.style.display='none'">
     </div>
@@ -57,7 +55,7 @@
     <!-- LOADING -->
     <div id="loading" class="loading">
       <div class="loading-spinner"></div>
-      <p>Carregando dados e conectando com Google Drive...</p>
+      <p>Carregando dados...</p>
     </div>
 
     <!-- ERROR -->

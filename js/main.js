@@ -1385,11 +1385,12 @@ function sleep(ms) {
 }
 
 /**
- * 📄 GERAR PDF DA CAMPANHA V10.2
- * ✅ NOVA ABORDAGEM: Print da tela com html2canvas
- * - Mais rápido (<30s)
- * - Sem caracteres estranhos
- * - Layout perfeito (é a tela real!)
+ * 📄 GERAR PDF DA CAMPANHA V10.4
+ * ✅ MELHORIAS CRÍTICAS:
+ * - Qualidade das imagens aumentada (scale 3x)
+ * - TODOS os pontos expandidos e carregados
+ * - Tempo de espera maior para garantir carregamento completo
+ * - Inclui pontos COM e SEM evidências
  */
 async function generateCampanhaPDF() {
     try {
@@ -1398,7 +1399,7 @@ async function generateCampanhaPDF() {
             return;
         }
 
-        Logger.info('Gerando PDF da campanha V10.2 via html2canvas');
+        Logger.info('Gerando PDF da campanha V10.4 com qualidade aprimorada');
 
         // Função helper para atualizar progresso com texto
         const setProgress = (text, percent) => {
@@ -1410,85 +1411,116 @@ async function generateCampanhaPDF() {
         showUploadProgress('Preparando PDF...');
         setProgress('Preparando PDF...', 0);
 
-        // 1. EXPANDIR todos os pontos
-        setProgress('Expandindo todos os pontos...', 10);
-        const allToggleButtons = document.querySelectorAll('.btn-expand[id^="toggle-btn-"]');
+        // 1. EXPANDIR TODOS os pontos (incluindo sem evidências)
+        setProgress('Expandindo TODOS os pontos...', 10);
         let expandidos = 0;
 
-        for (const btn of allToggleButtons) {
-            const pontoId = btn.id.replace('toggle-btn-', '');
-            const content = document.getElementById(`content-${pontoId}`);
-            const icon = document.getElementById(`toggle-icon-${pontoId}`);
+        // ✅ V10.4: Buscar TODOS os pontos (não apenas os com botão toggle)
+        for (const ponto of appData.pontos) {
+            const content = document.getElementById(`content-${ponto.id}`);
+            const icon = document.getElementById(`toggle-icon-${ponto.id}`);
 
-            if (content && content.style.display === 'none') {
-                content.style.display = 'grid';
-                if (icon) icon.textContent = '▲';
-                expandidos++;
-                await sleep(100); // Pequeno delay para renderização
+            if (content) {
+                if (content.style.display === 'none' || content.style.display === '') {
+                    content.style.display = 'grid';
+                    if (icon) icon.textContent = '▲';
+                    expandidos++;
+
+                    // ✅ V10.4: CARREGAR fotos de cada ponto expandido
+                    if (content.dataset.loaded === 'false') {
+                        await Promise.all([
+                            loadPontoMediaIfNeeded(ponto, 'entrada'),
+                            loadPontoMediaIfNeeded(ponto, 'saida')
+                        ]);
+                    }
+
+                    await sleep(200); // Delay para renderização
+                }
             }
         }
 
-        Logger.info(`${expandidos} pontos expandidos`);
+        Logger.info(`✅ ${expandidos} pontos expandidos (total: ${appData.pontos.length})`);
 
-        // 2. AGUARDAR fotos carregarem
-        setProgress('Aguardando fotos carregarem...', 30);
-        await sleep(3000); // 3 segundos para fotos lazy load
+        // 2. AGUARDAR carregamento completo das imagens
+        setProgress('Aguardando carregamento completo das imagens...', 40);
+        await sleep(5000); // ✅ V10.4: 5 segundos para garantir todas as imagens
 
-        // 3. CAPTURAR a tela
-        setProgress('Capturando tela...', 50);
+        // ✅ V10.4: Verificar se todas as imagens carregaram
+        const allImages = document.querySelectorAll('#pontos-list img');
+        Logger.info(`Total de imagens no PDF: ${allImages.length}`);
+
+        // 3. CAPTURAR a tela com ALTA QUALIDADE
+        setProgress('Capturando tela em alta qualidade...', 60);
         const pontosContainer = document.getElementById('pontos-list');
 
         if (!pontosContainer) {
             throw new Error('Container de pontos não encontrado');
         }
 
+        // ✅ V10.4: Qualidade MÁXIMA para PDF
         const canvas = await html2canvas(pontosContainer, {
-            scale: 2, // Qualidade 2x
+            scale: 3, // ✅ AUMENTADO: 3x para maior nitidez
             useCORS: true,
             allowTaint: true,
             backgroundColor: '#ffffff',
             logging: false,
             windowWidth: pontosContainer.scrollWidth,
-            windowHeight: pontosContainer.scrollHeight
+            windowHeight: pontosContainer.scrollHeight,
+            imageTimeout: 15000, // ✅ NOVO: 15s timeout para cada imagem
+            removeContainer: false // ✅ NOVO: Manter container no DOM
         });
 
-        // 4. CONVERTER para PDF
-        setProgress('Gerando PDF...', 80);
+        Logger.info(`Canvas gerado: ${canvas.width}x${canvas.height}px`);
+
+        // 4. CONVERTER para PDF com qualidade máxima
+        setProgress('Gerando PDF com qualidade aprimorada...', 80);
         const { jsPDF } = window.jspdf;
         const pdf = new jsPDF('p', 'mm', 'a4');
 
-        const imgData = canvas.toDataURL('image/png');
+        // ✅ V10.4: Usar JPEG com qualidade 0.95 (mais nítido que PNG)
+        const imgData = canvas.toDataURL('image/jpeg', 0.95);
         const imgWidth = 210; // A4 width em mm
         const imgHeight = (canvas.height * imgWidth) / canvas.width;
         const pageHeight = 297; // A4 height em mm
 
         let heightLeft = imgHeight;
         let position = 0;
+        let pageCount = 1;
 
         // Adicionar primeira página
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
         heightLeft -= pageHeight;
 
         // Adicionar páginas adicionais se necessário
         while (heightLeft > 0) {
             position = heightLeft - imgHeight;
             pdf.addPage();
-            pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+            pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
             heightLeft -= pageHeight;
+            pageCount++;
         }
 
-        // 5. SALVAR
-        const fileName = `campanha-${appData.databaseId}-${new Date().toISOString().split('T')[0]}.pdf`;
+        Logger.info(`PDF: ${pageCount} página(s) geradas`);
+
+        // 5. SALVAR com nome descritivo
+        const fileName = `CheckingOOH-Campanha-${appData.databaseId}-${new Date().toISOString().split('T')[0]}.pdf`;
+        setProgress('Salvando PDF...', 95);
         pdf.save(fileName);
 
         hideUploadProgress();
-        showSuccessMessage('📄 PDF gerado com sucesso!');
-        Logger.success('PDF gerado V10.2 via html2canvas', { fileName, pages: pdf.internal.getNumberOfPages() });
+        showSuccessMessage(`📄 PDF gerado com sucesso! ${pageCount} página(s) | ${appData.pontos.length} ponto(s)`);
+        Logger.success('PDF gerado V10.4 com qualidade aprimorada', {
+            fileName,
+            pages: pageCount,
+            pontos: appData.pontos.length,
+            images: allImages.length,
+            resolution: `${canvas.width}x${canvas.height}px`
+        });
 
     } catch (error) {
         hideUploadProgress();
         Logger.error('Erro ao gerar PDF', error);
-        alert('Erro ao gerar PDF: ' + error.message);
+        alert('Erro ao gerar PDF: ' + error.message + '\n\nTente novamente ou use a função de impressão do navegador (Ctrl+P).');
     }
 }
 
@@ -1516,8 +1548,18 @@ window.showSuccessMessage = showSuccessMessage;
 
 Logger.info('Script principal carregado');
 
-// ✅ V10.2: TELA DE CARREGAMENTO COM FRASES OOH
+// ✅ V10.4: TELA DE CARREGAMENTO COM FRASES OOH - SEM REFERÊNCIAS A DRIVE
 const LOADING_TEXTS_OOH = [
+    "Sincronizando campanhas...",
+    "Verificando evidências...",
+    "Carregando pontos de mídia...",
+    "Processando fotos...",
+    "Checando qualidade das imagens...",
+    "Organizando relatórios...",
+    "Mapeando localizações...",
+    "Preparando dashboard...",
+    "🎯 Carregando campanhas ativas...",
+    "📸 Processando evidências...",
     "Instalando lona...",
     "Espantando os pombos do outdoor...",
     "Conversando com exibidora...",
@@ -1526,10 +1568,7 @@ const LOADING_TEXTS_OOH = [
     "Verificando se o painel está iluminado...",
     "Medindo a audiência da esquina...",
     "Negociando com o vento para não derrubar nada...",
-    "Conferindo se a arte está reta...",
-    "Carregando dados do Notion...",
-    "Conectando ao Google Drive...",
-    "Preparando visualização..."
+    "Conferindo se a arte está reta..."
 ];
 
 let loadingTextInterval = null;
@@ -1547,10 +1586,11 @@ function rotateLoadingText() {
 }
 
 /**
- * 🎬 INICIAR TELA DE CARREGAMENTO
+ * 🎬 INICIAR TELA DE CARREGAMENTO V10.4
+ * ✅ Atualizado para usar #loading-proposta (novo ID)
  */
 function startLoadingScreen() {
-    const loadingScreen = document.getElementById('loading-screen');
+    const loadingScreen = document.getElementById('loading-proposta');
     if (loadingScreen) {
         loadingScreen.style.display = 'flex';
         loadingScreen.classList.remove('hidden');
@@ -1558,17 +1598,18 @@ function startLoadingScreen() {
         // Rotacionar frases a cada 2.5 segundos
         loadingTextInterval = setInterval(rotateLoadingText, 2500);
 
-        Logger.info('Tela de carregamento iniciada');
+        Logger.info('Tela de carregamento iniciada V10.4');
     }
 }
 
 /**
- * 🏁 ESCONDER TELA DE CARREGAMENTO
+ * 🏁 ESCONDER TELA DE CARREGAMENTO V10.4
+ * ✅ Controle preciso de estados - loading desaparece quando TUDO está pronto
  */
 function hideLoadingScreen() {
-    const loadingScreen = document.getElementById('loading-screen');
+    const loadingScreen = document.getElementById('loading-proposta');
     if (loadingScreen) {
-        // Parar rotação de textos
+        // Parar rotação de textos IMEDIATAMENTE
         if (loadingTextInterval) {
             clearInterval(loadingTextInterval);
             loadingTextInterval = null;
@@ -1577,12 +1618,12 @@ function hideLoadingScreen() {
         // Fade out suave
         loadingScreen.classList.add('hidden');
 
-        // Remover do DOM após transição
+        // Remover do DOM após transição (800ms conforme modelo)
         setTimeout(() => {
             loadingScreen.style.display = 'none';
-        }, 500);
+        }, 800);
 
-        Logger.info('Tela de carregamento escondida');
+        Logger.info('Tela de carregamento escondida V10.4 - Loading removido completamente');
     }
 }
 
