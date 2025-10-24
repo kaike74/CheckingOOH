@@ -1480,45 +1480,46 @@ body[data-mode="campanha"] .download-badge,
 }
 
 /* =============================================================================
-    ✏️ V10.6: MODO EDIÇÃO CORRIGIDO COM BOTÕES "-" SEMPRE VISÍVEIS
+    ✏️ V10.6: MODO EDIÇÃO CORRIGIDO - BOTÕES SEMPRE VISÍVEIS
     ============================================================================= */
 
-/* Botões de deletar sempre visíveis quando modo edição ativo */
-.edit-mode-active-v10-6 .media-item.editing .delete-badge {
-    display: flex !important;
+/* ✅ FORÇAR BOTÕES DE DELETE SEMPRE VISÍVEIS (SEM HOVER) */
+.media-item.editing .delete-badge {
+    display: flex !important; /* SEMPRE VISÍVEL */
+    position: absolute !important;
+    top: 6px !important;
+    left: 6px !important; /* LADO ESQUERDO */
+    width: 32px !important;
+    height: 32px !important;
+    background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%) !important;
+    color: white !important;
+    border-radius: 50% !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 20px !important;
+    font-weight: bold !important;
+    cursor: pointer !important;
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.6) !important;
+    z-index: 1001 !important;
+    line-height: 1 !important;
+    user-select: none !important;
+    border: 2px solid white !important;
+    opacity: 1 !important;
+    visibility: visible !important;
 }
 
-/* Garantir que delete badge apareça corretamente */
-.media-item.editing .delete-badge {
-    display: flex;
-    position: absolute;
-    top: 6px;
-    left: 6px; /* ✅ LADO ESQUERDO para não conflitar com download */
-    width: 32px;
-    height: 32px;
-    background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
-    color: white;
-    border-radius: 50%;
-    align-items: center;
-    justify-content: center;
-    font-size: 20px;
-    font-weight: bold;
-    cursor: pointer;
-    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
-    transition: all 0.3s ease;
-    z-index: 1001;
-    line-height: 1;
-    user-select: none;
-    border: 2px solid white;
+/* Remover qualquer regra de hover que oculte */
+.delete-badge {
+    display: none; /* Oculto por padrão */
 }
 
 .media-item.editing .delete-badge:hover {
-    transform: scale(1.15);
-    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.6);
+    transform: scale(1.15) !important;
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.8) !important;
 }
 
 .media-item.editing .delete-badge:active {
-    transform: scale(0.9);
+    transform: scale(0.9) !important;
 }
 
 /* NÃO mostrar delete em logos, headers, etc */
