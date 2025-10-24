@@ -15,12 +15,16 @@ const appData = {
  * 🎬 INICIALIZAR APLICAÇÃO
  * Ponto de entrada principal
  */
+/**
+ * 🚀 INICIALIZAR APLICAÇÃO V10.2
+ * ✅ Com tela de carregamento OOH
+ */
 async function initApp() {
     try {
-        Logger.info('Iniciando aplicação Checking OOH...');
+        Logger.info('Iniciando aplicação Checking OOH V10.2...');
 
-        // Mostrar loading
-        showLoading();
+        // ✅ V10.2: Mostrar tela de carregamento OOH
+        startLoadingScreen();
 
         // Configurar interface inicial
         setupInterface();
@@ -53,7 +57,7 @@ async function initApp() {
             await loadCampanhaData(campanhaId);
         } else {
             // Sem ID - Mostrar instruções
-            hideLoading();
+            hideLoadingScreen();
             showWelcomeScreen();
             return;
         }
@@ -61,14 +65,14 @@ async function initApp() {
         // Configurar drag & drop após carregar dados
         setupDragAndDrop();
 
-        // ✅ CORREÇÃO 3: Esconder loading após carregar tudo
-        hideLoading();
+        // ✅ V10.2: Esconder tela de carregamento OOH
+        hideLoadingScreen();
 
-        Logger.success('Aplicação inicializada com sucesso');
+        Logger.success('Aplicação inicializada com sucesso V10.2');
 
     } catch (error) {
         Logger.error('Erro ao inicializar aplicação', error);
-        hideLoading();
+        hideLoadingScreen();
         showErrorScreen(error.message);
     }
 }
@@ -513,21 +517,25 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false, containerPar
             mediaItem.appendChild(img);
         }
         
-        // ✅ CORREÇÃO: Badge de delete sempre criado, mas inicialmente escondido (modo exibidora)
+        // ✅ V10.2: Badge de delete - controlado por CSS class .editing
         if (!readOnly) {
             const deleteBtn = document.createElement('div');
             deleteBtn.className = 'delete-badge';
             deleteBtn.innerHTML = '−'; // Sinal de menos
-            const currentEditMode = isEditMode(pontoId, tipo);
-            deleteBtn.style.display = currentEditMode ? 'flex' : 'none';
             deleteBtn.dataset.pontoId = pontoId;
             deleteBtn.dataset.tipo = tipo;
-            console.log(`🗑️ Badge criado para ${file.name} (${pontoId}-${tipo}): ${currentEditMode ? 'VISÍVEL' : 'OCULTO'}`);
             deleteBtn.onclick = (e) => {
                 e.stopPropagation(); // Não abrir carrossel ao clicar no -
                 deleteFile(file.id, file.name, pontoId, tipo);
             };
             mediaItem.appendChild(deleteBtn);
+
+            // ✅ V10.2: Se modo edição já está ativo, adicionar classe .editing
+            const currentEditMode = isEditMode(pontoId, tipo);
+            if (currentEditMode) {
+                mediaItem.classList.add('editing');
+            }
+            console.log(`🗑️ V10.2: Badge criado para ${file.name} - editMode: ${currentEditMode}`);
         }
 
         // ✅ MELHORIA: Botão de download individual (modo cliente)
@@ -672,31 +680,42 @@ async function loadPontoMediaIfNeeded(ponto, tipo) {
  * ✏️ ALTERNAR MODO EDIÇÃO
  * Ativa/desativa o modo edição para uma seção
  */
+/**
+ * ✏️ ALTERNAR MODO EDIÇÃO V10.2
+ * ✅ CORRIGIDO: Usa classe .editing para controle CSS (funciona no mobile)
+ */
 function toggleEditMode(pontoId, tipo) {
     const key = `${pontoId}-${tipo}`;
     const isCurrentlyEditing = appData.editMode[key] || false;
-    
+
     appData.editMode[key] = !isCurrentlyEditing;
-    
+
     const editBtn = document.getElementById(`edit-btn-${pontoId}-${tipo}`);
     if (editBtn) {
         editBtn.textContent = appData.editMode[key] ? '✅ Finalizar' : '✏️ Editar';
         editBtn.className = appData.editMode[key] ? 'btn btn-success btn-small' : 'btn btn-secondary btn-small';
     }
-    
-    // ✅ CORREÇÃO: Apenas mostrar/ocultar badges de delete do container específico
+
+    // ✅ V10.2: Adicionar/remover classe .editing nos media-items
     const container = document.getElementById(`preview-${pontoId}-${tipo}`);
     if (container) {
-        const deleteButtons = container.querySelectorAll('.delete-badge');
-        console.log(`🔧 Toggle modo edição: ${deleteButtons.length} badges encontrados para ${pontoId}-${tipo}`);
-        deleteButtons.forEach(badge => {
-            badge.style.display = appData.editMode[key] ? 'flex' : 'none';
+        const mediaItems = container.querySelectorAll('.media-item');
+        console.log(`🔧 V10.2: Toggle modo edição - ${mediaItems.length} media-items para ${pontoId}-${tipo}`);
+
+        mediaItems.forEach(item => {
+            if (appData.editMode[key]) {
+                item.classList.add('editing'); // Classe ativa CSS: .media-item.editing .delete-badge
+                console.log('✅ Modo edição ATIVADO:', item);
+            } else {
+                item.classList.remove('editing');
+                console.log('⏹️ Modo edição DESATIVADO:', item);
+            }
         });
     } else {
         console.error(`❌ Container preview-${pontoId}-${tipo} não encontrado ao alternar modo edição!`);
     }
 
-    Logger.debug('Modo edição alternado', { pontoId, tipo, editMode: appData.editMode[key] });
+    Logger.info('Modo edição alternado V10.2', { pontoId, tipo, editMode: appData.editMode[key], method: 'CSS class .editing' });
 }
 
 /**
@@ -1359,239 +1378,112 @@ function addPDFButton() {
 }
 
 /**
- * 🖼️ CARREGAR IMAGEM COMO BASE64 (V10.1)
- * Helper para incluir imagens no PDF
+ * ⏱️ SLEEP HELPER (V10.2)
  */
-async function loadImageAsBase64(imageUrl) {
-    try {
-        Logger.debug('Carregando imagem para PDF', { imageUrl });
-
-        const response = await fetch(imageUrl);
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
-
-        const blob = await response.blob();
-
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = () => reject(new Error('Erro ao ler imagem'));
-            reader.readAsDataURL(blob);
-        });
-    } catch (error) {
-        Logger.warning('Erro ao carregar imagem para PDF', error);
-        return null;
-    }
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 /**
- * 📄 GERAR PDF DA CAMPANHA V10.1
- * ✅ CORRIGIDO: Imagens reais + layout profissional + performance otimizada
+ * 📄 GERAR PDF DA CAMPANHA V10.2
+ * ✅ NOVA ABORDAGEM: Print da tela com html2canvas
+ * - Mais rápido (<30s)
+ * - Sem caracteres estranhos
+ * - Layout perfeito (é a tela real!)
  */
 async function generateCampanhaPDF() {
     try {
-        if (!window.jspdf || !window.jspdf.jsPDF) {
-            alert('Biblioteca jsPDF não carregada. Por favor, recarregue a página.');
+        if (!window.html2canvas || !window.jspdf || !window.jspdf.jsPDF) {
+            alert('Bibliotecas não carregadas. Por favor, recarregue a página.');
             return;
         }
 
-        Logger.info('Gerando PDF da campanha V10.1');
+        Logger.info('Gerando PDF da campanha V10.2 via html2canvas');
 
-        // Mostrar progresso
-        const progressText = document.getElementById('progress-text');
-        const originalText = progressText ? progressText.textContent : '';
+        // Função helper para atualizar progresso com texto
+        const setProgress = (text, percent) => {
+            const progressText = document.getElementById('progress-text');
+            if (progressText) progressText.textContent = text;
+            updateUploadProgress(percent);
+        };
 
-        showUploadProgress('Gerando PDF...');
+        showUploadProgress('Preparando PDF...');
+        setProgress('Preparando PDF...', 0);
 
-        const { jsPDF } = window.jspdf;
-        const pdf = new jsPDF();
-        let yPosition = 20;
-        let totalImagens = 0;
-        let imagensCarregadas = 0;
+        // 1. EXPANDIR todos os pontos
+        setProgress('Expandindo todos os pontos...', 10);
+        const allToggleButtons = document.querySelectorAll('.btn-expand[id^="toggle-btn-"]');
+        let expandidos = 0;
 
-        // Cabeçalho do relatório
-        pdf.setFontSize(20);
-        pdf.setFont(undefined, 'bold');
-        pdf.text('Relatório de Campanha OOH', 105, yPosition, { align: 'center' });
+        for (const btn of allToggleButtons) {
+            const pontoId = btn.id.replace('toggle-btn-', '');
+            const content = document.getElementById(`content-${pontoId}`);
+            const icon = document.getElementById(`toggle-icon-${pontoId}`);
 
-        yPosition += 8;
-        pdf.setFontSize(11);
-        pdf.setFont(undefined, 'normal');
-        pdf.setTextColor(100, 100, 100);
-        pdf.text(`Total: ${appData.pontos.length} ponto(s) | Data: ${new Date().toLocaleDateString('pt-BR')}`, 105, yPosition, { align: 'center' });
-        pdf.setTextColor(0, 0, 0);
-
-        yPosition += 15;
-
-        // ✅ V10.1: Limitar a 2 fotos por tipo para performance (<10 segundos)
-        const MAX_FOTOS_POR_TIPO = 2;
-        const LARGURA_IMG = 50;
-        const ALTURA_IMG = 35;
-
-        // Processar cada ponto
-        for (let i = 0; i < appData.pontos.length; i++) {
-            const ponto = appData.pontos[i];
-
-            if (progressText) {
-                progressText.textContent = `Gerando PDF... Ponto ${i + 1}/${appData.pontos.length}`;
+            if (content && content.style.display === 'none') {
+                content.style.display = 'grid';
+                if (icon) icon.textContent = '▲';
+                expandidos++;
+                await sleep(100); // Pequeno delay para renderização
             }
-
-            // Verificar se precisa de nova página
-            if (yPosition > 240) {
-                pdf.addPage();
-                yPosition = 20;
-            }
-
-            // Título do ponto com box
-            pdf.setFillColor(6, 5, 91);
-            pdf.rect(15, yPosition - 5, 180, 8, 'F');
-            pdf.setTextColor(255, 255, 255);
-            pdf.setFontSize(12);
-            pdf.setFont(undefined, 'bold');
-            pdf.text(`📍 ${ponto.endereco}`, 18, yPosition);
-            pdf.setTextColor(0, 0, 0);
-            yPosition += 10;
-
-            pdf.setFontSize(9);
-            pdf.setFont(undefined, 'normal');
-            pdf.text(`Exibidora: ${ponto.exibidora}`, 18, yPosition);
-            yPosition += 8;
-
-            // Buscar fotos de Entrada
-            try {
-                const resultEntrada = await DriveAPI.listDriveFiles(ponto.exibidora, ponto.id, 'entrada', appData.databaseId);
-                if (resultEntrada.success && resultEntrada.files.length > 0) {
-                    pdf.setFontSize(10);
-                    pdf.setFont(undefined, 'bold');
-                    pdf.setTextColor(16, 185, 129); // Verde
-                    pdf.text('🟢 Entrada', 18, yPosition);
-                    pdf.setTextColor(0, 0, 0);
-                    yPosition += 6;
-
-                    // ✅ V10.1: Limitar fotos para performance
-                    const fotosEntrada = resultEntrada.files.filter(f => !DriveAPI.isVideoFile(f.mimeType)).slice(0, MAX_FOTOS_POR_TIPO);
-
-                    for (const foto of fotosEntrada) {
-                        if (yPosition > 230) {
-                            pdf.addPage();
-                            yPosition = 20;
-                        }
-
-                        // Bi-semana
-                        if (foto.createdTime) {
-                            const bisemana = calcularBisemana(foto.createdTime);
-                            pdf.setFontSize(8);
-                            pdf.setFont(undefined, 'italic');
-                            pdf.setTextColor(100, 100, 100);
-                            pdf.text(bisemana, 23, yPosition);
-                            pdf.setTextColor(0, 0, 0);
-                            yPosition += 5;
-                        }
-
-                        // ✅ V10.1: INCLUIR IMAGEM REAL
-                        try {
-                            // Usar thumbnailLink para melhor performance
-                            const imageUrl = foto.thumbnailLink || foto.url;
-                            const imageBase64 = await loadImageAsBase64(imageUrl);
-
-                            if (imageBase64) {
-                                pdf.addImage(imageBase64, 'JPEG', 23, yPosition, LARGURA_IMG, ALTURA_IMG);
-                                imagensCarregadas++;
-                                yPosition += ALTURA_IMG + 3;
-                            } else {
-                                // Fallback: texto se imagem falhar
-                                pdf.setFontSize(8);
-                                pdf.text(`[Imagem indisponível: ${foto.name}]`, 23, yPosition);
-                                yPosition += 5;
-                            }
-                        } catch (imgError) {
-                            Logger.warning('Erro ao adicionar imagem ao PDF', imgError);
-                            pdf.setFontSize(8);
-                            pdf.text(`[Erro: ${foto.name}]`, 23, yPosition);
-                            yPosition += 5;
-                        }
-                    }
-
-                    yPosition += 3;
-                }
-            } catch (error) {
-                Logger.warning('Erro ao buscar fotos de entrada para PDF', error);
-            }
-
-            // Buscar fotos de Saída
-            try {
-                const resultSaida = await DriveAPI.listDriveFiles(ponto.exibidora, ponto.id, 'saida', appData.databaseId);
-                if (resultSaida.success && resultSaida.files.length > 0) {
-                    if (yPosition > 230) {
-                        pdf.addPage();
-                        yPosition = 20;
-                    }
-
-                    pdf.setFontSize(10);
-                    pdf.setFont(undefined, 'bold');
-                    pdf.setTextColor(245, 158, 11); // Laranja
-                    pdf.text('🔴 Saída', 18, yPosition);
-                    pdf.setTextColor(0, 0, 0);
-                    yPosition += 6;
-
-                    const fotosSaida = resultSaida.files.filter(f => !DriveAPI.isVideoFile(f.mimeType)).slice(0, MAX_FOTOS_POR_TIPO);
-
-                    for (const foto of fotosSaida) {
-                        if (yPosition > 230) {
-                            pdf.addPage();
-                            yPosition = 20;
-                        }
-
-                        // Bi-semana
-                        if (foto.createdTime) {
-                            const bisemana = calcularBisemana(foto.createdTime);
-                            pdf.setFontSize(8);
-                            pdf.setFont(undefined, 'italic');
-                            pdf.setTextColor(100, 100, 100);
-                            pdf.text(bisemana, 23, yPosition);
-                            pdf.setTextColor(0, 0, 0);
-                            yPosition += 5;
-                        }
-
-                        // ✅ V10.1: INCLUIR IMAGEM REAL
-                        try {
-                            const imageUrl = foto.thumbnailLink || foto.url;
-                            const imageBase64 = await loadImageAsBase64(imageUrl);
-
-                            if (imageBase64) {
-                                pdf.addImage(imageBase64, 'JPEG', 23, yPosition, LARGURA_IMG, ALTURA_IMG);
-                                imagensCarregadas++;
-                                yPosition += ALTURA_IMG + 3;
-                            } else {
-                                pdf.setFontSize(8);
-                                pdf.text(`[Imagem indisponível: ${foto.name}]`, 23, yPosition);
-                                yPosition += 5;
-                            }
-                        } catch (imgError) {
-                            Logger.warning('Erro ao adicionar imagem ao PDF', imgError);
-                            pdf.setFontSize(8);
-                            pdf.text(`[Erro: ${foto.name}]`, 23, yPosition);
-                            yPosition += 5;
-                        }
-                    }
-
-                    yPosition += 3;
-                }
-            } catch (error) {
-                Logger.warning('Erro ao buscar fotos de saída para PDF', error);
-            }
-
-            yPosition += 5; // Espaço entre pontos
         }
 
-        // Salvar PDF
+        Logger.info(`${expandidos} pontos expandidos`);
+
+        // 2. AGUARDAR fotos carregarem
+        setProgress('Aguardando fotos carregarem...', 30);
+        await sleep(3000); // 3 segundos para fotos lazy load
+
+        // 3. CAPTURAR a tela
+        setProgress('Capturando tela...', 50);
+        const pontosContainer = document.getElementById('pontos-list');
+
+        if (!pontosContainer) {
+            throw new Error('Container de pontos não encontrado');
+        }
+
+        const canvas = await html2canvas(pontosContainer, {
+            scale: 2, // Qualidade 2x
+            useCORS: true,
+            allowTaint: true,
+            backgroundColor: '#ffffff',
+            logging: false,
+            windowWidth: pontosContainer.scrollWidth,
+            windowHeight: pontosContainer.scrollHeight
+        });
+
+        // 4. CONVERTER para PDF
+        setProgress('Gerando PDF...', 80);
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF('p', 'mm', 'a4');
+
+        const imgData = canvas.toDataURL('image/png');
+        const imgWidth = 210; // A4 width em mm
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+        const pageHeight = 297; // A4 height em mm
+
+        let heightLeft = imgHeight;
+        let position = 0;
+
+        // Adicionar primeira página
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+
+        // Adicionar páginas adicionais se necessário
+        while (heightLeft > 0) {
+            position = heightLeft - imgHeight;
+            pdf.addPage();
+            pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+            heightLeft -= pageHeight;
+        }
+
+        // 5. SALVAR
         const fileName = `campanha-${appData.databaseId}-${new Date().toISOString().split('T')[0]}.pdf`;
         pdf.save(fileName);
 
         hideUploadProgress();
-        showSuccessMessage(`📄 PDF gerado! ${imagensCarregadas} imagens incluídas`);
-        Logger.success('PDF gerado V10.1', { fileName, imagensCarregadas });
+        showSuccessMessage('📄 PDF gerado com sucesso!');
+        Logger.success('PDF gerado V10.2 via html2canvas', { fileName, pages: pdf.internal.getNumberOfPages() });
 
     } catch (error) {
         hideUploadProgress();
@@ -1623,6 +1515,76 @@ window.updateMediaPreview = updateMediaPreview;
 window.showSuccessMessage = showSuccessMessage;
 
 Logger.info('Script principal carregado');
+
+// ✅ V10.2: TELA DE CARREGAMENTO COM FRASES OOH
+const LOADING_TEXTS_OOH = [
+    "Instalando lona...",
+    "Espantando os pombos do outdoor...",
+    "Conversando com exibidora...",
+    "Ajeitando o ângulo da foto...",
+    "A avenida tá cheia hoje, do jeito que a mídia gosta...",
+    "Verificando se o painel está iluminado...",
+    "Medindo a audiência da esquina...",
+    "Negociando com o vento para não derrubar nada...",
+    "Conferindo se a arte está reta...",
+    "Carregando dados do Notion...",
+    "Conectando ao Google Drive...",
+    "Preparando visualização..."
+];
+
+let loadingTextInterval = null;
+let currentTextIndex = 0;
+
+/**
+ * 🔄 ROTACIONAR TEXTO DE CARREGAMENTO
+ */
+function rotateLoadingText() {
+    const loadingText = document.getElementById('loading-text');
+    if (loadingText) {
+        currentTextIndex = (currentTextIndex + 1) % LOADING_TEXTS_OOH.length;
+        loadingText.textContent = LOADING_TEXTS_OOH[currentTextIndex];
+    }
+}
+
+/**
+ * 🎬 INICIAR TELA DE CARREGAMENTO
+ */
+function startLoadingScreen() {
+    const loadingScreen = document.getElementById('loading-screen');
+    if (loadingScreen) {
+        loadingScreen.style.display = 'flex';
+        loadingScreen.classList.remove('hidden');
+
+        // Rotacionar frases a cada 2.5 segundos
+        loadingTextInterval = setInterval(rotateLoadingText, 2500);
+
+        Logger.info('Tela de carregamento iniciada');
+    }
+}
+
+/**
+ * 🏁 ESCONDER TELA DE CARREGAMENTO
+ */
+function hideLoadingScreen() {
+    const loadingScreen = document.getElementById('loading-screen');
+    if (loadingScreen) {
+        // Parar rotação de textos
+        if (loadingTextInterval) {
+            clearInterval(loadingTextInterval);
+            loadingTextInterval = null;
+        }
+
+        // Fade out suave
+        loadingScreen.classList.add('hidden');
+
+        // Remover do DOM após transição
+        setTimeout(() => {
+            loadingScreen.style.display = 'none';
+        }, 500);
+
+        Logger.info('Tela de carregamento escondida');
+    }
+}
 
 // ✅ INICIALIZAR APLICAÇÃO QUANDO O DOM ESTIVER PRONTO
 if (document.readyState === 'loading') {
