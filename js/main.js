@@ -12,18 +12,14 @@ const appData = {
 };
 
 /**
- * 🎬 INICIALIZAR APLICAÇÃO
- * Ponto de entrada principal
- */
-/**
- * 🚀 INICIALIZAR APLICAÇÃO V10.2
- * ✅ Com tela de carregamento OOH
+ * 🎬 INICIALIZAR APLICAÇÃO V10.5
+ * ✅ Com tela de carregamento OOH + remoção de textos "Carregando" residuais
  */
 async function initApp() {
     try {
-        Logger.info('Iniciando aplicação Checking OOH V10.2...');
+        Logger.info('Iniciando aplicação Checking OOH V10.5...');
 
-        // ✅ V10.2: Mostrar tela de carregamento OOH
+        // ✅ V10.5: Mostrar tela de carregamento OOH
         startLoadingScreen();
 
         // Configurar interface inicial
@@ -58,6 +54,7 @@ async function initApp() {
         } else {
             // Sem ID - Mostrar instruções
             hideLoadingScreen();
+            removeAllLoadingTexts(); // ✅ V10.5
             showWelcomeScreen();
             return;
         }
@@ -65,14 +62,21 @@ async function initApp() {
         // Configurar drag & drop após carregar dados
         setupDragAndDrop();
 
-        // ✅ V10.2: Esconder tela de carregamento OOH
+        // ✅ V10.5: Esconder tela de carregamento OOH
         hideLoadingScreen();
 
-        Logger.success('Aplicação inicializada com sucesso V10.2');
+        // ✅ V10.5: REMOVER TODOS os textos "Carregando" residuais
+        setTimeout(() => {
+            removeAllLoadingTexts();
+            startLoadingTextObserver(); // Monitorar dinamicamente
+        }, 1000);
+
+        Logger.success('Aplicação inicializada com sucesso V10.5');
 
     } catch (error) {
         Logger.error('Erro ao inicializar aplicação', error);
         hideLoadingScreen();
+        removeAllLoadingTexts(); // ✅ V10.5
         showErrorScreen(error.message);
     }
 }
@@ -1385,34 +1389,29 @@ function sleep(ms) {
 }
 
 /**
- * 📄 GERAR PDF DA CAMPANHA V10.4
+ * 📄 GERAR PDF DA CAMPANHA V10.5
  * ✅ MELHORIAS CRÍTICAS:
  * - Qualidade das imagens aumentada (scale 3x)
  * - TODOS os pontos expandidos e carregados
  * - Tempo de espera maior para garantir carregamento completo
  * - Inclui pontos COM e SEM evidências
+ * - Notificação flutuante de progresso
  */
 async function generateCampanhaPDF() {
     try {
         if (!window.html2canvas || !window.jspdf || !window.jspdf.jsPDF) {
-            alert('Bibliotecas não carregadas. Por favor, recarregue a página.');
+            showPDFNotification('❌ Bibliotecas não carregadas', 'error');
+            setTimeout(hidePDFNotification, 3000);
             return;
         }
 
-        Logger.info('Gerando PDF da campanha V10.4 com qualidade aprimorada');
+        Logger.info('Gerando PDF da campanha V10.5 com qualidade aprimorada');
 
-        // Função helper para atualizar progresso com texto
-        const setProgress = (text, percent) => {
-            const progressText = document.getElementById('progress-text');
-            if (progressText) progressText.textContent = text;
-            updateUploadProgress(percent);
-        };
-
-        showUploadProgress('Preparando PDF...');
-        setProgress('Preparando PDF...', 0);
+        // ✅ V10.5: Usar notificação flutuante em vez de barra de progresso
+        showPDFNotification('📄 Preparando PDF...', 'progress');
 
         // 1. EXPANDIR TODOS os pontos (incluindo sem evidências)
-        setProgress('Expandindo TODOS os pontos...', 10);
+        showPDFNotification('📂 Expandindo todos os pontos...', 'progress');
         let expandidos = 0;
 
         // ✅ V10.4: Buscar TODOS os pontos (não apenas os com botão toggle)
@@ -1442,7 +1441,7 @@ async function generateCampanhaPDF() {
         Logger.info(`✅ ${expandidos} pontos expandidos (total: ${appData.pontos.length})`);
 
         // 2. AGUARDAR carregamento completo das imagens
-        setProgress('Aguardando carregamento completo das imagens...', 40);
+        showPDFNotification('📸 Carregando imagens...', 'progress');
         await sleep(5000); // ✅ V10.4: 5 segundos para garantir todas as imagens
 
         // ✅ V10.4: Verificar se todas as imagens carregaram
@@ -1450,7 +1449,7 @@ async function generateCampanhaPDF() {
         Logger.info(`Total de imagens no PDF: ${allImages.length}`);
 
         // 3. CAPTURAR a tela com ALTA QUALIDADE
-        setProgress('Capturando tela em alta qualidade...', 60);
+        showPDFNotification('🖼️ Capturando tela...', 'progress');
         const pontosContainer = document.getElementById('pontos-list');
 
         if (!pontosContainer) {
@@ -1473,7 +1472,7 @@ async function generateCampanhaPDF() {
         Logger.info(`Canvas gerado: ${canvas.width}x${canvas.height}px`);
 
         // 4. CONVERTER para PDF com qualidade máxima
-        setProgress('Gerando PDF com qualidade aprimorada...', 80);
+        showPDFNotification('📄 Convertendo para PDF...', 'progress');
         const { jsPDF } = window.jspdf;
         const pdf = new jsPDF('p', 'mm', 'a4');
 
@@ -1504,12 +1503,14 @@ async function generateCampanhaPDF() {
 
         // 5. SALVAR com nome descritivo
         const fileName = `CheckingOOH-Campanha-${appData.databaseId}-${new Date().toISOString().split('T')[0]}.pdf`;
-        setProgress('Salvando PDF...', 95);
+        showPDFNotification('💾 Salvando PDF...', 'progress');
         pdf.save(fileName);
 
-        hideUploadProgress();
-        showSuccessMessage(`📄 PDF gerado com sucesso! ${pageCount} página(s) | ${appData.pontos.length} ponto(s)`);
-        Logger.success('PDF gerado V10.4 com qualidade aprimorada', {
+        // ✅ V10.5: Notificação de sucesso
+        showPDFNotification(`✅ PDF baixado! ${pageCount} pág. | ${appData.pontos.length} pontos`, 'success');
+        setTimeout(hidePDFNotification, 4000); // Auto-fechar após 4 segundos
+
+        Logger.success('PDF gerado V10.5 com qualidade aprimorada', {
             fileName,
             pages: pageCount,
             pontos: appData.pontos.length,
@@ -1518,9 +1519,14 @@ async function generateCampanhaPDF() {
         });
 
     } catch (error) {
-        hideUploadProgress();
         Logger.error('Erro ao gerar PDF', error);
-        alert('Erro ao gerar PDF: ' + error.message + '\n\nTente novamente ou use a função de impressão do navegador (Ctrl+P).');
+
+        // ✅ V10.5: Notificação de erro
+        showPDFNotification('❌ Erro ao gerar PDF', 'error');
+        setTimeout(() => {
+            hidePDFNotification();
+            alert('Erro ao gerar PDF: ' + error.message + '\n\nTente novamente ou use Ctrl+P para imprimir.');
+        }, 2000);
     }
 }
 
@@ -1625,6 +1631,138 @@ function hideLoadingScreen() {
 
         Logger.info('Tela de carregamento escondida V10.4 - Loading removido completamente');
     }
+}
+
+/**
+ * 🚫 V10.5: REMOVER TODOS OS TEXTOS "CARREGANDO" DO DOM
+ * Elimina QUALQUER texto residual que apareça após a tela de carregamento
+ */
+function removeAllLoadingTexts() {
+    Logger.info('🧹 V10.5: Removendo todos os textos "Carregando"...');
+
+    // 1. FORÇAR ocultação do elemento #loading
+    const loadingElement = document.getElementById('loading');
+    if (loadingElement) {
+        loadingElement.style.display = 'none';
+        loadingElement.style.visibility = 'hidden';
+        loadingElement.style.opacity = '0';
+        Logger.info('✅ Elemento #loading forçadamente ocultado');
+    }
+
+    // 2. Buscar por TODOS os elementos com classe "loading"
+    const loadingElements = document.querySelectorAll('.loading, [class*="loading"], [id*="loading"]');
+    loadingElements.forEach((element) => {
+        // Não remover a tela de carregamento principal (#loading-proposta)
+        if (element.id === 'loading-proposta') return;
+
+        const text = element.textContent || '';
+        if (text.toLowerCase().includes('carregando')) {
+            element.style.display = 'none';
+            Logger.info('✅ Elemento com texto "carregando" ocultado:', element.id || element.className);
+        }
+    });
+
+    // 3. Buscar por textos específicos observados
+    const allParagraphs = document.querySelectorAll('p, span, div');
+    allParagraphs.forEach((element) => {
+        const text = element.textContent?.trim() || '';
+        if (text === 'Carregando dados...' ||
+            text === 'Carregando...' ||
+            text.match(/^Carregando\s+/i)) {
+            element.style.display = 'none';
+            Logger.info('✅ Texto "Carregando" removido:', text);
+        }
+    });
+
+    Logger.success('🧹 V10.5: Limpeza de textos "Carregando" concluída');
+}
+
+/**
+ * 👁️ V10.5: OBSERVADOR PARA REMOVER TEXTOS "CARREGANDO" DINAMICAMENTE
+ * Monitora o DOM e remove automaticamente qualquer texto "Carregando" que apareça
+ */
+let loadingTextObserver = null;
+
+function startLoadingTextObserver() {
+    // Não criar múltiplos observers
+    if (loadingTextObserver) return;
+
+    Logger.info('👁️ V10.5: Iniciando observador de textos "Carregando"...');
+
+    loadingTextObserver = new MutationObserver((mutations) => {
+        let foundLoadingText = false;
+
+        mutations.forEach((mutation) => {
+            mutation.addedNodes.forEach((node) => {
+                if (node.nodeType === Node.ELEMENT_NODE) {
+                    const text = node.textContent || '';
+                    if (text.toLowerCase().includes('carregando')) {
+                        foundLoadingText = true;
+                    }
+                }
+            });
+        });
+
+        if (foundLoadingText) {
+            Logger.info('👁️ Texto "Carregando" detectado dinamicamente, removendo...');
+            removeAllLoadingTexts();
+        }
+    });
+
+    // Observar apenas o container principal
+    const container = document.querySelector('.container');
+    if (container) {
+        loadingTextObserver.observe(container, {
+            childList: true,
+            subtree: true,
+            characterData: false
+        });
+        Logger.success('👁️ V10.5: Observador iniciado com sucesso');
+    }
+}
+
+/**
+ * 📄 V10.5: NOTIFICAÇÃO FLUTUANTE PARA PDF
+ * Sistema de notificação aprimorado com tipos (progress, success, error)
+ */
+function showPDFNotification(message, type = 'progress') {
+    const notification = document.getElementById('pdf-notification');
+    const textElement = document.getElementById('pdf-notification-text');
+    const spinner = notification.querySelector('.pdf-spinner');
+
+    if (!notification || !textElement) return;
+
+    // Atualizar texto
+    textElement.textContent = message;
+
+    // Controlar spinner
+    if (spinner) {
+        spinner.style.display = type === 'progress' ? 'block' : 'none';
+    }
+
+    // Remover classes anteriores
+    notification.classList.remove('success', 'error', 'progress');
+
+    // Adicionar classe do tipo
+    notification.classList.add(type);
+
+    // Mostrar notificação
+    notification.style.display = 'block';
+    setTimeout(() => {
+        notification.classList.add('show');
+    }, 10);
+
+    Logger.info(`📄 Notificação PDF [${type}]: ${message}`);
+}
+
+function hidePDFNotification() {
+    const notification = document.getElementById('pdf-notification');
+    if (!notification) return;
+
+    notification.classList.remove('show');
+    setTimeout(() => {
+        notification.style.display = 'none';
+    }, 300);
 }
 
 // ✅ INICIALIZAR APLICAÇÃO QUANDO O DOM ESTIVER PRONTO
