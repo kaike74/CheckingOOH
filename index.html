@@ -52,10 +52,10 @@
       </div>
     </div>
 
-    <!-- LOADING -->
-    <div id="loading" class="loading">
+    <!-- LOADING SECUNDÁRIO - REMOVIDO V10.5: Já existe tela de carregamento dedicada -->
+    <div id="loading" class="loading" style="display: none;">
       <div class="loading-spinner"></div>
-      <p>Carregando dados...</p>
+      <p>Processando...</p>
     </div>
 
     <!-- ERROR -->
@@ -157,6 +157,14 @@
     <!-- RODAPÉ -->
     <div class="footer">
       <p class="footer-text">Sistema de Checking OOH • E-MÍDIAS</p>
+    </div>
+  </div>
+
+  <!-- ✅ V10.5: NOTIFICAÇÃO FLUTUANTE PARA PDF -->
+  <div id="pdf-notification" class="pdf-notification" style="display: none;">
+    <div class="notification-content">
+      <div class="pdf-spinner"></div>
+      <span id="pdf-notification-text">Gerando PDF...</span>
     </div>
   </div>
 
