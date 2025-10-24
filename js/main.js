@@ -226,7 +226,7 @@ async function createPontoElement(ponto, readOnly = false) {
     // Header do ponto
     const headerDiv = document.createElement('div');
     headerDiv.className = 'ponto-header';
-    
+
     // ⚠️ IMPORTANTE: Usar "endereco" em vez de "ponto"
     const infoDiv = document.createElement('div');
     infoDiv.className = 'ponto-info';
@@ -234,11 +234,21 @@ async function createPontoElement(ponto, readOnly = false) {
         <h3>📍 ${ponto.endereco}</h3>
         <p style="font-size: 14px; color: #64748B;">Exibidora: ${ponto.exibidora}</p>
     `;
-    
+
+    // ✅ CORREÇÃO: Botão "Ver Campanha Completa" no cabeçalho (modo cliente)
+    if (readOnly && appData.databaseId) {
+        const campanhaBtn = document.createElement('button');
+        campanhaBtn.className = 'btn btn-primary btn-small';
+        campanhaBtn.style.marginTop = '12px';
+        campanhaBtn.innerHTML = '📋 Ver Campanha Completa';
+        campanhaBtn.onclick = () => window.location.href = `?campanha=${appData.databaseId}`;
+        infoDiv.appendChild(campanhaBtn);
+    }
+
     // Ações do ponto (apenas para exibidora)
     const actionsDiv = document.createElement('div');
     actionsDiv.className = 'ponto-actions';
-    
+
     if (!readOnly) {
         actionsDiv.innerHTML = `
             <button class="btn btn-small btn-expand" onclick="togglePontoContent('${ponto.id}')" title="Expandir/Recolher">
@@ -246,7 +256,7 @@ async function createPontoElement(ponto, readOnly = false) {
             </button>
         `;
     }
-    
+
     headerDiv.appendChild(infoDiv);
     headerDiv.appendChild(actionsDiv);
     
@@ -302,18 +312,9 @@ async function createSecaoElement(ponto, tipo, readOnly = false) {
             </button>
         `;
     } else {
-        // ✅ MELHORIA: Modo Cliente - Botões de ação
-        const campanhaBtn = appData.databaseId ?
-            `<button class="btn btn-primary btn-small" onclick="window.location.href='?campanha=${appData.databaseId}'">
-                📋 Ver Campanha Completa
-            </button>` : '';
-
-        actionsDiv.innerHTML = `
-            <button class="btn btn-success btn-small" onclick="downloadAllFiles('${ponto.id}', '${tipo}')">
-                📥 Baixar Todos
-            </button>
-            ${campanhaBtn}
-        `;
+        // ✅ CORREÇÃO: Modo Cliente - Remover botão "Baixar Todos" (limitações do browser)
+        // Download individual está disponível em cada foto (ícone ⬇)
+        actionsDiv.innerHTML = '';
     }
 
     secaoDiv.appendChild(actionsDiv);
@@ -358,16 +359,16 @@ async function loadMediaPreview(ponto, tipo, container, readOnly = false) {
         // ✅ CORREÇÃO: Usar ponto.exibidora em vez de appData.exibidora (importante para modo campanha)
         const exibidora = ponto.exibidora || appData.exibidora;
         const result = await DriveAPI.listDriveFiles(exibidora, ponto.id, tipo, appData.databaseId);
-        
+
         if (result.success && result.files.length > 0) {
-            // Atualizar preview
-            updateMediaPreview(ponto.id, tipo, result.files, readOnly);
+            // ✅ CORREÇÃO: Passar container como parâmetro
+            updateMediaPreview(ponto.id, tipo, result.files, readOnly, container);
         } else {
             // Sem arquivos
             container.innerHTML = '<p style="text-align: center; color: #64748B; font-size: 12px;">Nenhum arquivo</p>';
             updateMediaCount(ponto.id, tipo, 0);
         }
-        
+
     } catch (error) {
         Logger.warning('Erro ao carregar preview de mídia', error);
         container.innerHTML = '<p style="text-align: center; color: #EF4444; font-size: 12px;">Erro ao carregar</p>';
@@ -378,8 +379,9 @@ async function loadMediaPreview(ponto, tipo, container, readOnly = false) {
  * 🔄 ATUALIZAR PREVIEW DE MÍDIA
  * Atualiza o preview com novos arquivos
  */
-function updateMediaPreview(pontoId, tipo, files, readOnly = false) {
-    const container = document.getElementById(`preview-${pontoId}-${tipo}`);
+function updateMediaPreview(pontoId, tipo, files, readOnly = false, containerParam = null) {
+    // ✅ CORREÇÃO: Aceitar container como parâmetro ou buscar por ID
+    const container = containerParam || document.getElementById(`preview-${pontoId}-${tipo}`);
     if (!container) {
         console.error(`❌ Container preview-${pontoId}-${tipo} não encontrado!`);
         return;

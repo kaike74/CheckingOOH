@@ -213,15 +213,15 @@ function pemToBinary(pem) {
 }
 
 // =============================================================================
-// 🗑️ DELETAR ARQUIVO DO GOOGLE DRIVE
+// 🗑️ SOFT DELETE: RENOMEAR ARQUIVO (IMPLEMENTAÇÃO SIMPLIFICADA)
 // =============================================================================
 async function deleteFileFromGoogleDrive(fileId, fileName, accessToken) {
     try {
-        console.log('🗑️ Iniciando exclusão do arquivo:', { fileId, fileName });
+        console.log('🗑️ Iniciando soft delete do arquivo:', { fileId, fileName });
 
         // Primeiro, verificar se o arquivo existe e obter informações
         const fileInfo = await getFileInfo(fileId, accessToken);
-        
+
         if (!fileInfo) {
             return {
                 success: false,
@@ -236,36 +236,34 @@ async function deleteFileFromGoogleDrive(fileId, fileName, accessToken) {
             mimeType: fileInfo.mimeType
         });
 
-        // ✅ CORREÇÃO: Executar exclusão com suporte a Shared Drives
-        const deleteResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?supportsAllDrives=true`, {
-            method: 'DELETE',
+        // ✅ SOFT DELETE: Renomear arquivo com sufixo _EXCLUIDO_timestamp
+        const timestamp = Date.now();
+        const newName = `${fileInfo.name}_EXCLUIDO_${timestamp}`;
+
+        console.log('🔄 Renomeando arquivo para soft delete:', newName);
+
+        const renameResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?supportsAllDrives=true`, {
+            method: 'PATCH',
             headers: {
-                'Authorization': `Bearer ${accessToken}`
-            }
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                name: newName
+            })
         });
 
-        if (!deleteResponse.ok) {
-            // ✅ CORREÇÃO: Tratar 404 como sucesso (arquivo já foi deletado)
-            if (deleteResponse.status === 404) {
-                console.log('⚠️ Arquivo já foi deletado anteriormente:', fileId);
-                return {
-                    success: true,
-                    fileId: fileId,
-                    fileName: fileInfo?.name || fileName,
-                    deletedAt: new Date().toISOString(),
-                    message: 'Arquivo já estava deletado',
-                    wasAlreadyDeleted: true
-                };
-            } else if (deleteResponse.status === 403) {
-                throw new Error('Sem permissão para deletar este arquivo');
+        if (!renameResponse.ok) {
+            if (renameResponse.status === 403) {
+                throw new Error('Sem permissão para renomear este arquivo');
             } else {
-                const errorText = await deleteResponse.text();
-                console.error(`❌ Erro HTTP ${deleteResponse.status}:`, errorText);
-                throw new Error(`Erro na exclusão: ${deleteResponse.status} - ${errorText}`);
+                const errorText = await renameResponse.text();
+                console.error(`❌ Erro HTTP ${renameResponse.status}:`, errorText);
+                throw new Error(`Erro no soft delete: ${renameResponse.status} - ${errorText}`);
             }
         }
 
-        console.log('✅ Arquivo deletado com sucesso:', fileId);
+        console.log('✅ Arquivo renomeado com sucesso (soft delete):', newName);
 
         // Log da operação (para auditoria)
         await logDeletionOperation(fileInfo, accessToken);
@@ -274,12 +272,14 @@ async function deleteFileFromGoogleDrive(fileId, fileName, accessToken) {
             success: true,
             fileId: fileId,
             fileName: fileInfo.name,
+            newFileName: newName,
             deletedAt: new Date().toISOString(),
-            message: 'Arquivo deletado com sucesso'
+            message: 'Arquivo marcado como excluído (soft delete)',
+            softDelete: true
         };
 
     } catch (error) {
-        console.error('❌ Erro ao deletar arquivo do Google Drive:', error);
+        console.error('❌ Erro ao executar soft delete:', error);
 
         return {
             success: false,

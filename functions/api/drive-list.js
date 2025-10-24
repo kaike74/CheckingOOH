@@ -297,10 +297,16 @@ async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, ac
         // ✅ CORREÇÃO CRÍTICA: Filtro inteligente que aceita:
         // 1. Arquivos do sistema com pontoId no nome (tipo_pontoId_timestamp.ext)
         // 2. Arquivos manuais que contenham o pontoId em qualquer parte do nome
-        // Isso resolve o bug de mostrar mesmos arquivos para todos os pontos
+        // 3. ✅ NOVO: Filtrar arquivos excluídos (soft delete com sufixo _EXCLUIDO_)
         const filteredFiles = allFiles.filter(file => {
             const fileName = file.name.toLowerCase();
             const pontoIdLower = pontoId.toLowerCase();
+
+            // ✅ SOFT DELETE: Ignorar arquivos com _EXCLUIDO_ no nome
+            if (fileName.includes('_excluido_')) {
+                console.log(`🗑️ Arquivo excluído filtrado: ${file.name}`);
+                return false;
+            }
 
             // Aceitar se o nome contém o pontoId
             // Exemplos que passam:
