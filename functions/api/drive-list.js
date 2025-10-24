@@ -317,13 +317,15 @@ async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, ac
             const isImage = file.mimeType && file.mimeType.startsWith('image/');
             const isVideo = file.mimeType && file.mimeType.startsWith('video/');
 
-            // ✅ Adicionar URLs alternativas para fallback
+            // ✅ PRIORIDADE 1: URLs alternativas com THUMBNAIL PRIMEIRO
             const alternativeUrls = [];
             if (isImage) {
+                // ✅ ORDEM: Thumbnail (rápido) → uc (direto) → download
+                if (file.thumbnailLink) alternativeUrls.push(file.thumbnailLink.replace('=s220', '=s1000'));
+                alternativeUrls.push(`https://drive.google.com/thumbnail?id=${file.id}&sz=w1000`);
+                alternativeUrls.push(`https://drive.google.com/thumbnail?id=${file.id}&sz=w800`);
                 alternativeUrls.push(`https://drive.google.com/uc?id=${file.id}`);
                 alternativeUrls.push(`https://drive.google.com/uc?export=download&id=${file.id}`);
-                alternativeUrls.push(`https://drive.google.com/thumbnail?id=${file.id}&sz=w1000`);
-                if (file.thumbnailLink) alternativeUrls.push(file.thumbnailLink);
             } else if (isVideo) {
                 // ✅ CORREÇÃO: Adicionar URLs alternativas para vídeos também
                 alternativeUrls.push(`https://drive.google.com/file/d/${file.id}/preview`);
@@ -560,12 +562,14 @@ async function findFolderInAllDrives(folderName, accessToken) {
 // 🔗 OBTER URL DE VISUALIZAÇÃO DO ARQUIVO
 // =============================================================================
 function getFileViewUrl(file) {
-    // ✅ CORREÇÃO CRÍTICA: URLs otimizadas para visualização direta
+    // ✅ PRIORIDADE 1: Usar thumbnail primeiro (mais rápido e confiável)
 
     if (file.mimeType && file.mimeType.startsWith('image/')) {
-        // Para imagens: formato mais direto sem export=view
-        const url = `https://drive.google.com/uc?id=${file.id}`;
-        console.log(`🖼️ URL gerada para imagem ${file.name}: ${url}`);
+        // ✅ CORREÇÃO: Thumbnail como primeira opção (sz=w800 para boa qualidade)
+        const url = file.thumbnailLink
+            ? file.thumbnailLink.replace('=s220', '=s800')
+            : `https://drive.google.com/thumbnail?id=${file.id}&sz=w800`;
+        console.log(`🖼️ URL gerada para imagem ${file.name} (thumbnail): ${url}`);
         return url;
     }
 

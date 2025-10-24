@@ -36,6 +36,45 @@ async function fetchPontosFromNotion(pontoId) {
 }
 
 /**
+ * 📋 BUSCAR TODOS OS PONTOS DE UMA CAMPANHA (NOVO)
+ * Busca todos os pontos de uma campanha específica (todas exibidoras)
+ */
+async function fetchPontosByCampanha(campanhaId) {
+    try {
+        Logger.info('Buscando pontos da campanha', { campanhaId });
+
+        // 🧪 MODO DEMO
+        if (CONFIG.DEMO.ENABLED) {
+            const allSampleData = CONFIG.DEMO.SAMPLE_DATA;
+
+            return {
+                mode: 'campanha',
+                pontos: allSampleData, // Retornar todos os pontos de exemplo
+                databaseId: campanhaId,
+                totalCount: allSampleData.length
+            };
+        }
+
+        // 🔗 CHAMADA REAL PARA A API
+        const response = await fetch(`${getApiBaseUrl()}/api/notion-data?campanha=${campanhaId}`);
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: 'Erro desconhecido' }));
+            throw new Error(errorData.error || `Erro HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        Logger.success('Pontos da campanha carregados', data);
+
+        return data;
+
+    } catch (error) {
+        Logger.error('Erro ao buscar pontos da campanha', error);
+        throw error;
+    }
+}
+
+/**
  * 🔍 BUSCAR PONTO PARA CLIENTE
  * Busca apenas um ponto específico para visualização do cliente
  */
@@ -239,6 +278,7 @@ function cleanNotionId(id) {
 window.NotionAPI = {
     fetchPontosFromNotion,
     fetchPontoForCliente,
+    fetchPontosByCampanha, // ✅ NOVO: Buscar pontos por campanha
     updatePontoStatus,
     extractPontoData,
     validateNotionId,
