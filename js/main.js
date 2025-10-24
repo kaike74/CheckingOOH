@@ -200,26 +200,27 @@ async function createPontoElement(ponto, readOnly = false) {
 
     // ✅ LIMPEZA: Modo cliente removido, não precisa mais deste botão
 
-    // Ações do ponto (apenas para exibidora)
+    // Ações do ponto (com toggle para todos os modos)
     const actionsDiv = document.createElement('div');
     actionsDiv.className = 'ponto-actions';
 
-    if (!readOnly) {
-        actionsDiv.innerHTML = `
-            <button class="btn btn-small btn-expand" onclick="togglePontoContent('${ponto.id}')" title="Expandir/Recolher">
-                <span id="toggle-icon-${ponto.id}">▼</span>
-            </button>
-        `;
-    }
+    // ✅ LAZY LOADING: Botão toggle em todos os modos
+    const toggleFunction = readOnly ? 'togglePontoLazy' : 'togglePontoContent';
+    actionsDiv.innerHTML = `
+        <button class="btn btn-small btn-expand" onclick="${toggleFunction}('${ponto.id}')" title="Expandir/Recolher">
+            <span id="toggle-icon-${ponto.id}">▼</span>
+        </button>
+    `;
 
     headerDiv.appendChild(infoDiv);
     headerDiv.appendChild(actionsDiv);
-    
+
     // Conteúdo do ponto (seções Entrada e Saída)
     const contentDiv = document.createElement('div');
     contentDiv.className = 'ponto-content';
     contentDiv.id = `content-${ponto.id}`;
-    contentDiv.style.display = readOnly ? 'grid' : 'none'; // Cliente sempre vê, exibidora precisa expandir
+    contentDiv.style.display = 'none'; // ✅ LAZY LOADING: Sempre inicia colapsado
+    contentDiv.dataset.loaded = 'false'; // ✅ Marcar como não carregado
     
     // Seção Entrada
     const entradaSection = await createSecaoElement(ponto, 'entrada', readOnly);
@@ -279,17 +280,12 @@ async function createSecaoElement(ponto, tipo, readOnly = false) {
     previewDiv.className = readOnly ? 'media-preview media-preview-large' : 'media-preview';
     previewDiv.id = `preview-${ponto.id}-${tipo}`;
 
-    // ✅ OTIMIZAÇÃO: Lazy loading - só carregar quando visível ou em modo cliente
-    if (readOnly) {
-        // Modo cliente: carregar imediatamente
-        await loadMediaPreview(ponto, tipo, previewDiv, readOnly);
-    } else {
-        // Modo exibidora: mostrar placeholder, carregar sob demanda
-        previewDiv.innerHTML = '<p style="text-align: center; color: #94A3B8; font-size: 11px; padding: 10px;">↓ Expanda para carregar ↓</p>';
-        previewDiv.dataset.pontoId = ponto.id;
-        previewDiv.dataset.tipo = tipo;
-        previewDiv.dataset.loaded = 'false';
-    }
+    // ✅ LAZY LOADING: Sempre usar placeholder, carregar sob demanda
+    previewDiv.innerHTML = '<p style="text-align: center; color: #94A3B8; font-size: 11px; padding: 10px;">↓ Expanda para carregar ↓</p>';
+    previewDiv.dataset.pontoId = ponto.id;
+    previewDiv.dataset.tipo = tipo;
+    previewDiv.dataset.loaded = 'false';
+    previewDiv.dataset.exibidora = ponto.exibidora; // ✅ Armazenar exibidora para lazy load
 
     secaoDiv.appendChild(previewDiv);
     
@@ -509,6 +505,49 @@ async function togglePontoContent(pontoId) {
         }
 
         Logger.debug('Conteúdo do ponto alternado', { pontoId, visible: !isVisible });
+    }
+}
+
+/**
+ * 🔄 ALTERNAR PONTO COM LAZY LOADING (MODO CAMPANHA)
+ * Expande/recolhe e carrega fotos na primeira expansão
+ */
+async function togglePontoLazy(pontoId) {
+    const content = document.getElementById(`content-${pontoId}`);
+    const icon = document.getElementById(`toggle-icon-${pontoId}`);
+
+    if (content && icon) {
+        const isVisible = content.style.display !== 'none';
+
+        if (!isVisible) {
+            // ✅ LAZY LOADING: Carregar fotos na primeira expansão
+            if (content.dataset.loaded === 'false') {
+                Logger.info('Carregando fotos do ponto pela primeira vez', { pontoId });
+
+                // Buscar informações do ponto
+                const ponto = appData.pontos.find(p => p.id === pontoId);
+                if (ponto) {
+                    // Carregar entrada e saída em PARALELO
+                    await Promise.all([
+                        loadPontoMediaIfNeeded(ponto, 'entrada'),
+                        loadPontoMediaIfNeeded(ponto, 'saida')
+                    ]);
+                }
+
+                content.dataset.loaded = 'true';
+                Logger.success('Fotos carregadas', { pontoId });
+            }
+
+            // Expandir
+            content.style.display = 'grid';
+            icon.textContent = '▲';
+        } else {
+            // Recolher
+            content.style.display = 'none';
+            icon.textContent = '▼';
+        }
+
+        Logger.debug('Ponto alternado', { pontoId, visible: !isVisible });
     }
 }
 
@@ -1344,6 +1383,7 @@ function chooseUpload(exibidora, pontoId, tipo, databaseId) {
 
 // 🚀 EXPORTAR FUNÇÕES GLOBAIS
 window.togglePontoContent = togglePontoContent;
+window.togglePontoLazy = togglePontoLazy;
 window.toggleEditMode = toggleEditMode;
 window.openMediaChoiceModal = openMediaChoiceModal;
 window.closeMediaChoiceModal = closeMediaChoiceModal;
