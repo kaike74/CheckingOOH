@@ -198,15 +198,7 @@ async function createPontoElement(ponto, readOnly = false) {
         <p style="font-size: 14px; color: #64748B;">Exibidora: ${ponto.exibidora}</p>
     `;
 
-    // ✅ CORREÇÃO: Botão "Ver Campanha Completa" no cabeçalho (modo cliente)
-    if (readOnly && appData.databaseId) {
-        const campanhaBtn = document.createElement('button');
-        campanhaBtn.className = 'btn btn-primary btn-small';
-        campanhaBtn.style.marginTop = '12px';
-        campanhaBtn.innerHTML = '📋 Ver Campanha Completa';
-        campanhaBtn.onclick = () => window.location.href = `?campanha=${appData.databaseId}`;
-        infoDiv.appendChild(campanhaBtn);
-    }
+    // ✅ LIMPEZA: Modo cliente removido, não precisa mais deste botão
 
     // Ações do ponto (apenas para exibidora)
     const actionsDiv = document.createElement('div');
@@ -267,7 +259,7 @@ async function createSecaoElement(ponto, tipo, readOnly = false) {
     if (!readOnly) {
         // Modo Exibidora
         actionsDiv.innerHTML = `
-            <button class="btn btn-primary btn-small" onclick="openMediaChoiceModal('${appData.exibidora}', '${ponto.id}', '${tipo}', '${appData.databaseId}')">
+            <button class="btn btn-primary btn-small" onclick="openUploadModal('${ponto.exibidora}', '${ponto.id}', '${tipo}', '${appData.databaseId}')">
                 📎 Adicionar Mídia
             </button>
             <button class="btn btn-secondary btn-small" onclick="toggleEditMode('${ponto.id}', '${tipo}')" id="edit-btn-${ponto.id}-${tipo}">
@@ -275,8 +267,7 @@ async function createSecaoElement(ponto, tipo, readOnly = false) {
             </button>
         `;
     } else {
-        // ✅ CORREÇÃO: Modo Cliente - Remover botão "Baixar Todos" (limitações do browser)
-        // Download individual está disponível em cada foto (ícone ⬇)
+        // Modo campanha/read-only: sem botões de ação
         actionsDiv.innerHTML = '';
     }
 
