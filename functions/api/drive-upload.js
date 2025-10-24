@@ -148,7 +148,8 @@ export async function onRequestPost(context) {
         // =============================================================================
         console.log('🔍 ETAPA 5: Iniciando upload...');
 
-        const folderPath = await ensureFolderPathInSharedDrive(exibidora, tipo, databaseId, accessToken);
+        // ✅ CORREÇÃO: Passar pontoId para criar estrutura correta
+        const folderPath = await ensureFolderPathInSharedDrive(exibidora, tipo, databaseId, pontoId, accessToken);
         
         if (!folderPath) {
             console.log('❌ ETAPA 5: Falha ao criar estrutura de pastas');
@@ -427,17 +428,18 @@ async function makeFileViewable(fileId, accessToken) {
 // =============================================================================
 // 📁 GARANTIR ESTRUTURA DE PASTAS NO SHARED DRIVE
 // =============================================================================
-async function ensureFolderPathInSharedDrive(exibidora, tipo, databaseId, accessToken) {
+async function ensureFolderPathInSharedDrive(exibidora, tipo, databaseId, pontoId, accessToken) {
     try {
-        console.log('📁 Criando estrutura de pastas...', { exibidora, tipo, databaseId });
+        console.log('📁 Criando estrutura de pastas...', { exibidora, tipo, databaseId, pontoId });
 
         console.log('🔍 Buscando pasta CheckingOOH...');
         const checkingFolderDirect = await findFolderInAllDrives('CheckingOOH', accessToken);
-        
+
         if (checkingFolderDirect) {
             console.log('✅ Pasta CheckingOOH encontrada:', checkingFolderDirect.id);
-            
-            const result = await buildFolderStructureForUpload(checkingFolderDirect.id, exibidora, tipo, databaseId, accessToken, 'CheckingOOH');
+
+            // ✅ CORREÇÃO: Passar pontoId para criar estrutura correta
+            const result = await buildFolderStructureForUpload(checkingFolderDirect.id, exibidora, tipo, databaseId, pontoId, accessToken, 'CheckingOOH');
             if (result) {
                 console.log('🎉 Estrutura criada com sucesso');
                 return result;
@@ -454,38 +456,50 @@ async function ensureFolderPathInSharedDrive(exibidora, tipo, databaseId, access
 
 // =============================================================================
 // 🏗️ CONSTRUIR ESTRUTURA DE PASTAS PARA UPLOAD
+// ✅ NOVA ESTRUTURA: CheckingOOH/Exibidora/Entrada-Saida/Campanha/Ponto
 // =============================================================================
-async function buildFolderStructureForUpload(checkingFolderId, exibidora, tipo, databaseId, accessToken, basePath) {
+async function buildFolderStructureForUpload(checkingFolderId, exibidora, tipo, databaseId, pontoId, accessToken, basePath) {
     try {
-        console.log(`🏗️ Construindo estrutura a partir de ${basePath}...`);
+        console.log(`🏗️ NOVA ESTRUTURA: ${basePath}/Exibidora/Tipo/Campanha/Ponto`);
 
-        console.log(`📁 Buscando/criando pasta ${exibidora}...`);
+        // PASSO 1: Exibidora
+        console.log(`📁 [1/4] Buscando/criando pasta Exibidora: ${exibidora}...`);
         const exibidoraFolder = await findOrCreateFolder(exibidora, checkingFolderId, accessToken);
         if (!exibidoraFolder) {
             throw new Error(`Falha ao criar pasta da exibidora: ${exibidora}`);
         }
-        console.log('✅ Pasta da exibidora:', exibidoraFolder.id);
+        console.log('✅ Pasta Exibidora:', exibidoraFolder.id);
 
-        console.log(`📁 Buscando/criando pasta ${databaseId}...`);
-        const campanhaFolder = await findOrCreateFolder(databaseId, exibidoraFolder.id, accessToken);
-        if (!campanhaFolder) {
-            throw new Error(`Falha ao criar pasta da campanha: ${databaseId}`);
-        }
-        console.log('✅ Pasta da campanha:', campanhaFolder.id);
-
+        // PASSO 2: Tipo (Entrada ou Saída)
         const tipoFolderName = tipo === 'entrada' ? 'Entrada' : 'Saida';
-        console.log(`📁 Buscando/criando pasta ${tipoFolderName}...`);
-        const tipoFolder = await findOrCreateFolder(tipoFolderName, campanhaFolder.id, accessToken);
+        console.log(`📁 [2/4] Buscando/criando pasta Tipo: ${tipoFolderName}...`);
+        const tipoFolder = await findOrCreateFolder(tipoFolderName, exibidoraFolder.id, accessToken);
         if (!tipoFolder) {
             throw new Error(`Falha ao criar pasta do tipo: ${tipoFolderName}`);
         }
-        console.log('✅ Pasta do tipo:', tipoFolder.id);
-        
-        const fullPath = `${basePath}/${exibidora}/${databaseId}/${tipoFolderName}`;
-        console.log('📁 Caminho completo:', fullPath);
+        console.log('✅ Pasta Tipo:', tipoFolder.id);
+
+        // PASSO 3: Campanha (databaseId)
+        console.log(`📁 [3/4] Buscando/criando pasta Campanha: ${databaseId}...`);
+        const campanhaFolder = await findOrCreateFolder(databaseId, tipoFolder.id, accessToken);
+        if (!campanhaFolder) {
+            throw new Error(`Falha ao criar pasta da campanha: ${databaseId}`);
+        }
+        console.log('✅ Pasta Campanha:', campanhaFolder.id);
+
+        // PASSO 4: Ponto (pontoId)
+        console.log(`📁 [4/4] Buscando/criando pasta Ponto: ${pontoId}...`);
+        const pontoFolder = await findOrCreateFolder(pontoId, campanhaFolder.id, accessToken);
+        if (!pontoFolder) {
+            throw new Error(`Falha ao criar pasta do ponto: ${pontoId}`);
+        }
+        console.log('✅ Pasta Ponto:', pontoFolder.id);
+
+        const fullPath = `${basePath}/${exibidora}/${tipoFolderName}/${databaseId}/${pontoId}`;
+        console.log('🎉 Caminho completo:', fullPath);
 
         return {
-            id: tipoFolder.id,
+            id: pontoFolder.id,
             path: fullPath
         };
 

@@ -302,7 +302,8 @@ body {
 
 .secao-actions {
     display: flex;
-    flex-direction: column;
+    flex-direction: row; /* ✅ MUDANÇA: Botões lado a lado */
+    flex-wrap: wrap; /* ✅ NOVO: Quebra linha se necessário */
     gap: 12px;
     margin-bottom: 16px;
 }
