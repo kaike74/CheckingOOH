@@ -245,13 +245,22 @@ async function deleteFileFromGoogleDrive(fileId, fileName, accessToken) {
         });
 
         if (!deleteResponse.ok) {
-            // Verificar se é erro de permissão
-            if (deleteResponse.status === 403) {
+            // ✅ CORREÇÃO: Tratar 404 como sucesso (arquivo já foi deletado)
+            if (deleteResponse.status === 404) {
+                console.log('⚠️ Arquivo já foi deletado anteriormente:', fileId);
+                return {
+                    success: true,
+                    fileId: fileId,
+                    fileName: fileInfo?.name || fileName,
+                    deletedAt: new Date().toISOString(),
+                    message: 'Arquivo já estava deletado',
+                    wasAlreadyDeleted: true
+                };
+            } else if (deleteResponse.status === 403) {
                 throw new Error('Sem permissão para deletar este arquivo');
-            } else if (deleteResponse.status === 404) {
-                throw new Error('Arquivo não encontrado ou já foi deletado');
             } else {
                 const errorText = await deleteResponse.text();
+                console.error(`❌ Erro HTTP ${deleteResponse.status}:`, errorText);
                 throw new Error(`Erro na exclusão: ${deleteResponse.status} - ${errorText}`);
             }
         }
@@ -271,11 +280,12 @@ async function deleteFileFromGoogleDrive(fileId, fileName, accessToken) {
 
     } catch (error) {
         console.error('❌ Erro ao deletar arquivo do Google Drive:', error);
-        
+
         return {
             success: false,
             fileId: fileId,
             error: error.message,
+            details: error.stack,
             deletedAt: new Date().toISOString()
         };
     }

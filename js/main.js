@@ -8,7 +8,9 @@ const appData = {
     pontos: [],
     pontoAtual: null,
     databaseId: null, // ✅ NOVO: ID da campanha
-    editMode: {} // { 'pontoId-tipo': boolean }
+    editMode: {}, // { 'pontoId-tipo': boolean }
+    carouselOpen: false, // ✅ NOVO: Flag para prevenir múltiplas aberturas
+    lastCarouselOpen: 0 // ✅ NOVO: Timestamp da última abertura
 };
 
 /**
@@ -29,6 +31,7 @@ async function initApp() {
         const urlParams = new URLSearchParams(window.location.search);
         const pontoId = urlParams.get('id');
         const clienteId = urlParams.get('idcliente');
+        const campanhaId = urlParams.get('campanha'); // ✅ NOVO: Modo campanha
         const exibidora = urlParams.get('exibidora');
         const databaseId = urlParams.get('databaseId');
 
@@ -51,6 +54,10 @@ async function initApp() {
             // Modo Cliente
             appData.mode = 'cliente';
             await loadClienteData(clienteId);
+        } else if (campanhaId) {
+            // ✅ NOVO: Modo Campanha
+            appData.mode = 'campanha';
+            await loadCampanhaData(campanhaId);
         } else {
             // Sem ID - Mostrar instruções
             hideLoading();
@@ -108,6 +115,39 @@ async function loadExibidoraData(pontoId) {
         
     } catch (error) {
         Logger.error('Erro ao carregar dados da exibidora', error);
+        throw error;
+    }
+}
+
+/**
+ * 📋 CARREGAR DADOS DA CAMPANHA (NOVO)
+ * Carrega TODOS os pontos de uma campanha (todas exibidoras)
+ */
+async function loadCampanhaData(campanhaId) {
+    try {
+        Logger.info('Carregando dados da campanha', { campanhaId });
+
+        // Buscar dados no Notion
+        const notionData = await NotionAPI.fetchPontosByCampanha(campanhaId);
+
+        appData.exibidora = 'TODAS'; // Modo campanha mostra todas exibidoras
+        appData.pontos = notionData.pontos;
+        appData.databaseId = campanhaId;
+        appData.pontoAtual = null; // Não há ponto atual específico
+
+        // Atualizar header
+        updatePageHeader(`📋 Campanha Completa`, `Visualização Geral • ${appData.pontos.length} ponto(s) de todas as exibidoras`);
+
+        // Renderizar pontos (modo read-only como cliente, mas layout expandido como exibidora)
+        await renderPontos(true); // true = read-only (sem edição)
+
+        Logger.success('Dados da campanha carregados', {
+            pontosCount: appData.pontos.length,
+            campanhaId: appData.databaseId
+        });
+
+    } catch (error) {
+        Logger.error('Erro ao carregar dados da campanha', error);
         throw error;
     }
 }
@@ -262,11 +302,17 @@ async function createSecaoElement(ponto, tipo, readOnly = false) {
             </button>
         `;
     } else {
-        // ✅ MELHORIA: Modo Cliente - Botão "Baixar Todos"
+        // ✅ MELHORIA: Modo Cliente - Botões de ação
+        const campanhaBtn = appData.databaseId ?
+            `<button class="btn btn-primary btn-small" onclick="window.location.href='?campanha=${appData.databaseId}'">
+                📋 Ver Campanha Completa
+            </button>` : '';
+
         actionsDiv.innerHTML = `
             <button class="btn btn-success btn-small" onclick="downloadAllFiles('${ponto.id}', '${tipo}')">
                 📥 Baixar Todos
             </button>
+            ${campanhaBtn}
         `;
     }
 
@@ -308,9 +354,10 @@ async function createSecaoElement(ponto, tipo, readOnly = false) {
 async function loadMediaPreview(ponto, tipo, container, readOnly = false) {
     try {
         Logger.debug('Carregando preview de mídia', { pontoId: ponto.id, tipo });
-        
-        // ✅ ALTERADO: Passar databaseId para listDriveFiles
-        const result = await DriveAPI.listDriveFiles(appData.exibidora, ponto.id, tipo, appData.databaseId);
+
+        // ✅ CORREÇÃO: Usar ponto.exibidora em vez de appData.exibidora (importante para modo campanha)
+        const exibidora = ponto.exibidora || appData.exibidora;
+        const result = await DriveAPI.listDriveFiles(exibidora, ponto.id, tipo, appData.databaseId);
         
         if (result.success && result.files.length > 0) {
             // Atualizar preview
@@ -333,21 +380,26 @@ async function loadMediaPreview(ponto, tipo, container, readOnly = false) {
  */
 function updateMediaPreview(pontoId, tipo, files, readOnly = false) {
     const container = document.getElementById(`preview-${pontoId}-${tipo}`);
-    if (!container) return;
-    
+    if (!container) {
+        console.error(`❌ Container preview-${pontoId}-${tipo} não encontrado!`);
+        return;
+    }
+
+    console.log(`📸 updateMediaPreview: Renderizando ${files.length} arquivos para ponto ${pontoId} (${tipo}) [modo: ${readOnly ? 'CLIENTE' : 'EXIBIDORA'}]`);
+
     container.innerHTML = '';
-    
+
     if (files.length === 0) {
         container.innerHTML = '<p style="text-align: center; color: #64748B; font-size: 12px;">Nenhum arquivo</p>';
         updateMediaCount(pontoId, tipo, 0);
         return;
     }
-    
-    files.forEach(file => {
+
+    files.forEach((file, index) => {
         const mediaItem = document.createElement('div');
         mediaItem.className = 'media-item';
-        // ✅ MELHORIA: Abrir carousel fullscreen em vez de modal grid
-        mediaItem.onclick = () => openMediaCarousel(pontoId, tipo, container.children.length - 1);
+        // ✅ CORREÇÃO: Usar index correto do array ao clicar
+        mediaItem.onclick = () => openMediaCarousel(pontoId, tipo, index);
         
         if (DriveAPI.isVideoFile(file.mimeType)) {
             // ✅ CORREÇÃO: Vídeo com thumbnail e ícone de play
@@ -402,6 +454,9 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false) {
             if (file.alternativeUrls && file.alternativeUrls.length > 0) {
                 img.dataset.alternativeUrls = JSON.stringify(file.alternativeUrls);
                 img.dataset.currentUrlIndex = '0';
+                console.log(`🔄 ${file.name}: ${file.alternativeUrls.length} URLs alternativas disponíveis`);
+            } else {
+                console.warn(`⚠️ ${file.name}: Sem URLs alternativas!`);
             }
 
             // ✅ NOVO: Handler de erro com fallback automático
@@ -412,11 +467,11 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false) {
 
             // ✅ NOVO: Log quando carrega com sucesso
             img.onload = function() {
-                console.log(`✅ Imagem carregada: ${this.dataset.fileName}`);
+                console.log(`✅ Imagem carregada com sucesso: ${this.dataset.fileName} [${this.naturalWidth}x${this.naturalHeight}]`);
             };
 
             img.src = file.url;
-            console.log(`🖼️ Tentando carregar imagem ${file.name} de: ${file.url}`);
+            console.log(`🖼️ [${readOnly ? 'CLIENTE' : 'EXIBIDORA'}] Carregando imagem ${file.name} de: ${file.url}`);
 
             // ✅ MELHORIA: Timestamp removido conforme solicitado
             mediaItem.appendChild(img);
@@ -427,7 +482,11 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false) {
             const deleteBtn = document.createElement('div');
             deleteBtn.className = 'delete-badge';
             deleteBtn.innerHTML = '−'; // Sinal de menos
-            deleteBtn.style.display = isEditMode(pontoId, tipo) ? 'flex' : 'none';
+            const currentEditMode = isEditMode(pontoId, tipo);
+            deleteBtn.style.display = currentEditMode ? 'flex' : 'none';
+            deleteBtn.dataset.pontoId = pontoId;
+            deleteBtn.dataset.tipo = tipo;
+            console.log(`🗑️ Badge criado para ${file.name} (${pontoId}-${tipo}): ${currentEditMode ? 'VISÍVEL' : 'OCULTO'}`);
             deleteBtn.onclick = (e) => {
                 e.stopPropagation(); // Não abrir carrossel ao clicar no -
                 deleteFile(file.id, file.name, pontoId, tipo);
@@ -543,13 +602,16 @@ function toggleEditMode(pontoId, tipo) {
         editBtn.className = appData.editMode[key] ? 'btn btn-success btn-small' : 'btn btn-secondary btn-small';
     }
     
-    // ✅ CORREÇÃO: Apenas mostrar/ocultar badges de delete SEM recarregar (remove delay)
+    // ✅ CORREÇÃO: Apenas mostrar/ocultar badges de delete do container específico
     const container = document.getElementById(`preview-${pontoId}-${tipo}`);
     if (container) {
         const deleteButtons = container.querySelectorAll('.delete-badge');
+        console.log(`🔧 Toggle modo edição: ${deleteButtons.length} badges encontrados para ${pontoId}-${tipo}`);
         deleteButtons.forEach(badge => {
             badge.style.display = appData.editMode[key] ? 'flex' : 'none';
         });
+    } else {
+        console.error(`❌ Container preview-${pontoId}-${tipo} não encontrado ao alternar modo edição!`);
     }
 
     Logger.debug('Modo edição alternado', { pontoId, tipo, editMode: appData.editMode[key] });
@@ -611,12 +673,27 @@ async function deleteFile(fileId, fileName, pontoId, tipo) {
  */
 async function openMediaCarousel(pontoId, tipo, startIndex = 0) {
     try {
+        // ✅ DEBOUNCE: Prevenir múltiplas aberturas
+        const now = Date.now();
+        if (appData.carouselOpen || (now - appData.lastCarouselOpen) < 500) {
+            console.log('⏳ Carrossel já está aberto ou foi aberto recentemente. Aguarde...');
+            return;
+        }
+
+        appData.carouselOpen = true;
+        appData.lastCarouselOpen = now;
+
         Logger.info('Abrindo carrossel de mídia', { pontoId, tipo, startIndex });
 
+        // ✅ CORREÇÃO: Buscar ponto para obter exibidora correta
+        const ponto = appData.pontos.find(p => p.id === pontoId);
+        const exibidora = ponto?.exibidora || appData.exibidora;
+
         // Buscar arquivos
-        const result = await DriveAPI.listDriveFiles(appData.exibidora, pontoId, tipo, appData.databaseId);
+        const result = await DriveAPI.listDriveFiles(exibidora, pontoId, tipo, appData.databaseId);
 
         if (!result.success || result.files.length === 0) {
+            appData.carouselOpen = false;
             alert('Nenhuma mídia encontrada');
             return;
         }
@@ -811,6 +888,9 @@ function closeMediaCarousel() {
     }
     window.carouselData = null;
     document.removeEventListener('keydown', handleCarouselKeyboard);
+
+    // ✅ DEBOUNCE: Resetar flag após fechar
+    appData.carouselOpen = false;
 }
 
 /**
@@ -830,9 +910,10 @@ async function openPhotoModal(pontoId, tipo) {
         const modalTitle = document.getElementById('modal-title');
         const tipoText = tipo === 'entrada' ? 'Entrada' : 'Saída';
         modalTitle.textContent = `📸 ${ponto.endereco} - ${tipoText}`;
-        
-        // ✅ ALTERADO: Passar databaseId para listDriveFiles
-        const result = await DriveAPI.listDriveFiles(appData.exibidora, pontoId, tipo, appData.databaseId);
+
+        // ✅ CORREÇÃO: Usar exibidora do ponto
+        const exibidora = ponto.exibidora || appData.exibidora;
+        const result = await DriveAPI.listDriveFiles(exibidora, pontoId, tipo, appData.databaseId);
         
         const container = document.getElementById('photos-grid');
         container.innerHTML = '';
@@ -966,12 +1047,20 @@ function showWelcomeScreen() {
                         ?id=SEU_PONTO_ID
                     </code>
                 </div>
-                
-                <div style="background: #F1F5F9; padding: 20px; border-radius: 12px;">
+
+                <div style="background: #F1F5F9; padding: 20px; border-radius: 12px; margin-bottom: 20px;">
                     <h3 style="color: #1E293B; margin-bottom: 10px;">👤 Modo Cliente</h3>
                     <p style="color: #64748B; font-size: 14px;">Acesse com o ID do cliente do Notion:</p>
                     <code style="background: white; padding: 8px 12px; border-radius: 6px; display: block; margin-top: 10px;">
                         ?idcliente=SEU_CLIENTE_ID
+                    </code>
+                </div>
+
+                <div style="background: linear-gradient(135deg, #F1F5F9 0%, #E0E7FF 100%); padding: 20px; border-radius: 12px; border: 2px solid #06055B;">
+                    <h3 style="color: #06055B; margin-bottom: 10px;">📋 Modo Campanha (Novo!)</h3>
+                    <p style="color: #64748B; font-size: 14px;">Visualize todos os pontos de uma campanha:</p>
+                    <code style="background: white; padding: 8px 12px; border-radius: 6px; display: block; margin-top: 10px;">
+                        ?campanha=DATABASE_ID
                     </code>
                 </div>
             </div>
@@ -1204,34 +1293,46 @@ function showImageErrorPlaceholder(imgElement) {
 
 /**
  * 📥 BAIXAR TODOS OS ARQUIVOS (MODO CLIENTE)
- * Abre todos os arquivos em novas abas para download
+ * ✅ CORREÇÃO: Download direto sem abrir abas (evita bloqueio de pop-ups)
  */
 async function downloadAllFiles(pontoId, tipo) {
     try {
         Logger.info('Baixando todos os arquivos', { pontoId, tipo });
 
+        // ✅ CORREÇÃO: Buscar ponto para obter exibidora correta
+        const ponto = appData.pontos.find(p => p.id === pontoId);
+        const exibidora = ponto?.exibidora || appData.exibidora;
+
         // Buscar arquivos
-        const result = await DriveAPI.listDriveFiles(appData.exibidora, pontoId, tipo, appData.databaseId);
+        const result = await DriveAPI.listDriveFiles(exibidora, pontoId, tipo, appData.databaseId);
 
         if (!result.success || result.files.length === 0) {
             alert('Nenhum arquivo para baixar');
             return;
         }
 
-        const confirmMsg = `Deseja baixar ${result.files.length} arquivo(s)?\n\nOs downloads serão iniciados em novas abas.`;
+        const confirmMsg = `Deseja baixar ${result.files.length} arquivo(s)?\n\nOs downloads serão iniciados automaticamente.`;
         if (!confirm(confirmMsg)) {
             return;
         }
 
-        // Abrir cada arquivo em uma nova aba
+        // ✅ CORREÇÃO: Usar tags <a> invisíveis para download direto
+        let downloadCount = 0;
         result.files.forEach((file, index) => {
-            const downloadUrl = `https://drive.google.com/uc?export=download&id=${file.id}`;
             setTimeout(() => {
-                window.open(downloadUrl, '_blank');
-            }, index * 300); // Delay de 300ms entre cada download
+                const a = document.createElement('a');
+                a.href = `https://drive.google.com/uc?export=download&id=${file.id}`;
+                a.download = file.name || `arquivo_${index + 1}`;
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                downloadCount++;
+                console.log(`📥 Download iniciado ${downloadCount}/${result.files.length}: ${file.name}`);
+            }, index * 500); // Delay de 500ms entre downloads
         });
 
-        showSuccessMessage(`📥 ${result.files.length} download(s) iniciado(s)!`);
+        showSuccessMessage(`📥 Iniciando download de ${result.files.length} arquivo(s)...`);
 
     } catch (error) {
         Logger.error('Erro ao baixar arquivos', error);
