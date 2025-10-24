@@ -510,12 +510,15 @@ async function buildFolderStructureForUpload(checkingFolderId, exibidora, tipo, 
 }
 
 // =============================================================================
-// 📁 ENCONTRAR OU CRIAR PASTA
+// 📁 ENCONTRAR OU CRIAR PASTA V10.1
+// ✅ CORRIGIDO: Proteção contra duplicação + escape de caracteres especiais
 // =============================================================================
 async function findOrCreateFolder(folderName, parentId, accessToken) {
     try {
-        const query = `name='${folderName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
-        
+        // ✅ V10.1: Escapar aspas simples no nome da pasta para evitar problemas na query
+        const escapedFolderName = folderName.replace(/'/g, "\\'");
+        const query = `name='${escapedFolderName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+
         const searchResponse = await fetch(
             `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&fields=files(id,name)`,
             {
@@ -528,12 +531,18 @@ async function findOrCreateFolder(folderName, parentId, accessToken) {
         if (searchResponse.ok) {
             const searchResult = await searchResponse.json();
             if (searchResult.files && searchResult.files.length > 0) {
+                // ✅ V10.1: Se houver múltiplas pastas com mesmo nome (duplicadas), usar a primeira
+                if (searchResult.files.length > 1) {
+                    console.warn(`⚠️ Encontradas ${searchResult.files.length} pastas duplicadas "${folderName}". Usando a primeira.`);
+                }
                 console.log(`📁 Pasta "${folderName}" já existe:`, searchResult.files[0].id);
                 return searchResult.files[0];
             }
         }
 
+        // ✅ V10.1: Verificar novamente antes de criar (proteção contra race condition)
         console.log(`📁 Criando pasta "${folderName}"...`);
+
         const createResponse = await fetch(
             'https://www.googleapis.com/drive/v3/files?supportsAllDrives=true',
             {

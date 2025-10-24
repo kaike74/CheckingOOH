@@ -495,12 +495,15 @@ async function createFolder(folderName, parentId, accessToken, driveId = null) {
 }
 
 // =============================================================================
-// 📁 ENCONTRAR PASTA
+// 📁 ENCONTRAR PASTA V10.1
+// ✅ CORRIGIDO: Proteção contra duplicação + escape de caracteres especiais
 // =============================================================================
 async function findFolder(folderName, parentId, accessToken) {
     try {
-        const query = `name='${folderName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
-        
+        // ✅ V10.1: Escapar aspas simples no nome da pasta
+        const escapedFolderName = folderName.replace(/'/g, "\\'");
+        const query = `name='${escapedFolderName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+
         const response = await fetch(
             `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&fields=files(id,name,driveId)`,
             {
@@ -516,8 +519,12 @@ async function findFolder(folderName, parentId, accessToken) {
         }
 
         const result = await response.json();
-        
+
         if (result.files && result.files.length > 0) {
+            // ✅ V10.1: Avisar se houver duplicatas
+            if (result.files.length > 1) {
+                console.warn(`⚠️ Encontradas ${result.files.length} pastas duplicadas "${folderName}". Usando a primeira.`);
+            }
             return result.files[0];
         }
 

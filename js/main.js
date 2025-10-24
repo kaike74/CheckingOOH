@@ -388,6 +388,24 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false, containerPar
         return;
     }
 
+    // ✅ V10.1: CORREÇÃO CRÍTICA - Agrupar arquivos por bi-semana ANTES de usar
+    const arquivosPorBisemana = {};
+    files.forEach(file => {
+        if (file.createdTime) {
+            const bisemana = calcularBisemana(file.createdTime);
+            if (!arquivosPorBisemana[bisemana]) {
+                arquivosPorBisemana[bisemana] = [];
+            }
+            arquivosPorBisemana[bisemana].push(file);
+        } else {
+            // Arquivos sem data vão para categoria "Sem Data"
+            if (!arquivosPorBisemana['Sem Data']) {
+                arquivosPorBisemana['Sem Data'] = [];
+            }
+            arquivosPorBisemana['Sem Data'].push(file);
+        }
+    });
+
     // ✅ V10: Renderizar arquivos agrupados por bi-semana
     let fileIndex = 0;
     const bisemanas = Object.keys(arquivosPorBisemana).sort();
@@ -1341,8 +1359,35 @@ function addPDFButton() {
 }
 
 /**
- * 📄 GERAR PDF DA CAMPANHA (V10)
- * Cria relatório PDF com todos os pontos e fotos
+ * 🖼️ CARREGAR IMAGEM COMO BASE64 (V10.1)
+ * Helper para incluir imagens no PDF
+ */
+async function loadImageAsBase64(imageUrl) {
+    try {
+        Logger.debug('Carregando imagem para PDF', { imageUrl });
+
+        const response = await fetch(imageUrl);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const blob = await response.blob();
+
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(new Error('Erro ao ler imagem'));
+            reader.readAsDataURL(blob);
+        });
+    } catch (error) {
+        Logger.warning('Erro ao carregar imagem para PDF', error);
+        return null;
+    }
+}
+
+/**
+ * 📄 GERAR PDF DA CAMPANHA V10.1
+ * ✅ CORRIGIDO: Imagens reais + layout profissional + performance otimizada
  */
 async function generateCampanhaPDF() {
     try {
@@ -1351,56 +1396,84 @@ async function generateCampanhaPDF() {
             return;
         }
 
-        Logger.info('Gerando PDF da campanha');
-        showLoading();
+        Logger.info('Gerando PDF da campanha V10.1');
+
+        // Mostrar progresso
+        const progressText = document.getElementById('progress-text');
+        const originalText = progressText ? progressText.textContent : '';
+
+        showUploadProgress('Gerando PDF...');
 
         const { jsPDF } = window.jspdf;
         const pdf = new jsPDF();
         let yPosition = 20;
+        let totalImagens = 0;
+        let imagensCarregadas = 0;
 
         // Cabeçalho do relatório
-        pdf.setFontSize(18);
+        pdf.setFontSize(20);
         pdf.setFont(undefined, 'bold');
         pdf.text('Relatório de Campanha OOH', 105, yPosition, { align: 'center' });
 
-        yPosition += 10;
-        pdf.setFontSize(12);
+        yPosition += 8;
+        pdf.setFontSize(11);
         pdf.setFont(undefined, 'normal');
-        pdf.text(`Total de pontos: ${appData.pontos.length}`, 105, yPosition, { align: 'center' });
-        pdf.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, 105, yPosition + 6, { align: 'center' });
+        pdf.setTextColor(100, 100, 100);
+        pdf.text(`Total: ${appData.pontos.length} ponto(s) | Data: ${new Date().toLocaleDateString('pt-BR')}`, 105, yPosition, { align: 'center' });
+        pdf.setTextColor(0, 0, 0);
 
-        yPosition += 20;
+        yPosition += 15;
+
+        // ✅ V10.1: Limitar a 2 fotos por tipo para performance (<10 segundos)
+        const MAX_FOTOS_POR_TIPO = 2;
+        const LARGURA_IMG = 50;
+        const ALTURA_IMG = 35;
 
         // Processar cada ponto
-        for (const ponto of appData.pontos) {
+        for (let i = 0; i < appData.pontos.length; i++) {
+            const ponto = appData.pontos[i];
+
+            if (progressText) {
+                progressText.textContent = `Gerando PDF... Ponto ${i + 1}/${appData.pontos.length}`;
+            }
+
             // Verificar se precisa de nova página
-            if (yPosition > 250) {
+            if (yPosition > 240) {
                 pdf.addPage();
                 yPosition = 20;
             }
 
-            // Título do ponto
-            pdf.setFontSize(14);
+            // Título do ponto com box
+            pdf.setFillColor(6, 5, 91);
+            pdf.rect(15, yPosition - 5, 180, 8, 'F');
+            pdf.setTextColor(255, 255, 255);
+            pdf.setFontSize(12);
             pdf.setFont(undefined, 'bold');
-            pdf.text(`${ponto.endereco}`, 20, yPosition);
-            yPosition += 8;
-
-            pdf.setFontSize(10);
-            pdf.setFont(undefined, 'normal');
-            pdf.text(`Exibidora: ${ponto.exibidora}`, 20, yPosition);
+            pdf.text(`📍 ${ponto.endereco}`, 18, yPosition);
+            pdf.setTextColor(0, 0, 0);
             yPosition += 10;
+
+            pdf.setFontSize(9);
+            pdf.setFont(undefined, 'normal');
+            pdf.text(`Exibidora: ${ponto.exibidora}`, 18, yPosition);
+            yPosition += 8;
 
             // Buscar fotos de Entrada
             try {
                 const resultEntrada = await DriveAPI.listDriveFiles(ponto.exibidora, ponto.id, 'entrada', appData.databaseId);
                 if (resultEntrada.success && resultEntrada.files.length > 0) {
-                    pdf.setFontSize(11);
+                    pdf.setFontSize(10);
                     pdf.setFont(undefined, 'bold');
-                    pdf.text('📥 Entrada', 20, yPosition);
+                    pdf.setTextColor(16, 185, 129); // Verde
+                    pdf.text('🟢 Entrada', 18, yPosition);
+                    pdf.setTextColor(0, 0, 0);
                     yPosition += 6;
 
-                    for (const foto of resultEntrada.files.slice(0, 3)) { // Limitar a 3 fotos por tipo
-                        if (yPosition > 240) {
+                    // ✅ V10.1: Limitar fotos para performance
+                    const fotosEntrada = resultEntrada.files.filter(f => !DriveAPI.isVideoFile(f.mimeType)).slice(0, MAX_FOTOS_POR_TIPO);
+
+                    for (const foto of fotosEntrada) {
+                        if (yPosition > 230) {
                             pdf.addPage();
                             yPosition = 20;
                         }
@@ -1409,24 +1482,38 @@ async function generateCampanhaPDF() {
                         if (foto.createdTime) {
                             const bisemana = calcularBisemana(foto.createdTime);
                             pdf.setFontSize(8);
-                            pdf.setFont(undefined, 'normal');
-                            pdf.text(bisemana, 25, yPosition);
-                            yPosition += 6;
+                            pdf.setFont(undefined, 'italic');
+                            pdf.setTextColor(100, 100, 100);
+                            pdf.text(bisemana, 23, yPosition);
+                            pdf.setTextColor(0, 0, 0);
+                            yPosition += 5;
                         }
 
-                        // Tentar adicionar imagem (com fallback)
+                        // ✅ V10.1: INCLUIR IMAGEM REAL
                         try {
-                            if (foto.url && !DriveAPI.isVideoFile(foto.mimeType)) {
-                                pdf.text(`[Foto: ${foto.name}]`, 25, yPosition);
-                                yPosition += 6;
+                            // Usar thumbnailLink para melhor performance
+                            const imageUrl = foto.thumbnailLink || foto.url;
+                            const imageBase64 = await loadImageAsBase64(imageUrl);
+
+                            if (imageBase64) {
+                                pdf.addImage(imageBase64, 'JPEG', 23, yPosition, LARGURA_IMG, ALTURA_IMG);
+                                imagensCarregadas++;
+                                yPosition += ALTURA_IMG + 3;
+                            } else {
+                                // Fallback: texto se imagem falhar
+                                pdf.setFontSize(8);
+                                pdf.text(`[Imagem indisponível: ${foto.name}]`, 23, yPosition);
+                                yPosition += 5;
                             }
                         } catch (imgError) {
-                            pdf.text(`[Erro ao carregar: ${foto.name}]`, 25, yPosition);
-                            yPosition += 6;
+                            Logger.warning('Erro ao adicionar imagem ao PDF', imgError);
+                            pdf.setFontSize(8);
+                            pdf.text(`[Erro: ${foto.name}]`, 23, yPosition);
+                            yPosition += 5;
                         }
                     }
 
-                    yPosition += 4;
+                    yPosition += 3;
                 }
             } catch (error) {
                 Logger.warning('Erro ao buscar fotos de entrada para PDF', error);
@@ -1436,18 +1523,22 @@ async function generateCampanhaPDF() {
             try {
                 const resultSaida = await DriveAPI.listDriveFiles(ponto.exibidora, ponto.id, 'saida', appData.databaseId);
                 if (resultSaida.success && resultSaida.files.length > 0) {
-                    if (yPosition > 240) {
+                    if (yPosition > 230) {
                         pdf.addPage();
                         yPosition = 20;
                     }
 
-                    pdf.setFontSize(11);
+                    pdf.setFontSize(10);
                     pdf.setFont(undefined, 'bold');
-                    pdf.text('📤 Saída', 20, yPosition);
+                    pdf.setTextColor(245, 158, 11); // Laranja
+                    pdf.text('🔴 Saída', 18, yPosition);
+                    pdf.setTextColor(0, 0, 0);
                     yPosition += 6;
 
-                    for (const foto of resultSaida.files.slice(0, 3)) {
-                        if (yPosition > 240) {
+                    const fotosSaida = resultSaida.files.filter(f => !DriveAPI.isVideoFile(f.mimeType)).slice(0, MAX_FOTOS_POR_TIPO);
+
+                    for (const foto of fotosSaida) {
+                        if (yPosition > 230) {
                             pdf.addPage();
                             yPosition = 20;
                         }
@@ -1456,42 +1547,54 @@ async function generateCampanhaPDF() {
                         if (foto.createdTime) {
                             const bisemana = calcularBisemana(foto.createdTime);
                             pdf.setFontSize(8);
-                            pdf.setFont(undefined, 'normal');
-                            pdf.text(bisemana, 25, yPosition);
-                            yPosition += 6;
+                            pdf.setFont(undefined, 'italic');
+                            pdf.setTextColor(100, 100, 100);
+                            pdf.text(bisemana, 23, yPosition);
+                            pdf.setTextColor(0, 0, 0);
+                            yPosition += 5;
                         }
 
-                        // Tentar adicionar nome do arquivo
+                        // ✅ V10.1: INCLUIR IMAGEM REAL
                         try {
-                            if (foto.url && !DriveAPI.isVideoFile(foto.mimeType)) {
-                                pdf.text(`[Foto: ${foto.name}]`, 25, yPosition);
-                                yPosition += 6;
+                            const imageUrl = foto.thumbnailLink || foto.url;
+                            const imageBase64 = await loadImageAsBase64(imageUrl);
+
+                            if (imageBase64) {
+                                pdf.addImage(imageBase64, 'JPEG', 23, yPosition, LARGURA_IMG, ALTURA_IMG);
+                                imagensCarregadas++;
+                                yPosition += ALTURA_IMG + 3;
+                            } else {
+                                pdf.setFontSize(8);
+                                pdf.text(`[Imagem indisponível: ${foto.name}]`, 23, yPosition);
+                                yPosition += 5;
                             }
                         } catch (imgError) {
-                            pdf.text(`[Erro ao carregar: ${foto.name}]`, 25, yPosition);
-                            yPosition += 6;
+                            Logger.warning('Erro ao adicionar imagem ao PDF', imgError);
+                            pdf.setFontSize(8);
+                            pdf.text(`[Erro: ${foto.name}]`, 23, yPosition);
+                            yPosition += 5;
                         }
                     }
 
-                    yPosition += 4;
+                    yPosition += 3;
                 }
             } catch (error) {
                 Logger.warning('Erro ao buscar fotos de saída para PDF', error);
             }
 
-            yPosition += 8; // Espaço entre pontos
+            yPosition += 5; // Espaço entre pontos
         }
 
         // Salvar PDF
         const fileName = `campanha-${appData.databaseId}-${new Date().toISOString().split('T')[0]}.pdf`;
         pdf.save(fileName);
 
-        hideLoading();
-        showSuccessMessage('📄 PDF gerado com sucesso!');
-        Logger.success('PDF gerado', { fileName });
+        hideUploadProgress();
+        showSuccessMessage(`📄 PDF gerado! ${imagensCarregadas} imagens incluídas`);
+        Logger.success('PDF gerado V10.1', { fileName, imagensCarregadas });
 
     } catch (error) {
-        hideLoading();
+        hideUploadProgress();
         Logger.error('Erro ao gerar PDF', error);
         alert('Erro ao gerar PDF: ' + error.message);
     }
