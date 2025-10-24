@@ -7,10 +7,8 @@ const appData = {
     exibidora: null,
     pontos: [],
     pontoAtual: null,
-    databaseId: null, // ✅ NOVO: ID da campanha
-    editMode: {}, // { 'pontoId-tipo': boolean }
-    carouselOpen: false, // ✅ NOVO: Flag para prevenir múltiplas aberturas
-    lastCarouselOpen: 0 // ✅ NOVO: Timestamp da última abertura
+    databaseId: null, // ID da campanha
+    editMode: {} // { 'pontoId-tipo': boolean }
 };
 
 /**
@@ -115,8 +113,8 @@ async function loadExibidoraData(pontoId) {
 }
 
 /**
- * 📋 CARREGAR DADOS DA CAMPANHA (NOVO)
- * Carrega TODOS os pontos de uma campanha (todas exibidoras)
+ * 📋 CARREGAR DADOS DA CAMPANHA V10
+ * Carrega TODOS os pontos de uma campanha (todas exibidoras) + botão PDF
  */
 async function loadCampanhaData(campanhaId) {
     try {
@@ -132,6 +130,9 @@ async function loadCampanhaData(campanhaId) {
 
         // Atualizar header
         updatePageHeader(`📋 Campanha Completa`, `Visualização Geral • ${appData.pontos.length} ponto(s) de todas as exibidoras`);
+
+        // ✅ V10: Adicionar botão PDF no header
+        addPDFButton();
 
         // Renderizar pontos (modo read-only como cliente, mas layout expandido como exibidora)
         await renderPontos(true); // true = read-only (sem edição)
@@ -326,8 +327,48 @@ async function loadMediaPreview(ponto, tipo, container, readOnly = false) {
 }
 
 /**
- * 🔄 ATUALIZAR PREVIEW DE MÍDIA
- * Atualiza o preview com novos arquivos
+ * 📅 CALCULAR BI-SEMANA V10
+ * Calcula a bi-semana baseada na data de upload
+ */
+function calcularBisemana(dataUpload) {
+    // Data base de referência (primeira bi-semana conhecida)
+    const BISEMANA_BASE = {
+        numero: 2,
+        ano: 2025,
+        dataInicio: new Date('2024-12-30T00:00:00') // 30/12/2024 - início bi-semana 02/25
+    };
+
+    const data = new Date(dataUpload);
+    const dataBase = BISEMANA_BASE.dataInicio;
+
+    // Calcular diferença em dias
+    const diferencaDias = Math.floor((data - dataBase) / (1000 * 60 * 60 * 24));
+
+    // Cada bi-semana = 14 dias
+    const numeroBisemanas = Math.floor(diferencaDias / 14);
+
+    // Número da bi-semana (sempre par, começando em 02)
+    let numeroBisemana = BISEMANA_BASE.numero + (numeroBisemanas * 2);
+
+    // Calcular ano da bi-semana
+    let anoBisemana = BISEMANA_BASE.ano;
+
+    // Ajustar para ano correto (52 bi-semanas por ano = 26 períodos de 14 dias)
+    while (numeroBisemana > 52) {
+        numeroBisemana -= 52;
+        anoBisemana++;
+    }
+
+    // Formatar resultado
+    const numeroFormatado = numeroBisemana.toString().padStart(2, '0');
+    const anoFormatado = anoBisemana.toString().slice(-2);
+
+    return `Bi-semana ${numeroFormatado}/${anoFormatado} - ${data.toLocaleDateString('pt-BR')}`;
+}
+
+/**
+ * 🔄 ATUALIZAR PREVIEW DE MÍDIA V10
+ * Atualiza o preview com novos arquivos + cabeçalhos de bi-semana
  */
 function updateMediaPreview(pontoId, tipo, files, readOnly = false, containerParam = null) {
     // ✅ CORREÇÃO: Aceitar container como parâmetro ou buscar por ID
@@ -337,7 +378,7 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false, containerPar
         return;
     }
 
-    console.log(`📸 updateMediaPreview: Renderizando ${files.length} arquivos para ponto ${pontoId} (${tipo}) [modo: ${readOnly ? 'CLIENTE' : 'EXIBIDORA'}]`);
+    console.log(`📸 updateMediaPreview: Renderizando ${files.length} arquivos para ponto ${pontoId} (${tipo}) [modo: ${readOnly ? 'CAMPANHA' : 'EXIBIDORA'}]`);
 
     container.innerHTML = '';
 
@@ -347,11 +388,36 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false, containerPar
         return;
     }
 
-    files.forEach((file, index) => {
-        const mediaItem = document.createElement('div');
-        mediaItem.className = 'media-item';
-        // ✅ CORREÇÃO: Usar index correto do array ao clicar
-        mediaItem.onclick = () => openMediaCarousel(pontoId, tipo, index);
+    // ✅ V10: Renderizar arquivos agrupados por bi-semana
+    let fileIndex = 0;
+    const bisemanas = Object.keys(arquivosPorBisemana).sort();
+
+    bisemanas.forEach(bisemana => {
+        // Criar cabeçalho de bi-semana
+        const bisemanaHeader = document.createElement('div');
+        bisemanaHeader.className = 'bisemana-header';
+        bisemanaHeader.style.cssText = `
+            grid-column: 1 / -1;
+            background: linear-gradient(135deg, rgba(6, 5, 91, 0.05) 0%, rgba(6, 5, 91, 0.02) 100%);
+            border-left: 3px solid #06055B;
+            padding: 8px 12px;
+            margin-top: 8px;
+            margin-bottom: 4px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #06055B;
+        `;
+        bisemanaHeader.textContent = bisemana;
+        container.appendChild(bisemanaHeader);
+
+        // Renderizar arquivos desta bi-semana
+        arquivosPorBisemana[bisemana].forEach(file => {
+            const currentIndex = fileIndex++;
+            const mediaItem = document.createElement('div');
+            mediaItem.className = 'media-item';
+            // ✅ CORREÇÃO: Usar index correto do array ao clicar
+            mediaItem.onclick = () => openMediaCarousel(pontoId, tipo, currentIndex);
         
         if (DriveAPI.isVideoFile(file.mimeType)) {
             // ✅ CORREÇÃO: Vídeo com thumbnail e ícone de play
@@ -459,9 +525,10 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false, containerPar
             mediaItem.appendChild(downloadBtn);
         }
 
-        container.appendChild(mediaItem);
+            container.appendChild(mediaItem);
+        });
     });
-    
+
     updateMediaCount(pontoId, tipo, files.length);
 }
 
@@ -509,10 +576,10 @@ async function togglePontoContent(pontoId) {
 }
 
 /**
- * 🔄 ALTERNAR PONTO COM LAZY LOADING (MODO CAMPANHA)
- * Expande/recolhe e carrega fotos na primeira expansão
+ * 🔄 ALTERNAR PONTO COM LAZY LOADING V10 (MODO CAMPANHA)
+ * ✅ V10: Expande IMEDIATAMENTE + carrega fotos em PARALELO (sem bloquear)
  */
-async function togglePontoLazy(pontoId) {
+function togglePontoLazy(pontoId) {
     const content = document.getElementById(`content-${pontoId}`);
     const icon = document.getElementById(`toggle-icon-${pontoId}`);
 
@@ -520,34 +587,36 @@ async function togglePontoLazy(pontoId) {
         const isVisible = content.style.display !== 'none';
 
         if (!isVisible) {
-            // ✅ LAZY LOADING: Carregar fotos na primeira expansão
+            // ✅ V10 PERFORMANCE: Expandir IMEDIATAMENTE (não await)
+            content.style.display = 'grid';
+            icon.textContent = '▲';
+
+            // ✅ V10 PERFORMANCE: Carregar fotos em BACKGROUND (não bloqueia UI)
             if (content.dataset.loaded === 'false') {
-                Logger.info('Carregando fotos do ponto pela primeira vez', { pontoId });
+                Logger.info('Expandindo + carregando fotos em paralelo', { pontoId });
 
                 // Buscar informações do ponto
                 const ponto = appData.pontos.find(p => p.id === pontoId);
                 if (ponto) {
-                    // Carregar entrada e saída em PARALELO
-                    await Promise.all([
+                    // Carregar entrada e saída em PARALELO (sem await - não bloqueia)
+                    Promise.all([
                         loadPontoMediaIfNeeded(ponto, 'entrada'),
                         loadPontoMediaIfNeeded(ponto, 'saida')
-                    ]);
+                    ]).then(() => {
+                        content.dataset.loaded = 'true';
+                        Logger.success('Fotos carregadas em background', { pontoId });
+                    }).catch(error => {
+                        Logger.error('Erro ao carregar fotos em background', error);
+                    });
                 }
-
-                content.dataset.loaded = 'true';
-                Logger.success('Fotos carregadas', { pontoId });
             }
-
-            // Expandir
-            content.style.display = 'grid';
-            icon.textContent = '▲';
         } else {
             // Recolher
             content.style.display = 'none';
             icon.textContent = '▼';
         }
 
-        Logger.debug('Ponto alternado', { pontoId, visible: !isVisible });
+        Logger.debug('Ponto alternado (expansão instantânea)', { pontoId, visible: !isVisible });
     }
 }
 
@@ -663,229 +732,85 @@ async function deleteFile(fileId, fileName, pontoId, tipo) {
 }
 
 /**
- * 🎠 ABRIR CARROSSEL DE MÍDIA (NOVO)
- * Visualizador fullscreen com navegação por setas
+ * 🔍 ZOOM SIMPLES DE FOTO (V10)
+ * Abre foto ampliada sem carrossel - apenas zoom
  */
-async function openMediaCarousel(pontoId, tipo, startIndex = 0) {
+function openMediaCarousel(pontoId, tipo, startIndex = 0) {
     try {
-        // ✅ DEBOUNCE: Prevenir múltiplas aberturas
-        const now = Date.now();
-        if (appData.carouselOpen || (now - appData.lastCarouselOpen) < 500) {
-            console.log('⏳ Carrossel já está aberto ou foi aberto recentemente. Aguarde...');
+        Logger.info('Abrindo zoom de foto', { pontoId, tipo, startIndex });
+
+        // Buscar container de fotos
+        const container = document.getElementById(`preview-${pontoId}-${tipo}`);
+        if (!container) {
+            alert('Erro ao localizar fotos');
             return;
         }
 
-        appData.carouselOpen = true;
-        appData.lastCarouselOpen = now;
-
-        Logger.info('Abrindo carrossel de mídia', { pontoId, tipo, startIndex });
-
-        // ✅ CORREÇÃO: Buscar ponto para obter exibidora correta
-        const ponto = appData.pontos.find(p => p.id === pontoId);
-        const exibidora = ponto?.exibidora || appData.exibidora;
-
-        // Buscar arquivos
-        const result = await DriveAPI.listDriveFiles(exibidora, pontoId, tipo, appData.databaseId);
-
-        if (!result.success || result.files.length === 0) {
-            appData.carouselOpen = false;
-            alert('Nenhuma mídia encontrada');
+        // Buscar todas as imagens no container
+        const images = container.querySelectorAll('img');
+        if (!images || images.length === 0 || startIndex >= images.length) {
+            alert('Nenhuma foto encontrada');
             return;
         }
 
-        // Criar overlay fullscreen
-        const carousel = document.createElement('div');
-        carousel.id = 'media-carousel';
-        carousel.className = 'media-carousel';
-        carousel.innerHTML = `
-            <div class="carousel-overlay" onclick="closeMediaCarousel()"></div>
+        // Pegar a imagem clicada
+        const clickedImage = images[startIndex];
+        const imageUrl = clickedImage.src;
+        const imageName = clickedImage.alt || 'Foto';
+
+        // Criar modal simples com zoom
+        const zoomModal = document.createElement('div');
+        zoomModal.id = 'zoom-modal';
+        zoomModal.className = 'media-carousel'; // Reutilizar CSS do carrossel
+        zoomModal.innerHTML = `
+            <div class="carousel-overlay" onclick="closeZoomModal()"></div>
             <div class="carousel-content">
-                <button class="carousel-close" onclick="closeMediaCarousel()">×</button>
-                <button class="carousel-nav carousel-prev" onclick="carouselPrev()">‹</button>
-                <button class="carousel-nav carousel-next" onclick="carouselNext()">›</button>
-                <div class="carousel-counter"><span id="carousel-current">1</span> / <span id="carousel-total">${result.files.length}</span></div>
-                <div class="carousel-media" id="carousel-media"></div>
+                <button class="carousel-close" onclick="closeZoomModal()">×</button>
+                <div class="carousel-media" style="display: flex; align-items: center; justify-content: center;">
+                    <img src="${imageUrl}" alt="${imageName}" style="max-width: 90vw; max-height: 90vh; object-fit: contain; border-radius: 8px; box-shadow: 0 10px 40px rgba(0,0,0,0.5);">
+                </div>
             </div>
         `;
 
-        document.body.appendChild(carousel);
+        document.body.appendChild(zoomModal);
 
-        // Armazenar dados para navegação
-        window.carouselData = {
-            files: result.files,
-            currentIndex: Math.min(startIndex, result.files.length - 1),
-            pontoId: pontoId,
-            tipo: tipo
-        };
+        // Adicionar controle ESC para fechar
+        document.addEventListener('keydown', handleZoomKeyboard);
 
-        // Mostrar primeira mídia
-        showCarouselMedia(window.carouselData.currentIndex);
-
-        // Adicionar controle por teclado
-        document.addEventListener('keydown', handleCarouselKeyboard);
+        Logger.info('Zoom de foto aberto', { imageUrl });
 
     } catch (error) {
-        Logger.error('Erro ao abrir carrossel', error);
-        alert('Erro ao carregar mídia: ' + error.message);
+        Logger.error('Erro ao abrir zoom', error);
+        alert('Erro ao visualizar foto: ' + error.message);
     }
 }
 
 /**
- * 🖼️ MOSTRAR MÍDIA NO CARROSSEL
+ * ⌨️ CONTROLE POR TECLADO DO ZOOM
  */
-function showCarouselMedia(index) {
-    const data = window.carouselData;
-    const file = data.files[index];
-    const container = document.getElementById('carousel-media');
+function handleZoomKeyboard(e) {
+    if (!document.getElementById('zoom-modal')) return;
 
-    // Atualizar contador
-    document.getElementById('carousel-current').textContent = index + 1;
-
-    // Limpar conteúdo anterior
-    container.innerHTML = '';
-
-    if (DriveAPI.isVideoFile(file.mimeType)) {
-        // ✅ CORREÇÃO: Vídeo com botão de download (Google Drive não permite embed)
-        const downloadUrl = `https://drive.google.com/uc?export=download&id=${file.id}`;
-        const thumbnail = file.thumbnailUrl || `https://drive.google.com/thumbnail?id=${file.id}&sz=w800`;
-
-        container.innerHTML = `
-            <div style="
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                gap: 30px;
-            ">
-                <div style="
-                    position: relative;
-                    width: 600px;
-                    max-width: 90vw;
-                    aspect-ratio: 16/9;
-                    background: url('${thumbnail}') center/cover no-repeat, #000;
-                    border-radius: 12px;
-                    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
-                ">
-                    <div style="
-                        position: absolute;
-                        top: 50%;
-                        left: 50%;
-                        transform: translate(-50%, -50%);
-                        background: rgba(0,0,0,0.7);
-                        border-radius: 50%;
-                        width: 80px;
-                        height: 80px;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        color: white;
-                        font-size: 40px;
-                    ">▶</div>
-                    <div style="
-                        position: absolute;
-                        top: 15px;
-                        right: 15px;
-                        background: rgba(0,0,0,0.8);
-                        color: white;
-                        padding: 8px 16px;
-                        border-radius: 8px;
-                        font-size: 14px;
-                        font-weight: bold;
-                    ">VÍDEO</div>
-                </div>
-                <a href="${downloadUrl}" class="btn btn-primary" style="
-                    padding: 16px 40px;
-                    font-size: 18px;
-                    text-decoration: none;
-                    display: inline-flex;
-                    align-items: center;
-                    gap: 10px;
-                ">
-                    ▶ Baixar Vídeo
-                </a>
-                <p style="color: #94A3B8; font-size: 14px; margin: 0;">
-                    Google Drive não permite reprodução direta de vídeos
-                </p>
-            </div>
-        `;
-    } else {
-        // Imagem
-        const img = document.createElement('img');
-        img.src = file.url;
-        img.alt = file.name;
-        img.style.maxWidth = '90vw';
-        img.style.maxHeight = '90vh';
-        img.style.objectFit = 'contain';
-
-        // Fallback de erro
-        if (file.alternativeUrls && file.alternativeUrls.length > 0) {
-            img.dataset.alternativeUrls = JSON.stringify(file.alternativeUrls);
-            img.dataset.currentUrlIndex = '0';
-            img.dataset.fileId = file.id;
-            img.dataset.fileName = file.name;
-            img.onerror = function() {
-                handleImageError(this);
-            };
-        }
-
-        container.appendChild(img);
-    }
-
-    data.currentIndex = index;
-}
-
-/**
- * ◀️ NAVEGAR PARA ANTERIOR
- */
-function carouselPrev() {
-    const data = window.carouselData;
-    if (data.currentIndex > 0) {
-        showCarouselMedia(data.currentIndex - 1);
+    if (e.key === 'Escape') {
+        closeZoomModal();
     }
 }
 
 /**
- * ▶️ NAVEGAR PARA PRÓXIMO
+ * 🔒 FECHAR MODAL DE ZOOM
  */
-function carouselNext() {
-    const data = window.carouselData;
-    if (data.currentIndex < data.files.length - 1) {
-        showCarouselMedia(data.currentIndex + 1);
+function closeZoomModal() {
+    const modal = document.getElementById('zoom-modal');
+    if (modal) {
+        modal.remove();
     }
+    document.removeEventListener('keydown', handleZoomKeyboard);
+    Logger.info('Zoom de foto fechado');
 }
 
-/**
- * ⌨️ CONTROLE POR TECLADO
- */
-function handleCarouselKeyboard(e) {
-    if (!document.getElementById('media-carousel')) return;
-
-    switch(e.key) {
-        case 'ArrowLeft':
-            carouselPrev();
-            break;
-        case 'ArrowRight':
-            carouselNext();
-            break;
-        case 'Escape':
-            closeMediaCarousel();
-            break;
-    }
-}
-
-/**
- * 🔒 FECHAR CARROSSEL
- */
+// ✅ MANTER FUNÇÕES ANTIGAS PARA COMPATIBILIDADE (mas simplificadas)
 function closeMediaCarousel() {
-    const carousel = document.getElementById('media-carousel');
-    if (carousel) {
-        carousel.remove();
-    }
-    window.carouselData = null;
-    document.removeEventListener('keydown', handleCarouselKeyboard);
-
-    // ✅ DEBOUNCE: Resetar flag após fechar
-    appData.carouselOpen = false;
+    closeZoomModal();
 }
 
 /**
@@ -1381,6 +1306,197 @@ function chooseUpload(exibidora, pontoId, tipo, databaseId) {
     openUploadModal(exibidora, pontoId, tipo, databaseId);
 }
 
+/**
+ * 📄 ADICIONAR BOTÃO PDF NO HEADER (V10)
+ */
+function addPDFButton() {
+    // Verificar se já existe
+    if (document.getElementById('btn-gerar-pdf')) {
+        return;
+    }
+
+    const headerContent = document.querySelector('.header-content');
+    if (!headerContent) return;
+
+    const buttonContainer = document.createElement('div');
+    buttonContainer.style.cssText = `
+        margin-top: 16px;
+        text-align: center;
+    `;
+
+    const pdfButton = document.createElement('button');
+    pdfButton.id = 'btn-gerar-pdf';
+    pdfButton.className = 'btn btn-primary';
+    pdfButton.innerHTML = '📄 Gerar Relatório PDF';
+    pdfButton.onclick = generateCampanhaPDF;
+    pdfButton.style.cssText = `
+        padding: 12px 24px;
+        font-size: 16px;
+    `;
+
+    buttonContainer.appendChild(pdfButton);
+    headerContent.appendChild(buttonContainer);
+
+    Logger.info('Botão PDF adicionado ao header');
+}
+
+/**
+ * 📄 GERAR PDF DA CAMPANHA (V10)
+ * Cria relatório PDF com todos os pontos e fotos
+ */
+async function generateCampanhaPDF() {
+    try {
+        if (!window.jspdf || !window.jspdf.jsPDF) {
+            alert('Biblioteca jsPDF não carregada. Por favor, recarregue a página.');
+            return;
+        }
+
+        Logger.info('Gerando PDF da campanha');
+        showLoading();
+
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF();
+        let yPosition = 20;
+
+        // Cabeçalho do relatório
+        pdf.setFontSize(18);
+        pdf.setFont(undefined, 'bold');
+        pdf.text('Relatório de Campanha OOH', 105, yPosition, { align: 'center' });
+
+        yPosition += 10;
+        pdf.setFontSize(12);
+        pdf.setFont(undefined, 'normal');
+        pdf.text(`Total de pontos: ${appData.pontos.length}`, 105, yPosition, { align: 'center' });
+        pdf.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, 105, yPosition + 6, { align: 'center' });
+
+        yPosition += 20;
+
+        // Processar cada ponto
+        for (const ponto of appData.pontos) {
+            // Verificar se precisa de nova página
+            if (yPosition > 250) {
+                pdf.addPage();
+                yPosition = 20;
+            }
+
+            // Título do ponto
+            pdf.setFontSize(14);
+            pdf.setFont(undefined, 'bold');
+            pdf.text(`${ponto.endereco}`, 20, yPosition);
+            yPosition += 8;
+
+            pdf.setFontSize(10);
+            pdf.setFont(undefined, 'normal');
+            pdf.text(`Exibidora: ${ponto.exibidora}`, 20, yPosition);
+            yPosition += 10;
+
+            // Buscar fotos de Entrada
+            try {
+                const resultEntrada = await DriveAPI.listDriveFiles(ponto.exibidora, ponto.id, 'entrada', appData.databaseId);
+                if (resultEntrada.success && resultEntrada.files.length > 0) {
+                    pdf.setFontSize(11);
+                    pdf.setFont(undefined, 'bold');
+                    pdf.text('📥 Entrada', 20, yPosition);
+                    yPosition += 6;
+
+                    for (const foto of resultEntrada.files.slice(0, 3)) { // Limitar a 3 fotos por tipo
+                        if (yPosition > 240) {
+                            pdf.addPage();
+                            yPosition = 20;
+                        }
+
+                        // Bi-semana
+                        if (foto.createdTime) {
+                            const bisemana = calcularBisemana(foto.createdTime);
+                            pdf.setFontSize(8);
+                            pdf.setFont(undefined, 'normal');
+                            pdf.text(bisemana, 25, yPosition);
+                            yPosition += 6;
+                        }
+
+                        // Tentar adicionar imagem (com fallback)
+                        try {
+                            if (foto.url && !DriveAPI.isVideoFile(foto.mimeType)) {
+                                pdf.text(`[Foto: ${foto.name}]`, 25, yPosition);
+                                yPosition += 6;
+                            }
+                        } catch (imgError) {
+                            pdf.text(`[Erro ao carregar: ${foto.name}]`, 25, yPosition);
+                            yPosition += 6;
+                        }
+                    }
+
+                    yPosition += 4;
+                }
+            } catch (error) {
+                Logger.warning('Erro ao buscar fotos de entrada para PDF', error);
+            }
+
+            // Buscar fotos de Saída
+            try {
+                const resultSaida = await DriveAPI.listDriveFiles(ponto.exibidora, ponto.id, 'saida', appData.databaseId);
+                if (resultSaida.success && resultSaida.files.length > 0) {
+                    if (yPosition > 240) {
+                        pdf.addPage();
+                        yPosition = 20;
+                    }
+
+                    pdf.setFontSize(11);
+                    pdf.setFont(undefined, 'bold');
+                    pdf.text('📤 Saída', 20, yPosition);
+                    yPosition += 6;
+
+                    for (const foto of resultSaida.files.slice(0, 3)) {
+                        if (yPosition > 240) {
+                            pdf.addPage();
+                            yPosition = 20;
+                        }
+
+                        // Bi-semana
+                        if (foto.createdTime) {
+                            const bisemana = calcularBisemana(foto.createdTime);
+                            pdf.setFontSize(8);
+                            pdf.setFont(undefined, 'normal');
+                            pdf.text(bisemana, 25, yPosition);
+                            yPosition += 6;
+                        }
+
+                        // Tentar adicionar nome do arquivo
+                        try {
+                            if (foto.url && !DriveAPI.isVideoFile(foto.mimeType)) {
+                                pdf.text(`[Foto: ${foto.name}]`, 25, yPosition);
+                                yPosition += 6;
+                            }
+                        } catch (imgError) {
+                            pdf.text(`[Erro ao carregar: ${foto.name}]`, 25, yPosition);
+                            yPosition += 6;
+                        }
+                    }
+
+                    yPosition += 4;
+                }
+            } catch (error) {
+                Logger.warning('Erro ao buscar fotos de saída para PDF', error);
+            }
+
+            yPosition += 8; // Espaço entre pontos
+        }
+
+        // Salvar PDF
+        const fileName = `campanha-${appData.databaseId}-${new Date().toISOString().split('T')[0]}.pdf`;
+        pdf.save(fileName);
+
+        hideLoading();
+        showSuccessMessage('📄 PDF gerado com sucesso!');
+        Logger.success('PDF gerado', { fileName });
+
+    } catch (error) {
+        hideLoading();
+        Logger.error('Erro ao gerar PDF', error);
+        alert('Erro ao gerar PDF: ' + error.message);
+    }
+}
+
 // 🚀 EXPORTAR FUNÇÕES GLOBAIS
 window.togglePontoContent = togglePontoContent;
 window.togglePontoLazy = togglePontoLazy;
@@ -1394,10 +1510,11 @@ window.downloadAllFiles = downloadAllFiles;
 window.openPhotoModal = openPhotoModal;
 window.closePhotoModal = closePhotoModal;
 window.openFullImage = openFullImage;
-window.openMediaCarousel = openMediaCarousel;
-window.closeMediaCarousel = closeMediaCarousel;
-window.carouselPrev = carouselPrev;
-window.carouselNext = carouselNext;
+window.openMediaCarousel = openMediaCarousel; // ✅ V10: Agora é zoom simples
+window.closeMediaCarousel = closeMediaCarousel; // Compatibilidade
+window.closeZoomModal = closeZoomModal; // ✅ V10: Nova função de zoom
+window.generateCampanhaPDF = generateCampanhaPDF; // ✅ V10: Gerador de PDF
+window.calcularBisemana = calcularBisemana; // ✅ V10: Cálculo de bi-semana
 window.hideDemoWarning = hideDemoWarning;
 window.updateMediaPreview = updateMediaPreview;
 window.showSuccessMessage = showSuccessMessage;

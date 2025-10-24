@@ -371,11 +371,11 @@ async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, ac
 
 // =============================================================================
 // 🔍 ENCONTRAR OU CRIAR CAMINHO DA PASTA
-// ✅ ROLLBACK: HIERARQUIA CORRETA CheckingOOH/Exibidora/Campanha/Tipo/Ponto
+// ✅ V10: HIERARQUIA CORRETA CheckingOOH/Exibidora/Campanha/Ponto/Tipo
 // =============================================================================
 async function findOrCreateFolderPath(exibidora, tipo, databaseId, pontoId, accessToken, rootFolderId) {
     try {
-        console.log('🔍 ✅ ROLLBACK: CheckingOOH/Exibidora/Campanha/Tipo/Ponto', { exibidora, tipo, databaseId, pontoId });
+        console.log('🔍 ✅ V10: CheckingOOH/Exibidora/Campanha/Ponto/Tipo', { exibidora, tipo, databaseId, pontoId });
 
         // PASSO 1: Buscar pasta CheckingOOH em todos os drives
         console.log('🔍 [1/5] Buscando pasta CheckingOOH...');
@@ -400,7 +400,7 @@ async function findOrCreateFolderPath(exibidora, tipo, databaseId, pontoId, acce
             console.log('✅ Pasta Exibidora já existe:', exibidoraFolder.id);
         }
 
-        // PASSO 3: Buscar ou criar pasta da Campanha (databaseId) ✅ CORRIGIDO: Agora vem ANTES do Tipo
+        // PASSO 3: Buscar ou criar pasta da Campanha (databaseId)
         console.log(`🔍 [3/5] Buscando/criando pasta Campanha: ${databaseId}...`);
         let campanhaFolder = await findFolder(databaseId, exibidoraFolder.id, accessToken);
 
@@ -412,36 +412,36 @@ async function findOrCreateFolderPath(exibidora, tipo, databaseId, pontoId, acce
             console.log('✅ Pasta Campanha já existe:', campanhaFolder.id);
         }
 
-        // PASSO 4: Buscar ou criar pasta do Tipo (Entrada/Saida) ✅ CORRIGIDO: Agora vem DEPOIS da Campanha
-        const tipoFolderName = tipo === 'entrada' ? 'Entrada' : 'Saida';
-        console.log(`🔍 [4/5] Buscando/criando pasta Tipo: ${tipoFolderName}...`);
-        let tipoFolder = await findFolder(tipoFolderName, campanhaFolder.id, accessToken);
-
-        if (!tipoFolder) {
-            console.log(`📁 Criando pasta Tipo: ${tipoFolderName}...`);
-            tipoFolder = await createFolder(tipoFolderName, campanhaFolder.id, accessToken, checkingFolder.driveId);
-            console.log('✅ Pasta Tipo criada:', tipoFolder.id);
-        } else {
-            console.log('✅ Pasta Tipo já existe:', tipoFolder.id);
-        }
-
-        // PASSO 5: Buscar ou criar pasta do Ponto (pontoId)
-        console.log(`🔍 [5/5] Buscando/criando pasta Ponto: ${pontoId}...`);
-        let pontoFolder = await findFolder(pontoId, tipoFolder.id, accessToken);
+        // PASSO 4: Buscar ou criar pasta do Ponto (pontoId) ✅ V10: Ponto ANTES do Tipo
+        console.log(`🔍 [4/5] Buscando/criando pasta Ponto: ${pontoId}...`);
+        let pontoFolder = await findFolder(pontoId, campanhaFolder.id, accessToken);
 
         if (!pontoFolder) {
             console.log(`📁 Criando pasta Ponto: ${pontoId}...`);
-            pontoFolder = await createFolder(pontoId, tipoFolder.id, accessToken, checkingFolder.driveId);
+            pontoFolder = await createFolder(pontoId, campanhaFolder.id, accessToken, checkingFolder.driveId);
             console.log('✅ Pasta Ponto criada:', pontoFolder.id);
         } else {
             console.log('✅ Pasta Ponto já existe:', pontoFolder.id);
         }
 
-        const fullPath = `CheckingOOH/${exibidora}/${databaseId}/${tipoFolderName}/${pontoId}`;
-        console.log('🎉 Estrutura completa pronta (CORRETA)! Caminho:', fullPath);
+        // PASSO 5: Buscar ou criar pasta do Tipo (Entrada/Saida) ✅ V10: Tipo DEPOIS do Ponto
+        const tipoFolderName = tipo === 'entrada' ? 'Entrada' : 'Saida';
+        console.log(`🔍 [5/5] Buscando/criando pasta Tipo: ${tipoFolderName}...`);
+        let tipoFolder = await findFolder(tipoFolderName, pontoFolder.id, accessToken);
+
+        if (!tipoFolder) {
+            console.log(`📁 Criando pasta Tipo: ${tipoFolderName}...`);
+            tipoFolder = await createFolder(tipoFolderName, pontoFolder.id, accessToken, checkingFolder.driveId);
+            console.log('✅ Pasta Tipo criada:', tipoFolder.id);
+        } else {
+            console.log('✅ Pasta Tipo já existe:', tipoFolder.id);
+        }
+
+        const fullPath = `CheckingOOH/${exibidora}/${databaseId}/${pontoId}/${tipoFolderName}`;
+        console.log('🎉 Estrutura completa pronta V10 (CORRETA)! Caminho:', fullPath);
 
         return {
-            id: pontoFolder.id,
+            id: tipoFolder.id,
             path: fullPath,
             driveId: checkingFolder.driveId
         };
