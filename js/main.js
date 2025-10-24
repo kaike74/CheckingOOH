@@ -685,8 +685,8 @@ async function loadPontoMediaIfNeeded(ponto, tipo) {
  * Ativa/desativa o modo edição para uma seção
  */
 /**
- * ✏️ ALTERNAR MODO EDIÇÃO V10.2
- * ✅ CORRIGIDO: Usa classe .editing para controle CSS (funciona no mobile)
+ * ✏️ ALTERNAR MODO EDIÇÃO V10.6
+ * ✅ CORRIGIDO: Usa classe .editing para controle CSS + atualiza UI global
  */
 function toggleEditMode(pontoId, tipo) {
     const key = `${pontoId}-${tipo}`;
@@ -704,7 +704,7 @@ function toggleEditMode(pontoId, tipo) {
     const container = document.getElementById(`preview-${pontoId}-${tipo}`);
     if (container) {
         const mediaItems = container.querySelectorAll('.media-item');
-        console.log(`🔧 V10.2: Toggle modo edição - ${mediaItems.length} media-items para ${pontoId}-${tipo}`);
+        console.log(`🔧 V10.6: Toggle modo edição - ${mediaItems.length} media-items para ${pontoId}-${tipo}`);
 
         mediaItems.forEach(item => {
             if (appData.editMode[key]) {
@@ -719,7 +719,10 @@ function toggleEditMode(pontoId, tipo) {
         console.error(`❌ Container preview-${pontoId}-${tipo} não encontrado ao alternar modo edição!`);
     }
 
-    Logger.info('Modo edição alternado V10.2', { pontoId, tipo, editMode: appData.editMode[key], method: 'CSS class .editing' });
+    // ✅ V10.6: Atualizar UI global
+    updateEditModeUI();
+
+    Logger.info('Modo edição alternado V10.6', { pontoId, tipo, editMode: appData.editMode[key], method: 'CSS class .editing' });
 }
 
 /**
@@ -1765,9 +1768,263 @@ function hidePDFNotification() {
     }, 300);
 }
 
+/**
+ * 📥 V10.6: ADICIONAR BOTÕES DE DOWNLOAD NO MODO CAMPANHA
+ * Adiciona overlay de download no canto superior direito de cada imagem
+ */
+function addDownloadButtonsToCampaign() {
+    // Verificar se estamos no modo campanha
+    const isCampaignMode = appData.mode === 'campanha' ||
+                          window.location.search.includes('campanha=');
+
+    if (!isCampaignMode) {
+        Logger.debug('Não está no modo campanha, pulando botões de download');
+        return;
+    }
+
+    Logger.info('📥 V10.6: Adicionando botões de download no modo campanha...');
+
+    // Encontrar todas as imagens de evidência (dentro de media-preview)
+    const mediaContainers = document.querySelectorAll('.media-preview .media-item');
+    let addedButtons = 0;
+
+    mediaContainers.forEach((container, index) => {
+        // Verificar se já tem download badge (pode estar oculto por CSS)
+        let downloadBadge = container.querySelector('.download-badge');
+
+        if (!downloadBadge) {
+            Logger.warning(`Container ${index} não tem download-badge, ignorando`);
+            return;
+        }
+
+        // Forçar visibilidade do badge no modo campanha
+        downloadBadge.style.display = 'flex';
+        downloadBadge.style.opacity = '1';
+        addedButtons++;
+    });
+
+    Logger.success(`📥 V10.6: ${addedButtons} botões de download tornados visíveis`);
+}
+
+/**
+ * 🖼️ V10.6: SISTEMA DE MODAL CORRIGIDO COM ÍNDICES CORRETOS
+ * Corrige erro "arquivo não encontrado" e seleção de imagem errada
+ */
+let currentModalImages = [];
+let currentModalIndex = 0;
+
+function setupImageModal() {
+    // Verificar se modal já existe
+    if (document.getElementById('image-modal-v10-6')) {
+        return;
+    }
+
+    Logger.info('🖼️ V10.6: Criando modal de imagem corrigido...');
+
+    const modal = document.createElement('div');
+    modal.id = 'image-modal-v10-6';
+    modal.className = 'image-modal-v10-6';
+    modal.style.display = 'none';
+    modal.innerHTML = `
+        <div class="modal-backdrop-v10-6" onclick="closeImageModalV106()"></div>
+        <div class="modal-content-v10-6">
+            <button class="modal-close-v10-6" onclick="closeImageModalV106()">&times;</button>
+            <img class="modal-image-v10-6" src="" alt="Evidência">
+            <div class="modal-nav-v10-6">
+                <button class="modal-prev-v10-6" onclick="navigateModalV106(-1)">❮</button>
+                <span class="modal-counter-v10-6">1 de 1</span>
+                <button class="modal-next-v10-6" onclick="navigateModalV106(1)">❯</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // Adicionar listener de teclado
+    document.addEventListener('keydown', handleModalKeyboardV106);
+
+    Logger.success('🖼️ V10.6: Modal criado com sucesso');
+}
+
+function handleModalKeyboardV106(e) {
+    const modal = document.getElementById('image-modal-v10-6');
+    if (!modal || modal.style.display === 'none') return;
+
+    switch(e.key) {
+        case 'Escape':
+            closeImageModalV106();
+            break;
+        case 'ArrowLeft':
+            navigateModalV106(-1);
+            break;
+        case 'ArrowRight':
+            navigateModalV106(1);
+            break;
+    }
+}
+
+function openImageModalV106(imageUrl, allImages, startIndex) {
+    setupImageModal();
+
+    const modal = document.getElementById('image-modal-v10-6');
+    const modalImage = modal.querySelector('.modal-image-v10-6');
+    const counter = modal.querySelector('.modal-counter-v10-6');
+
+    // Validar parâmetros
+    if (!imageUrl || !allImages || !Array.isArray(allImages)) {
+        Logger.error('Parâmetros inválidos para modal:', { imageUrl, allImages, startIndex });
+        return;
+    }
+
+    // Atualizar estado global
+    currentModalImages = allImages.filter(img => img && img.src);
+    currentModalIndex = Math.max(0, Math.min(startIndex || 0, currentModalImages.length - 1));
+
+    if (currentModalImages.length === 0) {
+        Logger.error('Nenhuma imagem válida encontrada');
+        return;
+    }
+
+    // Mostrar imagem atual
+    const currentImage = currentModalImages[currentModalIndex];
+    modalImage.src = currentImage.src;
+    modalImage.alt = currentImage.alt || `Evidência ${currentModalIndex + 1}`;
+
+    // Atualizar contador
+    counter.textContent = `${currentModalIndex + 1} de ${currentModalImages.length}`;
+
+    // Mostrar modal
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+
+    Logger.success(`🖼️ Modal aberto: imagem ${currentModalIndex + 1} de ${currentModalImages.length}`);
+}
+
+function navigateModalV106(direction) {
+    if (currentModalImages.length === 0) return;
+
+    currentModalIndex += direction;
+
+    // Loop circular
+    if (currentModalIndex < 0) currentModalIndex = currentModalImages.length - 1;
+    if (currentModalIndex >= currentModalImages.length) currentModalIndex = 0;
+
+    // Atualizar imagem
+    const modal = document.getElementById('image-modal-v10-6');
+    const modalImage = modal.querySelector('.modal-image-v10-6');
+    const counter = modal.querySelector('.modal-counter-v10-6');
+
+    const currentImage = currentModalImages[currentModalIndex];
+    modalImage.src = currentImage.src;
+    modalImage.alt = currentImage.alt || `Evidência ${currentModalIndex + 1}`;
+    counter.textContent = `${currentModalIndex + 1} de ${currentModalImages.length}`;
+
+    Logger.debug(`🖼️ Navegou para imagem ${currentModalIndex + 1}`);
+}
+
+function closeImageModalV106() {
+    const modal = document.getElementById('image-modal-v10-6');
+    if (modal) {
+        modal.style.display = 'none';
+        document.body.style.overflow = '';
+    }
+
+    // Limpar estado
+    currentModalImages = [];
+    currentModalIndex = 0;
+
+    Logger.debug('🖼️ Modal fechado');
+}
+
+/**
+ * 🔄 V10.6: SUBSTITUIR SISTEMA DE ZOOM ANTIGO POR MODAL CORRIGIDO
+ * Intercepta cliques em imagens e abre modal correto
+ */
+function attachImageClickHandlersV106() {
+    document.addEventListener('click', (e) => {
+        const imgElement = e.target.closest('img');
+
+        // Ignorar se não é imagem
+        if (!imgElement) return;
+
+        // Ignorar se clicou no botão de download ou delete
+        if (e.target.closest('.download-badge, .delete-badge, .download-overlay-btn, .delete-btn')) {
+            return;
+        }
+
+        // Ignorar logos e imagens de UI
+        if (imgElement.classList.contains('loading-logo') ||
+            imgElement.classList.contains('top-logo') ||
+            imgElement.closest('.loading-screen') ||
+            imgElement.closest('.top-header')) {
+            return;
+        }
+
+        // Apenas imagens dentro de media-preview
+        const mediaPreview = imgElement.closest('.media-preview, .media-preview-large');
+        if (!mediaPreview) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        // Coletar todas as imagens do container
+        const allImagesInPreview = Array.from(mediaPreview.querySelectorAll('img'))
+            .filter(img => !img.classList.contains('loading-logo') && !img.classList.contains('top-logo'));
+
+        // Encontrar índice da imagem clicada
+        const clickedIndex = allImagesInPreview.findIndex(img => img === imgElement);
+
+        if (clickedIndex === -1) {
+            Logger.error('Imagem não encontrada no contexto');
+            return;
+        }
+
+        Logger.info(`🖼️ V10.6: Abrindo modal para imagem ${clickedIndex + 1} de ${allImagesInPreview.length}`);
+
+        // Abrir modal correto
+        openImageModalV106(imgElement.src, allImagesInPreview, clickedIndex);
+    });
+}
+
+/**
+ * ✏️ V10.6: CORRIGIR MODO EDIÇÃO COM BOTÕES "-"
+ * Botões sempre visíveis em todas as evidências, exceto cards principais
+ */
+function updateEditModeUI() {
+    const editModeActive = Object.values(appData.editMode).some(value => value === true);
+
+    if (editModeActive) {
+        document.body.classList.add('edit-mode-active-v10-6');
+        Logger.info('✏️ V10.6: Modo edição ativado - botões "-" visíveis');
+    } else {
+        document.body.classList.remove('edit-mode-active-v10-6');
+        Logger.info('👁️ V10.6: Modo edição desativado - botões "-" ocultos');
+    }
+}
+
+// ✅ EXPORTAR FUNÇÕES V10.6
+window.addDownloadButtonsToCampaign = addDownloadButtonsToCampaign;
+window.openImageModalV106 = openImageModalV106;
+window.closeImageModalV106 = closeImageModalV106;
+window.navigateModalV106 = navigateModalV106;
+
 // ✅ INICIALIZAR APLICAÇÃO QUANDO O DOM ESTIVER PRONTO
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initApp);
+    document.addEventListener('DOMContentLoaded', () => {
+        initApp();
+
+        // ✅ V10.6: Inicializar após carregar
+        setTimeout(() => {
+            addDownloadButtonsToCampaign();
+            attachImageClickHandlersV106();
+        }, 2000);
+    });
 } else {
     initApp();
+
+    // ✅ V10.6: Inicializar após carregar
+    setTimeout(() => {
+        addDownloadButtonsToCampaign();
+        attachImageClickHandlersV106();
+    }, 2000);
 }
