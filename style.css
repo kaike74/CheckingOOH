@@ -549,17 +549,17 @@ body {
     opacity: 1;
 }
 
-/* ✅ MELHORIA: Badge de deletar com "-" vermelho */
+/* ✅ V10.2: Badge de deletar com "-" vermelho - CORRIGIDO PARA MOBILE */
 .delete-badge {
     position: absolute;
     top: 6px;
     right: 6px;
-    width: 26px;
-    height: 26px;
+    width: 32px;
+    height: 32px;
     background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
     color: white;
     border-radius: 50%;
-    display: flex;
+    display: none; /* Oculto por padrão */
     align-items: center;
     justify-content: center;
     font-size: 24px;
@@ -567,56 +567,69 @@ body {
     cursor: pointer;
     box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
     transition: all 0.3s ease;
-    z-index: 10;
+    z-index: 1000; /* Sempre no topo */
     line-height: 1;
     user-select: none;
+    border: 2px solid white;
 }
 
-.delete-badge:hover {
-    transform: scale(1.15);
+/* ✅ V10.2: VISÍVEL quando em modo edição (SEM hover!) */
+.media-item.editing .delete-badge {
+    display: flex !important; /* Força exibição no modo edição */
+}
+
+/* ✅ V10.2: Efeito de toque para mobile */
+.delete-badge:active {
+    transform: scale(0.9);
     box-shadow: 0 4px 12px rgba(239, 68, 68, 0.6);
     background: linear-gradient(135deg, #DC2626 0%, #B91C1C 100%);
 }
 
-.delete-badge:active {
-    transform: scale(0.95);
+/* Desktop: hover opcional */
+@media (hover: hover) {
+    .delete-badge:hover {
+        transform: scale(1.15);
+        box-shadow: 0 4px 12px rgba(239, 68, 68, 0.6);
+    }
 }
 
-/* ✅ MELHORIA: Badge de download com "⬇" verde (modo cliente) */
+/* ✅ V10.2: Badge de download com "⬇" verde - SEMPRE VISÍVEL NO MODO CAMPANHA */
 .download-badge {
     position: absolute;
     top: 6px;
     right: 6px;
-    width: 26px;
-    height: 26px;
+    width: 32px;
+    height: 32px;
     background: linear-gradient(135deg, #10B981 0%, #059669 100%);
     color: white;
     border-radius: 50%;
-    display: flex;
+    display: flex; /* ✅ V10.2: SEMPRE visível no modo campanha */
     align-items: center;
     justify-content: center;
-    font-size: 16px;
+    font-size: 18px;
     font-weight: bold;
     cursor: pointer;
     box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
     transition: all 0.3s ease;
-    z-index: 10;
+    z-index: 1000;
     text-decoration: none;
-    opacity: 0; /* Inicialmente invisível */
+    border: 2px solid white;
+    opacity: 1; /* ✅ V10.2: Sempre visível */
 }
 
-.media-item:hover .download-badge {
-    opacity: 1; /* Aparece no hover */
-}
-
-.download-badge:hover {
-    transform: scale(1.15);
+/* ✅ V10.2: Efeito de toque para mobile */
+.download-badge:active {
+    transform: scale(0.9);
     box-shadow: 0 4px 12px rgba(16, 185, 129, 0.6);
     background: linear-gradient(135deg, #059669 0%, #047857 100%);
 }
 
-.download-badge:active {
-    transform: scale(0.95);
+/* Desktop: hover opcional */
+@media (hover: hover) {
+    .download-badge:hover {
+        transform: scale(1.15);
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.6);
+    }
 }
 
 /* ✅ MELHORIA: Grid maior no modo cliente (fotos maiores) */
@@ -1112,5 +1125,95 @@ body {
 
     .photos-grid {
         grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    }
+}
+
+/* =============================================================================
+    ⏳ TELA DE CARREGAMENTO V10.2
+    ============================================================================= */
+.loading-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #06055B 0%, #8B5CF6 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    transition: opacity 0.5s ease, visibility 0.5s ease;
+}
+
+.loading-screen.hidden {
+    opacity: 0;
+    visibility: hidden;
+}
+
+.loading-content {
+    text-align: center;
+    color: white;
+}
+
+.loading-logo {
+    width: 140px;
+    height: auto;
+    margin-bottom: 40px;
+    animation: pulse 2s infinite ease-in-out;
+}
+
+.loading-spinner {
+    width: 50px;
+    height: 50px;
+    border: 5px solid rgba(255,255,255,0.2);
+    border-top: 5px solid white;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 25px;
+}
+
+.loading-text {
+    font-size: 17px;
+    font-weight: 500;
+    opacity: 0.95;
+    animation: fadeInOut 2.5s infinite ease-in-out;
+    min-height: 30px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.8;
+        transform: scale(1.02);
+    }
+}
+
+@keyframes fadeInOut {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 1; }
+}
+
+@media (max-width: 768px) {
+    .loading-logo {
+        width: 110px;
+        margin-bottom: 30px;
+    }
+
+    .loading-spinner {
+        width: 40px;
+        height: 40px;
+        border-width: 4px;
+    }
+
+    .loading-text {
+        font-size: 15px;
     }
 }

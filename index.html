@@ -12,6 +12,25 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <!-- ✅ V10.2: TELA DE CARREGAMENTO OOH -->
+    <div id="loading-screen" class="loading-screen">
+        <div class="loading-content">
+            <!-- Logo E-MÍDIAS -->
+            <img src="https://raw.githubusercontent.com/kaike74/distribuicaoemidias/main/logo%20E-MIDIAS%20png%20fundo%20escuro%20HORIZONTAL%20(1).png"
+                 alt="E-MÍDIAS"
+                 class="loading-logo"
+                 onerror="this.style.display='none'">
+
+            <!-- Spinner animado -->
+            <div class="loading-spinner"></div>
+
+            <!-- Texto que muda -->
+            <p id="loading-text" class="loading-text">
+                Carregando sistema...
+            </p>
+        </div>
+    </div>
+
     <!-- CABEÇALHO SUPERIOR COM LOGO -->
     <div class="top-header">
         <img src="https://raw.githubusercontent.com/kaike74/distribuicaoemidias/main/logo%20E-MIDIAS%20png%20fundo%20escuro%20HORIZONTAL%20(1).png" 
@@ -146,6 +165,8 @@
   <!-- Scripts -->
   <!-- ✅ V10: jsPDF para geração de relatórios -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <!-- ✅ V10.2: html2canvas para PDF via print -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
   <script src="js/config.js"></script>
   <script src="js/notion-api.js"></script>
