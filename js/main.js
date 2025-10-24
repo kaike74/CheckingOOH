@@ -30,12 +30,11 @@ async function initApp() {
         // Detectar modo de acesso pela URL
         const urlParams = new URLSearchParams(window.location.search);
         const pontoId = urlParams.get('id');
-        const clienteId = urlParams.get('idcliente');
-        const campanhaId = urlParams.get('campanha'); // ✅ NOVO: Modo campanha
+        const campanhaId = urlParams.get('campanha');
         const exibidora = urlParams.get('exibidora');
         const databaseId = urlParams.get('databaseId');
 
-        // ✅ CORREÇÃO 2: Armazenar databaseId e exibidora da URL
+        // ✅ CORREÇÃO: Armazenar databaseId e exibidora da URL
         if (databaseId && databaseId !== 'null' && databaseId !== 'undefined') {
             appData.databaseId = databaseId;
             Logger.info('✅ Database ID obtido da URL:', databaseId);
@@ -50,12 +49,8 @@ async function initApp() {
             // Modo Exibidora
             appData.mode = 'exibidora';
             await loadExibidoraData(pontoId);
-        } else if (clienteId) {
-            // Modo Cliente
-            appData.mode = 'cliente';
-            await loadClienteData(clienteId);
         } else if (campanhaId) {
-            // ✅ NOVO: Modo Campanha
+            // Modo Campanha
             appData.mode = 'campanha';
             await loadCampanhaData(campanhaId);
         } else {
@@ -152,38 +147,6 @@ async function loadCampanhaData(campanhaId) {
     }
 }
 
-/**
- * 👤 CARREGAR DADOS DO CLIENTE
- * Carrega apenas o ponto específico do cliente
- */
-async function loadClienteData(clienteId) {
-    try {
-        Logger.info('Carregando dados do cliente', { clienteId });
-        
-        // Buscar dados no Notion
-        const notionData = await NotionAPI.fetchPontoForCliente(clienteId);
-        
-        appData.exibidora = notionData.ponto.exibidora;
-        appData.pontos = [notionData.ponto]; // Cliente vê apenas seu ponto
-        appData.pontoAtual = notionData.ponto;
-        appData.databaseId = notionData.databaseId; // ✅ NOVO: Armazenar ID da campanha
-        
-        // Atualizar header com endereço do ponto
-        updatePageHeader(`👤 ${appData.pontoAtual.endereco}`, `Modo Cliente • Visualização`);
-        
-        // Renderizar ponto do cliente (somente leitura)
-        await renderPontos(true);
-        
-        Logger.success('Dados do cliente carregados', { 
-            endereco: appData.pontoAtual.endereco,
-            campanhaId: appData.databaseId
-        });
-        
-    } catch (error) {
-        Logger.error('Erro ao carregar dados do cliente', error);
-        throw error;
-    }
-}
 
 /**
  * 🏗️ RENDERIZAR PONTOS
@@ -1015,17 +978,7 @@ function closePhotoModal() {
  * Configura elementos da interface baseado no modo
  */
 function setupInterface() {
-    // Configurar modo cliente (ocultar elementos de exibidora)
-    if (appData.mode === 'cliente') {
-        const style = document.createElement('style');
-        style.textContent = `
-            .btn-camera, .btn[onclick*="openUploadModal"], .btn[onclick*="toggleEditMode"] {
-                display: none !important;
-            }
-        `;
-        document.head.appendChild(style);
-    }
-    
+    // ✅ LIMPEZA: Modo cliente foi removido
     Logger.debug('Interface configurada', { mode: appData.mode });
 }
 
@@ -1040,7 +993,7 @@ function showWelcomeScreen() {
         <div style="text-align: center; padding: 60px 20px;">
             <h2 style="color: #1E293B; margin-bottom: 20px;">👋 Bem-vindo ao Checking OOH</h2>
             <p style="color: #64748B; margin-bottom: 30px;">Para acessar o sistema, use um dos links abaixo:</p>
-            
+
             <div style="max-width: 600px; margin: 0 auto; text-align: left;">
                 <div style="background: #F1F5F9; padding: 20px; border-radius: 12px; margin-bottom: 20px;">
                     <h3 style="color: #1E293B; margin-bottom: 10px;">📢 Modo Exibidora</h3>
@@ -1050,16 +1003,8 @@ function showWelcomeScreen() {
                     </code>
                 </div>
 
-                <div style="background: #F1F5F9; padding: 20px; border-radius: 12px; margin-bottom: 20px;">
-                    <h3 style="color: #1E293B; margin-bottom: 10px;">👤 Modo Cliente</h3>
-                    <p style="color: #64748B; font-size: 14px;">Acesse com o ID do cliente do Notion:</p>
-                    <code style="background: white; padding: 8px 12px; border-radius: 6px; display: block; margin-top: 10px;">
-                        ?idcliente=SEU_CLIENTE_ID
-                    </code>
-                </div>
-
                 <div style="background: linear-gradient(135deg, #F1F5F9 0%, #E0E7FF 100%); padding: 20px; border-radius: 12px; border: 2px solid #06055B;">
-                    <h3 style="color: #06055B; margin-bottom: 10px;">📋 Modo Campanha (Novo!)</h3>
+                    <h3 style="color: #06055B; margin-bottom: 10px;">📋 Modo Campanha</h3>
                     <p style="color: #64748B; font-size: 14px;">Visualize todos os pontos de uma campanha:</p>
                     <code style="background: white; padding: 8px 12px; border-radius: 6px; display: block; margin-top: 10px;">
                         ?campanha=DATABASE_ID

@@ -17,12 +17,11 @@ export async function onRequest(context) {
     try {
         const url = new URL(context.request.url);
         const pontoId = url.searchParams.get('id');
-        const clienteId = url.searchParams.get('idcliente');
         const campanhaId = url.searchParams.get('campanha');
 
-        if (!pontoId && !clienteId && !campanhaId) {
+        if (!pontoId && !campanhaId) {
             return new Response(JSON.stringify({
-                error: 'ID do ponto, cliente ou campanha é obrigatório'
+                error: 'ID do ponto ou campanha é obrigatório'
             }), { status: 400, headers });
         }
 
@@ -33,14 +32,12 @@ export async function onRequest(context) {
             }), { status: 500, headers });
         }
 
-        console.log('🔍 Buscando dados no Notion...', { pontoId, clienteId, campanhaId });
+        console.log('🔍 Buscando dados no Notion...', { pontoId, campanhaId });
 
         let responseData;
 
         if (campanhaId) {
             responseData = await fetchPontosByCampanha(campanhaId, notionToken);
-        } else if (clienteId) {
-            responseData = await fetchPontoForCliente(clienteId, notionToken);
         } else {
             responseData = await fetchPontosForExibidora(pontoId, notionToken);
         }
@@ -143,59 +140,6 @@ async function fetchPontosForExibidora(pontoId, notionToken) {
 
     } catch (error) {
         console.error('❌ Erro ao buscar pontos para exibidora:', error);
-        throw error;
-    }
-}
-
-// =============================================================================
-// 👤 BUSCAR PONTO PARA CLIENTE
-// =============================================================================
-async function fetchPontoForCliente(clienteId, notionToken) {
-    try {
-        console.log('�� Buscando ponto para cliente:', clienteId);
-
-        const normalizedId = normalizeNotionId(clienteId);
-
-        const pontoResponse = await fetch(`https://api.notion.com/v1/pages/${normalizedId}`, {
-            headers: {
-                'Authorization': `Bearer ${notionToken}`,
-                'Notion-Version': '2022-06-28',
-                'Content-Type': 'application/json'
-            }
-        });
-
-        if (!pontoResponse.ok) {
-            const errorText = await pontoResponse.text();
-            throw new Error(`Erro ao buscar ponto do cliente: ${pontoResponse.status} - ${errorText}`);
-        }
-
-        const pontoData = await pontoResponse.json();
-        const pontoExtraido = extractPontoData(pontoData);
-
-        // ✅ CORREÇÃO: Obter databaseId do parent (igual modo exibidora)
-        const databaseId = pontoData.parent?.database_id;
-        if (!databaseId) {
-            throw new Error('Não foi possível determinar o database deste ponto');
-        }
-
-        console.log('✅ Ponto do cliente encontrado:', {
-            id: pontoExtraido.id,
-            endereco: pontoExtraido.endereco,
-            databaseId: databaseId
-        });
-
-        return {
-            success: true,
-            mode: 'cliente',
-            ponto: pontoExtraido,
-            pontos: [pontoExtraido],
-            databaseId: databaseId, // ✅ CORREÇÃO: Adicionar databaseId
-            exibidora: pontoExtraido.exibidora, // ✅ CORREÇÃO: Adicionar exibidora
-            totalPontos: 1
-        };
-
-    } catch (error) {
-        console.error('❌ Erro ao buscar ponto para cliente:', error);
         throw error;
     }
 }

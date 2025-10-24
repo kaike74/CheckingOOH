@@ -74,46 +74,6 @@ async function fetchPontosByCampanha(campanhaId) {
     }
 }
 
-/**
- * 🔍 BUSCAR PONTO PARA CLIENTE
- * Busca apenas um ponto específico para visualização do cliente
- */
-async function fetchPontoForCliente(clienteId) {
-    try {
-        Logger.info('Buscando ponto para cliente', { clienteId });
-        
-        // 🧪 MODO DEMO
-        if (CONFIG.DEMO.ENABLED) {
-            const allSampleData = CONFIG.DEMO.SAMPLE_DATA;
-            const ponto = allSampleData.find(p => p.id === clienteId) || allSampleData[0];
-
-            return {
-                mode: 'cliente',
-                ponto: ponto,
-                pontos: [ponto], // Cliente vê apenas seu ponto
-                databaseId: 'demo-database-id-12345', // ✅ CORREÇÃO: Adicionar databaseId para modo demo cliente
-                exibidora: ponto.exibidora
-            };
-        }
-        
-        // 🔗 CHAMADA REAL PARA A API
-        const response = await fetch(`${getApiBaseUrl()}/api/notion-data?idcliente=${clienteId}`);
-        
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: 'Erro desconhecido' }));
-            throw new Error(errorData.error || `Erro HTTP ${response.status}`);
-        }
-        
-        const data = await response.json();
-        Logger.success('Ponto carregado para cliente', data);
-        
-        return data;
-        
-    } catch (error) {
-        Logger.error('Erro ao buscar ponto para cliente', error);
-        throw error;
-    }
-}
 
 /**
  * 🧪 RESPOSTA MOCK PARA MODO DEMO
@@ -277,8 +237,7 @@ function cleanNotionId(id) {
 // 🚀 EXPORTAR FUNÇÕES
 window.NotionAPI = {
     fetchPontosFromNotion,
-    fetchPontoForCliente,
-    fetchPontosByCampanha, // ✅ NOVO: Buscar pontos por campanha
+    fetchPontosByCampanha,
     updatePontoStatus,
     extractPontoData,
     validateNotionId,
