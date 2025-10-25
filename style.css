@@ -549,11 +549,11 @@ body {
     opacity: 1;
 }
 
-/* ✅ V10.2: Badge de deletar com "-" vermelho - CORRIGIDO PARA MOBILE */
-.delete-badge {
+/* ✅ V10.7.3: Badge de deletar APENAS em media-items */
+.media-item .delete-badge {
     position: absolute;
     top: 6px;
-    right: 6px;
+    left: 6px; /* Lado esquerdo */
     width: 32px;
     height: 32px;
     background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
@@ -567,13 +567,13 @@ body {
     cursor: pointer;
     box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
     transition: all 0.3s ease;
-    z-index: 1000; /* Sempre no topo */
+    z-index: 1000;
     line-height: 1;
     user-select: none;
     border: 2px solid white;
 }
 
-/* ✅ V10.2: VISÍVEL quando em modo edição (SEM hover!) */
+/* ✅ V10.7.3: VISÍVEL quando em modo edição (APENAS em media-items) */
 .media-item.editing .delete-badge {
     display: flex !important; /* Força exibição no modo edição */
 }
@@ -593,28 +593,28 @@ body {
     }
 }
 
-/* ✅ V10.7: Badge de download DISCRETO e PEQUENO - MODO CAMPANHA */
+/* ✅ V10.7.3: Badge de download DISCRETO - APENAS EM MEDIA-ITEMS */
 .download-badge {
     position: absolute;
-    top: 4px;                   /* ✅ Canto superior direito */
+    top: 4px;
     right: 4px;
-    width: 24px;                /* ✅ REDUZIDO para ser discreto */
-    height: 24px;               /* ✅ REDUZIDO para ser discreto */
+    width: 24px;
+    height: 24px;
     background: linear-gradient(135deg, #10B981 0%, #059669 100%);
     color: white;
     border-radius: 50%;
-    display: flex;
+    display: none; /* ✅ V10.7.3: Oculto por padrão, exibido via .media-item .download-badge */
     align-items: center;
     justify-content: center;
-    font-size: 13px;            /* ✅ Ícone menor */
+    font-size: 13px;
     font-weight: bold;
     cursor: pointer;
-    box-shadow: 0 1px 4px rgba(16, 185, 129, 0.3);  /* ✅ Sombra sutil */
+    box-shadow: 0 1px 4px rgba(16, 185, 129, 0.3);
     transition: all 0.3s ease;
     z-index: 1000;
     text-decoration: none;
-    border: 1.5px solid white;  /* ✅ Borda mais fina */
-    opacity: 0.7;               /* ✅ DISCRETO por padrão */
+    border: 1.5px solid white;
+    opacity: 0.7;
 }
 
 /* ✅ V10.7: Efeito de toque para mobile */
@@ -1244,52 +1244,9 @@ body {
 }
 
 /* =============================================================================
-    📥 V10.5: BOTÕES DE DOWNLOAD REPOSICIONADOS (CANTO SUPERIOR DIREITO)
+    📥 V10.7.3: SEÇÃO REMOVIDA - REGRAS DUPLICADAS
     ============================================================================= */
-
-/* ✅ V10.7: Badge de download DISCRETO, PEQUENO e no canto superior direito */
-.download-badge {
-    position: absolute;
-    top: 4px !important;        /* ✅ Canto superior direito */
-    right: 4px;
-    bottom: auto !important;
-    left: auto !important;
-    width: 24px;                /* ✅ REDUZIDO: de 32px para 24px */
-    height: 24px;               /* ✅ REDUZIDO: de 32px para 24px */
-    background: linear-gradient(135deg, #10B981 0%, #059669 100%);
-    color: white;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 13px;            /* ✅ REDUZIDO: de 18px para 13px */
-    font-weight: bold;
-    cursor: pointer;
-    box-shadow: 0 1px 4px rgba(16, 185, 129, 0.3);  /* ✅ Sombra mais sutil */
-    transition: all 0.3s ease;
-    z-index: 1000;
-    text-decoration: none;
-    border: 1.5px solid white;  /* ✅ Borda mais fina */
-    opacity: 0.7;               /* ✅ DISCRETO: Opacidade reduzida */
-    backdrop-filter: blur(4px);
-}
-
-/* Efeito de toque para mobile */
-.download-badge:active {
-    transform: scale(0.9);
-    opacity: 1;
-    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.6);
-    background: linear-gradient(135deg, #059669 0%, #047857 100%);
-}
-
-/* Desktop: hover para destacar */
-@media (hover: hover) {
-    .download-badge:hover {
-        transform: scale(1.2);   /* ✅ Aumenta um pouco ao passar mouse */
-        opacity: 1;              /* ✅ Opacidade total ao hover */
-        box-shadow: 0 2px 8px rgba(16, 185, 129, 0.6);
-    }
-}
+/* ✅ V10.7.3: Regras movidas para cima (~linha 596) para evitar duplicação */
 
 /* =============================================================================
     📄 V10.5: NOTIFICAÇÃO FLUTUANTE PARA PDF
@@ -1473,50 +1430,24 @@ body {
 }
 
 /* =============================================================================
-    📥 V10.6: BOTÕES DE DOWNLOAD SEMPRE VISÍVEIS NO MODO CAMPANHA
+    📥 V10.7.3: BOTÕES DE DOWNLOAD APENAS EM ARQUIVOS
     ============================================================================= */
 
-/* Garantir que download badges sejam sempre visíveis no modo campanha */
-body[data-mode="campanha"] .download-badge,
-.campanha-mode .download-badge {
+/* ✅ V10.7.3: Download badges APENAS dentro de media-items */
+.media-item .download-badge {
     display: flex !important;
-    opacity: 1 !important;
+    opacity: 0.7 !important; /* Discreto por padrão */
+}
+
+.media-item .download-badge:hover {
+    opacity: 1 !important; /* Visível ao hover */
 }
 
 /* =============================================================================
     ✏️ V10.6: MODO EDIÇÃO CORRIGIDO - BOTÕES SEMPRE VISÍVEIS
     ============================================================================= */
 
-/* ✅ FORÇAR BOTÕES DE DELETE SEMPRE VISÍVEIS (SEM HOVER) */
-.media-item.editing .delete-badge {
-    display: flex !important; /* SEMPRE VISÍVEL */
-    position: absolute !important;
-    top: 6px !important;
-    left: 6px !important; /* LADO ESQUERDO */
-    width: 32px !important;
-    height: 32px !important;
-    background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%) !important;
-    color: white !important;
-    border-radius: 50% !important;
-    align-items: center !important;
-    justify-content: center !important;
-    font-size: 20px !important;
-    font-weight: bold !important;
-    cursor: pointer !important;
-    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.6) !important;
-    z-index: 1001 !important;
-    line-height: 1 !important;
-    user-select: none !important;
-    border: 2px solid white !important;
-    opacity: 1 !important;
-    visibility: visible !important;
-}
-
-/* Remover qualquer regra de hover que oculte */
-.delete-badge {
-    display: none; /* Oculto por padrão */
-}
-
+/* ✅ V10.7.3: Efeitos de hover e active para delete badges */
 .media-item.editing .delete-badge:hover {
     transform: scale(1.15) !important;
     box-shadow: 0 4px 12px rgba(239, 68, 68, 0.8) !important;
@@ -1524,14 +1455,6 @@ body[data-mode="campanha"] .download-badge,
 
 .media-item.editing .delete-badge:active {
     transform: scale(0.9) !important;
-}
-
-/* NÃO mostrar delete em logos, headers, etc */
-.loading-logo .delete-badge,
-.top-logo .delete-badge,
-.loading-screen .delete-badge,
-.top-header .delete-badge {
-    display: none !important;
 }
 
 /* =============================================================================

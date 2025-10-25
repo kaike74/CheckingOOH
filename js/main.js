@@ -1800,80 +1800,13 @@ function hidePDFNotification() {
 }
 
 /**
- * 📥 V10.6: ADICIONAR BOTÕES DE DOWNLOAD NO MODO CAMPANHA
- * CRIA botões de download no canto superior direito se não existirem
+ * 📥 V10.7.3: FUNÇÃO REMOVIDA - BOTÕES JÁ SÃO CRIADOS EM updateMediaPreview()
+ * Esta função causava duplicação de botões e foi desativada.
  */
 function addDownloadButtonsToCampaign() {
-    // Verificar se estamos no modo campanha
-    const isCampaignMode = appData.mode === 'campanha' ||
-                          window.location.search.includes('campanha=');
-
-    if (!isCampaignMode) {
-        Logger.debug('Não está no modo campanha, pulando botões de download');
-        return;
-    }
-
-    Logger.info('📥 V10.6: Adicionando botões de download no modo campanha...');
-
-    // Encontrar todas as imagens de evidência
-    const mediaContainers = document.querySelectorAll('.media-preview .media-item');
-    let createdButtons = 0;
-
-    mediaContainers.forEach((container) => {
-        // Verificar se já tem download badge
-        let downloadBadge = container.querySelector('.download-badge');
-
-        if (downloadBadge) {
-            // Forçar visibilidade
-            downloadBadge.style.display = 'flex';
-            downloadBadge.style.opacity = '1';
-            downloadBadge.style.visibility = 'visible';
-            createdButtons++;
-            Logger.debug('Download badge já existe, forçando visibilidade');
-        } else {
-            // CRIAR o botão de download
-            const img = container.querySelector('img');
-            if (!img) return;
-
-            downloadBadge = document.createElement('a');
-            downloadBadge.className = 'download-badge';
-            downloadBadge.href = `https://drive.google.com/uc?export=download&id=${extractFileId(img.src)}`;
-            downloadBadge.innerHTML = '⬇';
-            downloadBadge.title = 'Baixar arquivo';
-            downloadBadge.style.cssText = `
-                position: absolute;
-                top: 4px;
-                right: 4px;
-                width: 24px;
-                height: 24px;
-                background: linear-gradient(135deg, #10B981 0%, #059669 100%);
-                color: white;
-                border-radius: 50%;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 13px;
-                font-weight: bold;
-                cursor: pointer;
-                box-shadow: 0 1px 4px rgba(16, 185, 129, 0.3);
-                z-index: 1000;
-                text-decoration: none;
-                border: 1.5px solid white;
-                opacity: 0.7;
-                backdrop-filter: blur(4px);
-            `;
-
-            downloadBadge.onclick = (e) => {
-                e.stopPropagation(); // Não abrir zoom ao clicar no download
-            };
-
-            container.appendChild(downloadBadge);
-            createdButtons++;
-            Logger.debug('Download badge criado');
-        }
-    });
-
-    Logger.success(`📥 V10.6: ${createdButtons} botões de download adicionados/visíveis`);
+    // ✅ V10.7.3: Função desativada - botões são criados diretamente em updateMediaPreview()
+    Logger.debug('addDownloadButtonsToCampaign() desativada - botões criados em updateMediaPreview()');
+    return;
 }
 
 /**
