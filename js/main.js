@@ -1770,7 +1770,7 @@ function hidePDFNotification() {
 
 /**
  * 📥 V10.6: ADICIONAR BOTÕES DE DOWNLOAD NO MODO CAMPANHA
- * Adiciona overlay de download no canto superior direito de cada imagem
+ * CRIA botões de download no canto superior direito se não existirem
  */
 function addDownloadButtonsToCampaign() {
     // Verificar se estamos no modo campanha
@@ -1784,26 +1784,88 @@ function addDownloadButtonsToCampaign() {
 
     Logger.info('📥 V10.6: Adicionando botões de download no modo campanha...');
 
-    // Encontrar todas as imagens de evidência (dentro de media-preview)
-    const mediaContainers = document.querySelectorAll('.media-preview .media-item');
-    let addedButtons = 0;
+    // Encontrar todas as imagens de evidência
+    const mediaContainers = document.querySelectorAll('.media-preview .media-item, .media-preview-large .media-item');
+    let createdButtons = 0;
 
-    mediaContainers.forEach((container, index) => {
-        // Verificar se já tem download badge (pode estar oculto por CSS)
+    mediaContainers.forEach((container) => {
+        // Verificar se já tem download badge
         let downloadBadge = container.querySelector('.download-badge');
 
-        if (!downloadBadge) {
-            Logger.warning(`Container ${index} não tem download-badge, ignorando`);
-            return;
-        }
+        if (downloadBadge) {
+            // Forçar visibilidade
+            downloadBadge.style.display = 'flex';
+            downloadBadge.style.opacity = '1';
+            downloadBadge.style.visibility = 'visible';
+            createdButtons++;
+            Logger.debug('Download badge já existe, forçando visibilidade');
+        } else {
+            // CRIAR o botão de download
+            const img = container.querySelector('img');
+            if (!img) return;
 
-        // Forçar visibilidade do badge no modo campanha
-        downloadBadge.style.display = 'flex';
-        downloadBadge.style.opacity = '1';
-        addedButtons++;
+            downloadBadge = document.createElement('a');
+            downloadBadge.className = 'download-badge';
+            downloadBadge.href = `https://drive.google.com/uc?export=download&id=${extractFileId(img.src)}`;
+            downloadBadge.innerHTML = '⬇';
+            downloadBadge.title = 'Baixar arquivo';
+            downloadBadge.style.cssText = `
+                position: absolute;
+                top: 6px;
+                right: 6px;
+                width: 32px;
+                height: 32px;
+                background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+                color: white;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 18px;
+                font-weight: bold;
+                cursor: pointer;
+                box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+                z-index: 1000;
+                text-decoration: none;
+                border: 2px solid white;
+                opacity: 1;
+                backdrop-filter: blur(4px);
+            `;
+
+            downloadBadge.onclick = (e) => {
+                e.stopPropagation(); // Não abrir zoom ao clicar no download
+            };
+
+            container.appendChild(downloadBadge);
+            createdButtons++;
+            Logger.debug('Download badge criado');
+        }
     });
 
-    Logger.success(`📥 V10.6: ${addedButtons} botões de download tornados visíveis`);
+    Logger.success(`📥 V10.6: ${createdButtons} botões de download adicionados/visíveis`);
+}
+
+/**
+ * 🔗 EXTRAIR FILE ID DO GOOGLE DRIVE URL
+ */
+function extractFileId(url) {
+    if (!url) return '';
+
+    // Tentar extrair de diferentes formatos de URL
+    const patterns = [
+        /id=([^&]+)/,
+        /\/d\/([^/]+)/,
+        /\/file\/d\/([^/]+)/
+    ];
+
+    for (const pattern of patterns) {
+        const match = url.match(pattern);
+        if (match && match[1]) {
+            return match[1];
+        }
+    }
+
+    return '';
 }
 
 /**
@@ -1937,8 +1999,8 @@ function closeImageModalV106() {
 }
 
 /**
- * 🔄 V10.6: SUBSTITUIR SISTEMA DE ZOOM ANTIGO POR MODAL CORRIGIDO
- * Intercepta cliques em imagens e abre modal correto
+ * 🔄 V10.6: ZOOM SIMPLES - SEM CARROSSEL
+ * Apenas abre a imagem clicada em tela cheia
  */
 function attachImageClickHandlersV106() {
     document.addEventListener('click', (e) => {
@@ -1948,7 +2010,7 @@ function attachImageClickHandlersV106() {
         if (!imgElement) return;
 
         // Ignorar se clicou no botão de download ou delete
-        if (e.target.closest('.download-badge, .delete-badge, .download-overlay-btn, .delete-btn')) {
+        if (e.target.closest('.download-badge, .delete-badge')) {
             return;
         }
 
@@ -1967,23 +2029,92 @@ function attachImageClickHandlersV106() {
         e.preventDefault();
         e.stopPropagation();
 
-        // Coletar todas as imagens do container
-        const allImagesInPreview = Array.from(mediaPreview.querySelectorAll('img'))
-            .filter(img => !img.classList.contains('loading-logo') && !img.classList.contains('top-logo'));
-
-        // Encontrar índice da imagem clicada
-        const clickedIndex = allImagesInPreview.findIndex(img => img === imgElement);
-
-        if (clickedIndex === -1) {
-            Logger.error('Imagem não encontrada no contexto');
-            return;
-        }
-
-        Logger.info(`🖼️ V10.6: Abrindo modal para imagem ${clickedIndex + 1} de ${allImagesInPreview.length}`);
-
-        // Abrir modal correto
-        openImageModalV106(imgElement.src, allImagesInPreview, clickedIndex);
+        // ZOOM SIMPLES: Apenas abrir a imagem clicada
+        openSimpleZoom(imgElement.src, imgElement.alt || 'Evidência');
     });
+}
+
+/**
+ * 🔍 V10.6: ZOOM SIMPLES
+ * Abre apenas a imagem em tela cheia - SEM navegação
+ */
+function openSimpleZoom(imageUrl, imageAlt) {
+    // Remover zoom antigo se existir
+    closeSimpleZoom();
+
+    Logger.info('🔍 V10.6: Abrindo zoom simples');
+
+    const zoomDiv = document.createElement('div');
+    zoomDiv.id = 'simple-zoom-v106';
+    zoomDiv.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.95);
+        z-index: 99999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: zoom-out;
+    `;
+
+    zoomDiv.onclick = closeSimpleZoom;
+
+    const img = document.createElement('img');
+    img.src = imageUrl;
+    img.alt = imageAlt;
+    img.style.cssText = `
+        max-width: 90vw;
+        max-height: 90vh;
+        object-fit: contain;
+        border-radius: 8px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+    `;
+
+    const closeBtn = document.createElement('button');
+    closeBtn.innerHTML = '&times;';
+    closeBtn.style.cssText = `
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        background: transparent;
+        border: none;
+        color: white;
+        font-size: 50px;
+        cursor: pointer;
+        z-index: 100000;
+        width: 60px;
+        height: 60px;
+    `;
+    closeBtn.onclick = (e) => {
+        e.stopPropagation();
+        closeSimpleZoom();
+    };
+
+    zoomDiv.appendChild(img);
+    zoomDiv.appendChild(closeBtn);
+    document.body.appendChild(zoomDiv);
+    document.body.style.overflow = 'hidden';
+
+    // Fechar com ESC
+    document.addEventListener('keydown', handleZoomEscape);
+}
+
+function closeSimpleZoom() {
+    const zoom = document.getElementById('simple-zoom-v106');
+    if (zoom) {
+        zoom.remove();
+        document.body.style.overflow = '';
+    }
+    document.removeEventListener('keydown', handleZoomEscape);
+}
+
+function handleZoomEscape(e) {
+    if (e.key === 'Escape') {
+        closeSimpleZoom();
+    }
 }
 
 /**
