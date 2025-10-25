@@ -593,42 +593,44 @@ body {
     }
 }
 
-/* ✅ V10.2: Badge de download com "⬇" verde - SEMPRE VISÍVEL NO MODO CAMPANHA */
+/* ✅ V10.7: Badge de download DISCRETO e PEQUENO - MODO CAMPANHA */
 .download-badge {
     position: absolute;
-    top: 6px;
-    right: 6px;
-    width: 32px;
-    height: 32px;
+    top: 4px;                   /* ✅ Canto superior direito */
+    right: 4px;
+    width: 24px;                /* ✅ REDUZIDO para ser discreto */
+    height: 24px;               /* ✅ REDUZIDO para ser discreto */
     background: linear-gradient(135deg, #10B981 0%, #059669 100%);
     color: white;
     border-radius: 50%;
-    display: flex; /* ✅ V10.2: SEMPRE visível no modo campanha */
+    display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 18px;
+    font-size: 13px;            /* ✅ Ícone menor */
     font-weight: bold;
     cursor: pointer;
-    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+    box-shadow: 0 1px 4px rgba(16, 185, 129, 0.3);  /* ✅ Sombra sutil */
     transition: all 0.3s ease;
     z-index: 1000;
     text-decoration: none;
-    border: 2px solid white;
-    opacity: 1; /* ✅ V10.2: Sempre visível */
+    border: 1.5px solid white;  /* ✅ Borda mais fina */
+    opacity: 0.7;               /* ✅ DISCRETO por padrão */
 }
 
-/* ✅ V10.2: Efeito de toque para mobile */
+/* ✅ V10.7: Efeito de toque para mobile */
 .download-badge:active {
     transform: scale(0.9);
-    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.6);
+    opacity: 1;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.6);
     background: linear-gradient(135deg, #059669 0%, #047857 100%);
 }
 
-/* Desktop: hover opcional */
+/* Desktop: hover para destacar quando necessário */
 @media (hover: hover) {
     .download-badge:hover {
-        transform: scale(1.15);
-        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.6);
+        transform: scale(1.2);   /* ✅ Cresce suavemente */
+        opacity: 1;              /* ✅ Fica totalmente visível */
+        box-shadow: 0 2px 8px rgba(16, 185, 129, 0.6);
     }
 }
 
@@ -1245,45 +1247,47 @@ body {
     📥 V10.5: BOTÕES DE DOWNLOAD REPOSICIONADOS (CANTO SUPERIOR DIREITO)
     ============================================================================= */
 
-/* ✅ V10.5: REPOSICIONAR badge de download para canto SUPERIOR direito */
+/* ✅ V10.7: Badge de download DISCRETO, PEQUENO e no canto superior direito */
 .download-badge {
     position: absolute;
-    top: 6px !important;        /* ✅ MUDADO: de bottom para top */
-    right: 6px;
-    bottom: auto !important;     /* ✅ GARANTIR que não use bottom */
+    top: 4px !important;        /* ✅ Canto superior direito */
+    right: 4px;
+    bottom: auto !important;
     left: auto !important;
-    width: 32px;
-    height: 32px;
+    width: 24px;                /* ✅ REDUZIDO: de 32px para 24px */
+    height: 24px;               /* ✅ REDUZIDO: de 32px para 24px */
     background: linear-gradient(135deg, #10B981 0%, #059669 100%);
     color: white;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 18px;
+    font-size: 13px;            /* ✅ REDUZIDO: de 18px para 13px */
     font-weight: bold;
     cursor: pointer;
-    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+    box-shadow: 0 1px 4px rgba(16, 185, 129, 0.3);  /* ✅ Sombra mais sutil */
     transition: all 0.3s ease;
     z-index: 1000;
     text-decoration: none;
-    border: 2px solid white;
-    opacity: 1;
+    border: 1.5px solid white;  /* ✅ Borda mais fina */
+    opacity: 0.7;               /* ✅ DISCRETO: Opacidade reduzida */
     backdrop-filter: blur(4px);
 }
 
 /* Efeito de toque para mobile */
 .download-badge:active {
     transform: scale(0.9);
-    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.6);
+    opacity: 1;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.6);
     background: linear-gradient(135deg, #059669 0%, #047857 100%);
 }
 
-/* Desktop: hover opcional */
+/* Desktop: hover para destacar */
 @media (hover: hover) {
     .download-badge:hover {
-        transform: scale(1.15);
-        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.6);
+        transform: scale(1.2);   /* ✅ Aumenta um pouco ao passar mouse */
+        opacity: 1;              /* ✅ Opacidade total ao hover */
+        box-shadow: 0 2px 8px rgba(16, 185, 129, 0.6);
     }
 }
 

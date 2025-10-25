@@ -1811,24 +1811,24 @@ function addDownloadButtonsToCampaign() {
             downloadBadge.title = 'Baixar arquivo';
             downloadBadge.style.cssText = `
                 position: absolute;
-                top: 6px;
-                right: 6px;
-                width: 32px;
-                height: 32px;
+                top: 4px;
+                right: 4px;
+                width: 24px;
+                height: 24px;
                 background: linear-gradient(135deg, #10B981 0%, #059669 100%);
                 color: white;
                 border-radius: 50%;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                font-size: 18px;
+                font-size: 13px;
                 font-weight: bold;
                 cursor: pointer;
-                box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+                box-shadow: 0 1px 4px rgba(16, 185, 129, 0.3);
                 z-index: 1000;
                 text-decoration: none;
-                border: 2px solid white;
-                opacity: 1;
+                border: 1.5px solid white;
+                opacity: 0.7;
                 backdrop-filter: blur(4px);
             `;
 
