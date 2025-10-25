@@ -285,8 +285,8 @@ async function createSecaoElement(ponto, tipo, readOnly = false) {
     
     // Preview de mídia
     const previewDiv = document.createElement('div');
-    // ✅ MELHORIA: Grid maior no modo cliente (fotos maiores)
-    previewDiv.className = readOnly ? 'media-preview media-preview-large' : 'media-preview';
+    // ✅ V10.7.2: Mesmo tamanho em ambos os modos (80px)
+    previewDiv.className = 'media-preview';
     previewDiv.id = `preview-${ponto.id}-${tipo}`;
 
     // ✅ LAZY LOADING: Sempre usar placeholder, carregar sob demanda
@@ -445,10 +445,9 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false, containerPar
             // ✅ V10.7: Não definir onclick aqui - será tratado pelo img.onclick abaixo
         
         if (DriveAPI.isVideoFile(file.mimeType)) {
-            // ✅ CORREÇÃO: Vídeo com thumbnail e ícone de play
+            // ✅ V10.7.2: Vídeo com download ao clicar
             const videoThumb = file.thumbnailUrl || `https://drive.google.com/thumbnail?id=${file.id}&sz=w400`;
 
-            // ✅ MELHORIA: Removido timestamp conforme solicitado
             mediaItem.innerHTML = `
                 <div style="
                     position: relative;
@@ -471,7 +470,7 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false, containerPar
                         justify-content: center;
                         color: white;
                         font-size: 20px;
-                    ">▶</div>
+                    ">⬇</div>
                     <div style="
                         position: absolute;
                         top: 4px;
@@ -485,6 +484,32 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false, containerPar
                     ">VÍDEO</div>
                 </div>
             `;
+
+            // ✅ V10.7.2: Adicionar onclick para baixar vídeo
+            mediaItem.onclick = (e) => {
+                e.stopPropagation();
+                const a = document.createElement('a');
+                a.href = `https://drive.google.com/uc?export=download&id=${file.id}`;
+                a.download = file.name || 'video.mp4';
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                console.log(`📥 Download iniciado: ${file.name}`);
+            };
+
+            // ✅ V10.7.2: Adicionar botão de download também nos vídeos (modo campanha)
+            if (readOnly) {
+                const downloadBtn = document.createElement('a');
+                downloadBtn.href = `https://drive.google.com/uc?export=download&id=${file.id}`;
+                downloadBtn.className = 'download-badge';
+                downloadBtn.innerHTML = '⬇';
+                downloadBtn.title = 'Baixar vídeo';
+                downloadBtn.onclick = (e) => {
+                    e.stopPropagation(); // Não disparar o onclick do mediaItem
+                };
+                mediaItem.appendChild(downloadBtn);
+            }
         } else {
             // Imagem com fallback
             const img = document.createElement('img');
@@ -670,8 +695,8 @@ async function loadPontoMediaIfNeeded(ponto, tipo, readOnly = false) {
     if (!isLoaded) {
         console.log(`📥 Lazy loading: Carregando arquivos ${tipo} para ponto ${ponto.id} [readOnly: ${readOnly}]`);
 
-        // ✅ OTIMIZAÇÃO: Mostrar skeleton loaders durante carregamento
-        previewDiv.className = readOnly ? 'media-preview-large loading' : 'media-preview loading';
+        // ✅ V10.7.2: Usar mesmo tamanho (80px) em todos os modos
+        previewDiv.className = 'media-preview loading';
         previewDiv.innerHTML = `
             <div class="skeleton skeleton-media-item"></div>
             <div class="skeleton skeleton-media-item"></div>
@@ -679,7 +704,7 @@ async function loadPontoMediaIfNeeded(ponto, tipo, readOnly = false) {
         `;
 
         await loadMediaPreview(ponto, tipo, previewDiv, readOnly);
-        previewDiv.className = readOnly ? 'media-preview-large' : 'media-preview'; // Remover classe loading
+        previewDiv.className = 'media-preview'; // Remover classe loading
         previewDiv.dataset.loaded = 'true';
 
         Logger.info('Arquivos carregados via lazy loading', { pontoId: ponto.id, tipo, readOnly });
@@ -1791,7 +1816,7 @@ function addDownloadButtonsToCampaign() {
     Logger.info('📥 V10.6: Adicionando botões de download no modo campanha...');
 
     // Encontrar todas as imagens de evidência
-    const mediaContainers = document.querySelectorAll('.media-preview .media-item, .media-preview-large .media-item');
+    const mediaContainers = document.querySelectorAll('.media-preview .media-item');
     let createdButtons = 0;
 
     mediaContainers.forEach((container) => {
@@ -2029,7 +2054,7 @@ function attachImageClickHandlersV106() {
         }
 
         // Apenas imagens dentro de media-preview
-        const mediaPreview = imgElement.closest('.media-preview, .media-preview-large');
+        const mediaPreview = imgElement.closest('.media-preview');
         if (!mediaPreview) return;
 
         e.preventDefault();
