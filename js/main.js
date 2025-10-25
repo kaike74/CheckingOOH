@@ -442,8 +442,7 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false, containerPar
             const currentIndex = fileIndex++;
             const mediaItem = document.createElement('div');
             mediaItem.className = 'media-item';
-            // ✅ CORREÇÃO: Usar index correto do array ao clicar
-            mediaItem.onclick = () => openMediaCarousel(pontoId, tipo, currentIndex);
+            // ✅ V10.7: Não definir onclick aqui - será tratado pelo img.onclick abaixo
         
         if (DriveAPI.isVideoFile(file.mimeType)) {
             // ✅ CORREÇÃO: Vídeo com thumbnail e ícone de play
@@ -516,6 +515,12 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false, containerPar
 
             img.src = file.url;
             console.log(`🖼️ [${readOnly ? 'CLIENTE' : 'EXIBIDORA'}] Carregando imagem ${file.name} de: ${file.url}`);
+
+            // ✅ V10.7: Adicionar click handler para zoom simples (sem alert)
+            img.onclick = (e) => {
+                e.stopPropagation();
+                openSimpleZoom(file.url, file.name);
+            };
 
             // ✅ MELHORIA: Timestamp removido conforme solicitado
             mediaItem.appendChild(img);
@@ -595,8 +600,8 @@ async function togglePontoContent(pontoId) {
             const ponto = appData.pontos.find(p => p.id === pontoId);
             if (ponto) {
                 await Promise.all([
-                    loadPontoMediaIfNeeded(ponto, 'entrada'),
-                    loadPontoMediaIfNeeded(ponto, 'saida')
+                    loadPontoMediaIfNeeded(ponto, 'entrada', false),
+                    loadPontoMediaIfNeeded(ponto, 'saida', false)
                 ]);
             }
         }
@@ -629,9 +634,10 @@ function togglePontoLazy(pontoId) {
                 const ponto = appData.pontos.find(p => p.id === pontoId);
                 if (ponto) {
                     // Carregar entrada e saída em PARALELO (sem await - não bloqueia)
+                    // ✅ V10.7: Passar readOnly=true para mostrar botões de download
                     Promise.all([
-                        loadPontoMediaIfNeeded(ponto, 'entrada'),
-                        loadPontoMediaIfNeeded(ponto, 'saida')
+                        loadPontoMediaIfNeeded(ponto, 'entrada', true),
+                        loadPontoMediaIfNeeded(ponto, 'saida', true)
                     ]).then(() => {
                         content.dataset.loaded = 'true';
                         Logger.success('Fotos carregadas em background', { pontoId });
@@ -654,7 +660,7 @@ function togglePontoLazy(pontoId) {
  * 📥 CARREGAR MÍDIA SE NECESSÁRIO (LAZY LOADING)
  * Carrega arquivos apenas se ainda não foram carregados
  */
-async function loadPontoMediaIfNeeded(ponto, tipo) {
+async function loadPontoMediaIfNeeded(ponto, tipo, readOnly = false) {
     const previewDiv = document.getElementById(`preview-${ponto.id}-${tipo}`);
 
     if (!previewDiv) return;
@@ -662,21 +668,21 @@ async function loadPontoMediaIfNeeded(ponto, tipo) {
     const isLoaded = previewDiv.dataset.loaded === 'true';
 
     if (!isLoaded) {
-        console.log(`📥 Lazy loading: Carregando arquivos ${tipo} para ponto ${ponto.id}`);
+        console.log(`📥 Lazy loading: Carregando arquivos ${tipo} para ponto ${ponto.id} [readOnly: ${readOnly}]`);
 
         // ✅ OTIMIZAÇÃO: Mostrar skeleton loaders durante carregamento
-        previewDiv.className = 'media-preview loading';
+        previewDiv.className = readOnly ? 'media-preview-large loading' : 'media-preview loading';
         previewDiv.innerHTML = `
             <div class="skeleton skeleton-media-item"></div>
             <div class="skeleton skeleton-media-item"></div>
             <div class="skeleton skeleton-media-item"></div>
         `;
 
-        await loadMediaPreview(ponto, tipo, previewDiv, false);
-        previewDiv.className = 'media-preview'; // Remover classe loading
+        await loadMediaPreview(ponto, tipo, previewDiv, readOnly);
+        previewDiv.className = readOnly ? 'media-preview-large' : 'media-preview'; // Remover classe loading
         previewDiv.dataset.loaded = 'true';
 
-        Logger.info('Arquivos carregados via lazy loading', { pontoId: ponto.id, tipo });
+        Logger.info('Arquivos carregados via lazy loading', { pontoId: ponto.id, tipo, readOnly });
     }
 }
 
@@ -1431,8 +1437,8 @@ async function generateCampanhaPDF() {
                     // ✅ V10.4: CARREGAR fotos de cada ponto expandido
                     if (content.dataset.loaded === 'false') {
                         await Promise.all([
-                            loadPontoMediaIfNeeded(ponto, 'entrada'),
-                            loadPontoMediaIfNeeded(ponto, 'saida')
+                            loadPontoMediaIfNeeded(ponto, 'entrada', true),
+                            loadPontoMediaIfNeeded(ponto, 'saida', true)
                         ]);
                     }
 
