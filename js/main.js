@@ -527,37 +527,45 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false, containerPar
         }
         
         // ✅ V10.2: Badge de delete - controlado por CSS class .editing
+        // ✅ V10.7.1: APENAS adicionar badge se houver img ou vídeo no mediaItem
         if (!readOnly) {
-            const deleteBtn = document.createElement('div');
-            deleteBtn.className = 'delete-badge';
-            deleteBtn.innerHTML = '−'; // Sinal de menos
-            deleteBtn.dataset.pontoId = pontoId;
-            deleteBtn.dataset.tipo = tipo;
-            deleteBtn.onclick = (e) => {
-                e.stopPropagation(); // Não abrir carrossel ao clicar no -
-                deleteFile(file.id, file.name, pontoId, tipo);
-            };
-            mediaItem.appendChild(deleteBtn);
+            const hasMedia = mediaItem.querySelector('img') || mediaItem.querySelector('video');
+            if (hasMedia) {
+                const deleteBtn = document.createElement('div');
+                deleteBtn.className = 'delete-badge';
+                deleteBtn.innerHTML = '−'; // Sinal de menos
+                deleteBtn.dataset.pontoId = pontoId;
+                deleteBtn.dataset.tipo = tipo;
+                deleteBtn.onclick = (e) => {
+                    e.stopPropagation(); // Não abrir carrossel ao clicar no -
+                    deleteFile(file.id, file.name, pontoId, tipo);
+                };
+                mediaItem.appendChild(deleteBtn);
 
-            // ✅ V10.2: Se modo edição já está ativo, adicionar classe .editing
-            const currentEditMode = isEditMode(pontoId, tipo);
-            if (currentEditMode) {
-                mediaItem.classList.add('editing');
+                // ✅ V10.2: Se modo edição já está ativo, adicionar classe .editing
+                const currentEditMode = isEditMode(pontoId, tipo);
+                if (currentEditMode) {
+                    mediaItem.classList.add('editing');
+                }
+                console.log(`🗑️ V10.7.1: Badge criado para ${file.name} - editMode: ${currentEditMode}`);
             }
-            console.log(`🗑️ V10.2: Badge criado para ${file.name} - editMode: ${currentEditMode}`);
         }
 
         // ✅ MELHORIA: Botão de download individual (modo cliente)
+        // ✅ V10.7.1: APENAS adicionar badge se houver img ou vídeo no mediaItem
         if (readOnly) {
-            const downloadBtn = document.createElement('a');
-            downloadBtn.href = `https://drive.google.com/uc?export=download&id=${file.id}`;
-            downloadBtn.className = 'download-badge';
-            downloadBtn.innerHTML = '⬇';
-            downloadBtn.title = 'Baixar arquivo';
-            downloadBtn.onclick = (e) => {
-                e.stopPropagation(); // Não abrir carrossel ao clicar no download
-            };
-            mediaItem.appendChild(downloadBtn);
+            const hasMedia = mediaItem.querySelector('img') || mediaItem.querySelector('video');
+            if (hasMedia) {
+                const downloadBtn = document.createElement('a');
+                downloadBtn.href = `https://drive.google.com/uc?export=download&id=${file.id}`;
+                downloadBtn.className = 'download-badge';
+                downloadBtn.innerHTML = '⬇';
+                downloadBtn.title = 'Baixar arquivo';
+                downloadBtn.onclick = (e) => {
+                    e.stopPropagation(); // Não abrir carrossel ao clicar no download
+                };
+                mediaItem.appendChild(downloadBtn);
+            }
         }
 
             container.appendChild(mediaItem);
@@ -1775,8 +1783,8 @@ function hidePDFNotification() {
 }
 
 /**
- * 📥 V10.6: ADICIONAR BOTÕES DE DOWNLOAD NO MODO CAMPANHA
- * CRIA botões de download no canto superior direito se não existirem
+ * 📥 V10.7.1: ADICIONAR BOTÕES DE DOWNLOAD NO MODO CAMPANHA
+ * CRIA botões de download APENAS em fotos/vídeos (não em containers externos)
  */
 function addDownloadButtonsToCampaign() {
     // Verificar se estamos no modo campanha
@@ -1788,13 +1796,22 @@ function addDownloadButtonsToCampaign() {
         return;
     }
 
-    Logger.info('📥 V10.6: Adicionando botões de download no modo campanha...');
+    Logger.info('📥 V10.7.1: Adicionando botões de download no modo campanha...');
 
-    // Encontrar todas as imagens de evidência
+    // Encontrar APENAS media-items que contenham imagens ou vídeos
     const mediaContainers = document.querySelectorAll('.media-preview .media-item, .media-preview-large .media-item');
     let createdButtons = 0;
 
     mediaContainers.forEach((container) => {
+        // ✅ V10.7.1: VERIFICAR se o container realmente tem img ou video
+        const img = container.querySelector('img');
+        const video = container.querySelector('video');
+
+        if (!img && !video) {
+            Logger.debug('Container sem mídia, pulando...');
+            return; // Pular containers sem mídia
+        }
+
         // Verificar se já tem download badge
         let downloadBadge = container.querySelector('.download-badge');
 
@@ -1807,12 +1824,15 @@ function addDownloadButtonsToCampaign() {
             Logger.debug('Download badge já existe, forçando visibilidade');
         } else {
             // CRIAR o botão de download
-            const img = container.querySelector('img');
-            if (!img) return;
+            const fileId = extractFileId(img ? img.src : video.src);
+            if (!fileId) {
+                Logger.debug('Sem file ID, pulando...');
+                return;
+            }
 
             downloadBadge = document.createElement('a');
             downloadBadge.className = 'download-badge';
-            downloadBadge.href = `https://drive.google.com/uc?export=download&id=${extractFileId(img.src)}`;
+            downloadBadge.href = `https://drive.google.com/uc?export=download&id=${fileId}`;
             downloadBadge.innerHTML = '⬇';
             downloadBadge.title = 'Baixar arquivo';
             downloadBadge.style.cssText = `
@@ -1848,7 +1868,7 @@ function addDownloadButtonsToCampaign() {
         }
     });
 
-    Logger.success(`📥 V10.6: ${createdButtons} botões de download adicionados/visíveis`);
+    Logger.success(`📥 V10.7.1: ${createdButtons} botões de download adicionados/visíveis`);
 }
 
 /**
