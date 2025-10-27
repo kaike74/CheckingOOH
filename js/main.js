@@ -337,7 +337,7 @@ async function loadMediaPreview(ponto, tipo, container, readOnly = false) {
         }
 
     } catch (error) {
-        Logger.warning('Erro ao carregar preview de mídia', error);
+        Logger.debug('Erro ao carregar preview de mídia');
         container.innerHTML = '<p style="text-align: center; color: #EF4444; font-size: 12px;">Erro ao carregar</p>';
     }
 }
@@ -911,7 +911,7 @@ async function confirmPendingDeletesBackground(pontoId, tipo) {
     if (errorCount === 0) {
         Logger.success(`🗑️ ${successCount} arquivo(s) excluído(s) com sucesso!`);
     } else {
-        Logger.warning(`⚠️ ${successCount} excluído(s), ${errorCount} erro(s)`);
+        Logger.info(`⚠️ ${successCount} excluído(s), ${errorCount} erro(s)`);
     }
 }
 
@@ -1892,7 +1892,7 @@ async function generatePDFReport() {
                         saida: { files: saidaFiles, images: saidaImages }
                     };
                 } catch (error) {
-                    Logger.warn(`Erro ao carregar fotos do ponto ${ponto.id}`, error);
+                    Logger.debug(`Erro ao carregar fotos do ponto ${ponto.id}`);
                     return {
                         ponto,
                         entrada: { files: [], images: [] },
@@ -1928,10 +1928,16 @@ async function generatePDFReport() {
         let logoBase64 = null;
         try {
             // Tentar carregar a logo horizontal
-            const logoUrl = './LogoEmidias.png'; // Logo local como fallback
+            const logoUrl = 'https://emidiastec.com.br/wp-content/smush-avif/2025/03/logo-E-MIDIAS-png-fundo-escuro-HORIZONTAL.png.avif';
             logoBase64 = await loadImageAsBase64Fast(logoUrl);
         } catch (error) {
-            Logger.warn('Não foi possível carregar logo', error);
+            Logger.debug('Logo não carregada, usando fallback');
+            // Fallback: usar logo local se existir
+            try {
+                logoBase64 = await loadImageAsBase64Fast('./LogoEmidias.png');
+            } catch (e) {
+                Logger.debug('Logo local também não disponível');
+            }
         }
 
         // Helper: Adicionar cabeçalho
@@ -1944,7 +1950,15 @@ async function generatePDFReport() {
                 try {
                     pdf.addImage(logoBase64, 'PNG', margin, 8, 40, 20); // Logo 40x20mm
                 } catch (e) {
-                    Logger.warn('Erro ao adicionar logo', e);
+                    // Fallback silencioso para texto
+                    pdf.setTextColor(255, 255, 255);
+                    pdf.setFontSize(22);
+                    pdf.setFont('helvetica', 'bold');
+                    pdf.text('E-MÍDIAS', margin, 15);
+
+                    pdf.setFontSize(10);
+                    pdf.setFont('helvetica', 'normal');
+                    pdf.text('Soluções em Mídia Externa', margin, 22);
                 }
             } else {
                 // Fallback: texto
@@ -1975,12 +1989,15 @@ async function generatePDFReport() {
         yPos = addHeader();
 
         // Carregar ícone da página do Notion (se existir)
+        // NOTA: Pode falhar por CORS em ícones hospedados externamente
         let pageIconBase64 = null;
         if (appData.pageIcon) {
             try {
                 pageIconBase64 = await loadImageAsBase64Fast(appData.pageIcon);
+                Logger.info('✅ Ícone da página carregado com sucesso');
             } catch (error) {
-                Logger.warn('Erro ao carregar ícone da página', error);
+                // Erro de CORS é comum e esperado - usar título sem ícone
+                Logger.info('ℹ️ Ícone da página não disponível (CORS/rede) - usando título sem ícone');
             }
         }
 
@@ -1998,8 +2015,7 @@ async function generatePDFReport() {
                 pdf.setFont('helvetica', 'bold');
                 pdf.text(campanhaTitle, margin + 25, yPos + 13);
             } catch (e) {
-                Logger.warn('Erro ao adicionar ícone da página', e);
-                // Fallback: título centralizado sem ícone
+                // Fallback silencioso: título centralizado sem ícone
                 pdf.setTextColor(255, 255, 255);
                 pdf.setFontSize(16);
                 pdf.setFont('helvetica', 'bold');
@@ -2124,7 +2140,7 @@ async function generatePDFReport() {
                         try {
                             pdf.addImage(images[idx], 'JPEG', photoX, photoY, photoW, photoH);
                         } catch (e) {
-                            Logger.warn('Erro ao adicionar imagem', e);
+                            Logger.debug('Erro ao adicionar imagem ao PDF');
                         }
                     }
                 } else {
