@@ -135,14 +135,18 @@ async function uploadCapturedPhoto(photoFile) {
         
         // Mostrar progresso
         showUploadProgress('Enviando foto capturada...');
-        
-        // ✅ ALTERADO: Passar databaseId para uploadFileToDrive
+
+        // 🔧 NORMALIZAR IDS para prevenir duplicação de pastas
+        const normalizedPontoId = normalizeNotionId(currentPontoId);
+        const normalizedDatabaseId = normalizeNotionId(currentDatabaseId);
+
+        // ✅ ALTERADO: Passar databaseId normalizado para uploadFileToDrive
         const result = await DriveAPI.uploadFileToDrive(
             photoFile,
             currentExibidora,
-            currentPontoId,
+            normalizedPontoId,
             currentTipo,
-            currentDatabaseId
+            normalizedDatabaseId
         );
         
         hideUploadProgress();

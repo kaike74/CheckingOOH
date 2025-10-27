@@ -170,12 +170,16 @@ async function startUpload() {
                 updateUploadProgress((uploadedFiles / totalFiles) * 100);
                 showUploadProgress('Enviando arquivos...');
 
+                // 🔧 NORMALIZAR IDS para prevenir duplicação de pastas
+                const normalizedPontoId = normalizeNotionId(currentUploadContext.pontoId);
+                const normalizedDatabaseId = normalizeNotionId(currentUploadContext.databaseId);
+
                 const result = await DriveAPI.uploadFileToDrive(
                     file,
                     currentUploadContext.exibidora,
-                    currentUploadContext.pontoId,
+                    normalizedPontoId,
                     currentUploadContext.tipo,
-                    currentUploadContext.databaseId
+                    normalizedDatabaseId
                 );
 
                 if (result.success) {
@@ -300,9 +304,13 @@ function hideUploadProgress() {
 async function refreshFilesList(exibidora, pontoId, tipo, databaseId) { // ✅ NOVO: Receber databaseId
     try {
         Logger.info('Recarregando lista de arquivos', { exibidora, pontoId, tipo, databaseId });
-        
-        // ✅ ALTERADO: Passar databaseId para listDriveFiles
-        const result = await DriveAPI.listDriveFiles(exibidora, pontoId, tipo, databaseId);
+
+        // 🔧 NORMALIZAR IDS para prevenir duplicação de pastas
+        const normalizedPontoId = normalizeNotionId(pontoId);
+        const normalizedDatabaseId = normalizeNotionId(databaseId);
+
+        // ✅ ALTERADO: Passar databaseId normalizado para listDriveFiles
+        const result = await DriveAPI.listDriveFiles(exibidora, normalizedPontoId, tipo, normalizedDatabaseId);
         
         if (result.success) {
             // Atualizar preview na interface

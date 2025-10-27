@@ -13,6 +13,34 @@ const appData = {
 };
 
 /**
+ * 🔧 NORMALIZAR ID DO NOTION
+ * Converte IDs do Notion para formato consistente com hífens
+ * Previne duplicação de pastas no Drive
+ *
+ * @param {string} id - ID do Notion (com ou sem hífens)
+ * @returns {string} - ID normalizado (formato: 8-4-4-4-12)
+ */
+function normalizeNotionId(id) {
+    if (!id || typeof id !== 'string') {
+        return id;
+    }
+
+    // Remover hífens existentes
+    const cleanId = id.replace(/-/g, '');
+
+    // Verificar se tem 32 caracteres
+    if (cleanId.length !== 32) {
+        Logger.warning('ID do Notion com tamanho inválido', { id, length: cleanId.length });
+        return id; // Retornar original se inválido
+    }
+
+    // Adicionar hífens no formato padrão: 8-4-4-4-12
+    const normalized = `${cleanId.slice(0, 8)}-${cleanId.slice(8, 12)}-${cleanId.slice(12, 16)}-${cleanId.slice(16, 20)}-${cleanId.slice(20, 32)}`;
+
+    return normalized;
+}
+
+/**
  * 🎬 INICIALIZAR APLICAÇÃO V10.5
  * ✅ Com tela de carregamento OOH + remoção de textos "Carregando" residuais
  */
@@ -325,7 +353,12 @@ async function loadMediaPreview(ponto, tipo, container, readOnly = false) {
 
         // ✅ CORREÇÃO: Usar ponto.exibidora em vez de appData.exibidora (importante para modo campanha)
         const exibidora = ponto.exibidora || appData.exibidora;
-        const result = await DriveAPI.listDriveFiles(exibidora, ponto.id, tipo, appData.databaseId);
+
+        // 🔧 NORMALIZAR IDS para prevenir duplicação de pastas
+        const normalizedPontoId = normalizeNotionId(ponto.id);
+        const normalizedDatabaseId = normalizeNotionId(appData.databaseId);
+
+        const result = await DriveAPI.listDriveFiles(exibidora, normalizedPontoId, tipo, normalizedDatabaseId);
 
         if (result.success && result.files.length > 0) {
             // ✅ CORREÇÃO: Passar container como parâmetro
@@ -1081,7 +1114,12 @@ async function openPhotoModal(pontoId, tipo) {
 
         // ✅ CORREÇÃO: Usar exibidora do ponto
         const exibidora = ponto.exibidora || appData.exibidora;
-        const result = await DriveAPI.listDriveFiles(exibidora, pontoId, tipo, appData.databaseId);
+
+        // 🔧 NORMALIZAR IDS para prevenir duplicação de pastas
+        const normalizedPontoId = normalizeNotionId(pontoId);
+        const normalizedDatabaseId = normalizeNotionId(appData.databaseId);
+
+        const result = await DriveAPI.listDriveFiles(exibidora, normalizedPontoId, tipo, normalizedDatabaseId);
         
         const container = document.getElementById('photos-grid');
         container.innerHTML = '';
@@ -1582,8 +1620,12 @@ async function downloadAllFiles(pontoId, tipo) {
         const ponto = appData.pontos.find(p => p.id === pontoId);
         const exibidora = ponto?.exibidora || appData.exibidora;
 
+        // 🔧 NORMALIZAR IDS para prevenir duplicação de pastas
+        const normalizedPontoId = normalizeNotionId(pontoId);
+        const normalizedDatabaseId = normalizeNotionId(appData.databaseId);
+
         // Buscar arquivos
-        const result = await DriveAPI.listDriveFiles(exibidora, pontoId, tipo, appData.databaseId);
+        const result = await DriveAPI.listDriveFiles(exibidora, normalizedPontoId, tipo, normalizedDatabaseId);
 
         if (!result.success || result.files.length === 0) {
             alert('Nenhum arquivo para baixar');
@@ -1895,10 +1937,14 @@ async function generatePDFReport() {
         const pontosData = await Promise.all(
             appData.pontos.map(async (ponto) => {
                 try {
+                    // 🔧 NORMALIZAR IDS para prevenir duplicação de pastas
+                    const normalizedPontoId = normalizeNotionId(ponto.id);
+                    const normalizedDatabaseId = normalizeNotionId(appData.databaseId);
+
                     // Buscar entrada e saída em PARALELO
                     const [entradaData, saidaData] = await Promise.all([
-                        DriveAPI.listDriveFiles(ponto.exibidora, ponto.id, 'entrada', appData.databaseId),
-                        DriveAPI.listDriveFiles(ponto.exibidora, ponto.id, 'saida', appData.databaseId)
+                        DriveAPI.listDriveFiles(ponto.exibidora, normalizedPontoId, 'entrada', normalizedDatabaseId),
+                        DriveAPI.listDriveFiles(ponto.exibidora, normalizedPontoId, 'saida', normalizedDatabaseId)
                     ]);
 
                     const entradaFiles = (entradaData.files || []).slice(0, 4); // Máx 4 fotos
