@@ -12,7 +12,8 @@ function makeLockKey(parentId, folderName) {
 
 function escapeForQuery(name) {
   if (typeof name !== 'string') return name;
-  return name.replace(/'/g, "\\'");
+  // Escape backslashes first, then single quotes
+  return name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
 async function findFolder(folderName, parentId, accessToken) {
