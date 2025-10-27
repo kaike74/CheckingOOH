@@ -101,7 +101,7 @@ async function loadExibidoraData(pontoId) {
         Logger.info('✅ Database ID da campanha:', appData.databaseId);
         
         // Atualizar header
-        updatePageHeader(`📢 ${appData.exibidora}`, `Modo Exibidora • ${appData.pontos.length} ponto(s)`);
+        updatePageHeader(appData.exibidora, `Modo Exibidora • ${appData.pontos.length} ponto(s)`);
         
         // Mostrar informações da exibidora
         showExibidoraInfo();
@@ -136,9 +136,12 @@ async function loadCampanhaData(campanhaId) {
         appData.pontos = notionData.pontos;
         appData.databaseId = campanhaId;
         appData.pontoAtual = null; // Não há ponto atual específico
+        appData.pageTitle = notionData.pageTitle; // ✅ Armazenar título da página pai
+        appData.pageIcon = notionData.pageIcon; // ✅ Armazenar ícone da página pai
 
-        // Atualizar header
-        updatePageHeader(`📋 Campanha Completa`, `Visualização Geral • ${appData.pontos.length} ponto(s) de todas as exibidoras`);
+        // Atualizar header com título da página pai (sem emoji)
+        const campanhaTitle = notionData.pageTitle || 'Campanha Completa';
+        updatePageHeader(campanhaTitle, `Visualização Geral • ${appData.pontos.length} ponto(s) de todas as exibidoras`);
 
         // ✅ V10: Adicionar botão PDF no header
         addPDFButton();
@@ -148,7 +151,8 @@ async function loadCampanhaData(campanhaId) {
 
         Logger.success('Dados da campanha carregados', {
             pontosCount: appData.pontos.length,
-            campanhaId: appData.databaseId
+            campanhaId: appData.databaseId,
+            pageTitle: notionData.pageTitle
         });
 
     } catch (error) {
@@ -333,7 +337,7 @@ async function loadMediaPreview(ponto, tipo, container, readOnly = false) {
         }
 
     } catch (error) {
-        Logger.warning('Erro ao carregar preview de mídia', error);
+        Logger.debug('Erro ao carregar preview de mídia');
         container.innerHTML = '<p style="text-align: center; color: #EF4444; font-size: 12px;">Erro ao carregar</p>';
     }
 }
@@ -907,7 +911,7 @@ async function confirmPendingDeletesBackground(pontoId, tipo) {
     if (errorCount === 0) {
         Logger.success(`🗑️ ${successCount} arquivo(s) excluído(s) com sucesso!`);
     } else {
-        Logger.warning(`⚠️ ${successCount} excluído(s), ${errorCount} erro(s)`);
+        Logger.info(`⚠️ ${successCount} excluído(s), ${errorCount} erro(s)`);
     }
 }
 
@@ -1669,7 +1673,7 @@ function addPDFButton() {
     pdfButton.id = 'btn-gerar-pdf';
     pdfButton.className = 'btn btn-primary';
     pdfButton.innerHTML = '📄 Gerar Relatório PDF';
-    pdfButton.onclick = generateCampanhaPDF;
+    pdfButton.onclick = generatePDFReport; // ✅ NOVO: Usar função melhorada
     pdfButton.style.cssText = `
         padding: 12px 24px;
         font-size: 16px;
@@ -1830,6 +1834,499 @@ async function generateCampanhaPDF() {
     }
 }
 
+// =============================================================================
+// 📄 NOVA GERAÇÃO DE PDF COM jsPDF - RÁPIDO E COM FOTOS GRANDES
+// =============================================================================
+/**
+ * 📄 GERAR PDF MELHORADO V2
+ * - Layout profissional com grid 2 colunas (entrada/saída)
+ * - Carregamento paralelo de fotos (OTIMIZADO)
+ * - Fotos em grid 2x2 dentro de cada seção
+ * - Status visual com badges
+ */
+async function generatePDFReport() {
+    try {
+        if (!window.jspdf || !window.jspdf.jsPDF) {
+            showPDFNotification('❌ Biblioteca jsPDF não carregada', 'error');
+            setTimeout(hidePDFNotification, 3000);
+            return;
+        }
+
+        Logger.info('🚀 Gerando PDF melhorado V2 com layout profissional');
+        showPDFNotification('📄 Preparando PDF...', 'progress');
+
+        // ========================================
+        // FASE 1: PRÉ-CARREGAR TODAS AS FOTOS EM PARALELO (OTIMIZAÇÃO)
+        // ========================================
+        showPDFNotification('📸 Carregando fotos em alta qualidade...', 'progress');
+
+        const pontosData = await Promise.all(
+            appData.pontos.map(async (ponto) => {
+                try {
+                    // Buscar entrada e saída em PARALELO
+                    const [entradaData, saidaData] = await Promise.all([
+                        DriveAPI.listDriveFiles(ponto.exibidora, ponto.id, 'entrada', appData.databaseId),
+                        DriveAPI.listDriveFiles(ponto.exibidora, ponto.id, 'saida', appData.databaseId)
+                    ]);
+
+                    const entradaFiles = (entradaData.files || []).slice(0, 4); // Máx 4 fotos
+                    const saidaFiles = (saidaData.files || []).slice(0, 4); // Máx 4 fotos
+
+                    Logger.info(`📸 Ponto ${ponto.endereco}: ${entradaFiles.length} entrada, ${saidaFiles.length} saída`);
+
+                    // Carregar imagens em PARALELO
+                    const [entradaResults, saidaResults] = await Promise.all([
+                        Promise.allSettled(entradaFiles.map(f => {
+                            // ✅ CORRIGIDO: Usar propriedades corretas retornadas pelo backend
+                            // Backend retorna: url, thumbnailUrl, downloadUrl, alternativeUrls
+                            const url = f.url ||
+                                       f.thumbnailUrl ||
+                                       f.downloadUrl ||
+                                       (f.alternativeUrls && f.alternativeUrls[0]) ||
+                                       (f.id ? `https://drive.google.com/uc?id=${f.id}&export=view` : null);
+
+                            Logger.info(`🔄 Carregando entrada: ${f.name}`);
+                            Logger.info(`   Propriedades disponíveis:`, {
+                                url: f.url?.substring(0, 80),
+                                thumbnailUrl: f.thumbnailUrl?.substring(0, 80),
+                                downloadUrl: f.downloadUrl?.substring(0, 80),
+                                alternativeUrls: f.alternativeUrls?.length || 0
+                            });
+                            Logger.info(`   URL escolhida: ${url?.substring(0, 100) || 'NENHUMA URL DISPONÍVEL!'}`);
+
+                            if (!url) {
+                                return Promise.reject(new Error('URL não disponível'));
+                            }
+
+                            return loadImageAsBase64Fast(url);
+                        })),
+                        Promise.allSettled(saidaFiles.map(f => {
+                            // ✅ CORRIGIDO: Usar propriedades corretas retornadas pelo backend
+                            const url = f.url ||
+                                       f.thumbnailUrl ||
+                                       f.downloadUrl ||
+                                       (f.alternativeUrls && f.alternativeUrls[0]) ||
+                                       (f.id ? `https://drive.google.com/uc?id=${f.id}&export=view` : null);
+
+                            Logger.info(`🔄 Carregando saída: ${f.name}`);
+                            Logger.info(`   Propriedades disponíveis:`, {
+                                url: f.url?.substring(0, 80),
+                                thumbnailUrl: f.thumbnailUrl?.substring(0, 80),
+                                downloadUrl: f.downloadUrl?.substring(0, 80),
+                                alternativeUrls: f.alternativeUrls?.length || 0
+                            });
+                            Logger.info(`   URL escolhida: ${url?.substring(0, 100) || 'NENHUMA URL DISPONÍVEL!'}`);
+
+                            if (!url) {
+                                return Promise.reject(new Error('URL não disponível'));
+                            }
+
+                            return loadImageAsBase64Fast(url);
+                        }))
+                    ]);
+
+                    // Filtrar apenas imagens que carregaram com sucesso e logar falhas
+                    const entradaImages = [];
+                    entradaResults.forEach((r, idx) => {
+                        if (r.status === 'fulfilled') {
+                            entradaImages.push(r.value);
+                            Logger.debug(`✅ Entrada ${idx + 1} carregada com sucesso`);
+                        } else {
+                            Logger.error(`❌ Entrada ${idx + 1} falhou: ${r.reason?.message || 'erro desconhecido'}`);
+                        }
+                    });
+
+                    const saidaImages = [];
+                    saidaResults.forEach((r, idx) => {
+                        if (r.status === 'fulfilled') {
+                            saidaImages.push(r.value);
+                            Logger.debug(`✅ Saída ${idx + 1} carregada com sucesso`);
+                        } else {
+                            Logger.error(`❌ Saída ${idx + 1} falhou: ${r.reason?.message || 'erro desconhecido'}`);
+                        }
+                    });
+
+                    Logger.info(`✅ Carregadas: ${entradaImages.length}/${entradaFiles.length} entrada, ${saidaImages.length}/${saidaFiles.length} saída`);
+
+                    return {
+                        ponto,
+                        entrada: { files: entradaFiles, images: entradaImages },
+                        saida: { files: saidaFiles, images: saidaImages }
+                    };
+                } catch (error) {
+                    Logger.debug(`Erro ao carregar fotos do ponto ${ponto.id}`);
+                    return {
+                        ponto,
+                        entrada: { files: [], images: [] },
+                        saida: { files: [], images: [] }
+                    };
+                }
+            })
+        );
+
+        // Calcular resumo
+        const pontosComEntrada = pontosData.filter(p => p.entrada.files.length > 0).length;
+        const pontosComSaida = pontosData.filter(p => p.saida.files.length > 0).length;
+
+        // ========================================
+        // FASE 2: GERAR PDF COM LAYOUT PROFISSIONAL
+        // ========================================
+        showPDFNotification('📄 Montando relatório...', 'progress');
+
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF('p', 'mm', 'a4');
+
+        const pageWidth = 210;
+        const pageHeight = 297;
+        const margin = 15;
+        const contentWidth = pageWidth - 2 * margin;
+        let yPos = margin;
+        let pageNum = 1;
+
+        const campanhaTitle = appData.pageTitle || 'Campanha Completa';
+        const dataAtual = new Date().toLocaleDateString('pt-BR');
+
+        // Carregar logo E-MÍDIAS do site (não usar fallback local)
+        let logoBase64 = null;
+        try {
+            const logoUrl = 'https://emidiastec.com.br/wp-content/smush-avif/2025/03/logo-E-MIDIAS-png-fundo-escuro-HORIZONTAL.png.avif';
+            logoBase64 = await loadImageAsBase64Fast(logoUrl);
+            Logger.info('✅ Logo E-MÍDIAS carregada do site');
+        } catch (error) {
+            Logger.info('ℹ️ Logo não disponível, usando texto');
+            // Não usar fallback local - ir direto para texto
+        }
+
+        // Helper: Adicionar cabeçalho
+        const addHeader = () => {
+            // Usar cores E-MÍDIAS (#06055B)
+            pdf.setFillColor(6, 5, 91); // #06055B - Primary E-MÍDIAS
+            pdf.rect(0, 0, pageWidth, 35, 'F');
+
+            // Adicionar logo se disponível
+            if (logoBase64) {
+                try {
+                    pdf.addImage(logoBase64, 'PNG', margin, 8, 40, 20); // Logo 40x20mm
+                } catch (e) {
+                    // Fallback silencioso para texto
+                    pdf.setTextColor(255, 255, 255);
+                    pdf.setFontSize(22);
+                    pdf.setFont('helvetica', 'bold');
+                    pdf.text('E-MÍDIAS', margin, 15);
+
+                    pdf.setFontSize(10);
+                    pdf.setFont('helvetica', 'normal');
+                    pdf.text('Soluções em Mídia Externa', margin, 22);
+                }
+            } else {
+                // Fallback: texto
+                pdf.setTextColor(255, 255, 255);
+                pdf.setFontSize(22);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text('E-MÍDIAS', margin, 15);
+
+                pdf.setFontSize(10);
+                pdf.setFont('helvetica', 'normal');
+                pdf.text('Soluções em Mídia Externa', margin, 22);
+            }
+
+            pdf.setTextColor(255, 255, 255);
+            pdf.setFontSize(11);
+            pdf.setFont('helvetica', 'bold');
+            pdf.text('Relatório de Monitoramento', pageWidth - margin, 15, { align: 'right' });
+
+            pdf.setFontSize(9);
+            pdf.setFont('helvetica', 'normal');
+            pdf.text(`Data: ${dataAtual}`, pageWidth - margin, 22, { align: 'right' });
+            pdf.text(`Página ${pageNum}`, pageWidth - margin, 28, { align: 'right' });
+
+            return 45; // yPos após cabeçalho
+        };
+
+        // Primeira página - Cabeçalho
+        yPos = addHeader();
+
+        // Carregar ícone da página do Notion (se existir)
+        // NOTA: Pode falhar por CORS em ícones hospedados externamente
+        let pageIconBase64 = null;
+        if (appData.pageIcon) {
+            try {
+                pageIconBase64 = await loadImageAsBase64Fast(appData.pageIcon);
+                Logger.info('✅ Ícone da página carregado com sucesso');
+            } catch (error) {
+                // Erro de CORS é comum e esperado - usar título sem ícone
+                Logger.info('ℹ️ Ícone da página não disponível (CORS/rede) - usando título sem ícone');
+            }
+        }
+
+        // Título da campanha com gradiente E-MÍDIAS
+        pdf.setFillColor(6, 5, 91); // #06055B - Primary E-MÍDIAS
+        pdf.roundedRect(margin, yPos, contentWidth, 25, 3, 3, 'F');
+
+        // Adicionar ícone da página se disponível
+        if (pageIconBase64) {
+            try {
+                pdf.addImage(pageIconBase64, 'PNG', margin + 5, yPos + 5, 15, 15);
+                // Título com espaço para o ícone
+                pdf.setTextColor(255, 255, 255);
+                pdf.setFontSize(16);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text(campanhaTitle, margin + 25, yPos + 13);
+            } catch (e) {
+                // Fallback silencioso: título centralizado sem ícone
+                pdf.setTextColor(255, 255, 255);
+                pdf.setFontSize(16);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text(campanhaTitle, pageWidth / 2, yPos + 12, { align: 'center' });
+            }
+        } else {
+            // Título centralizado sem ícone
+            pdf.setTextColor(255, 255, 255);
+            pdf.setFontSize(16);
+            pdf.setFont('helvetica', 'bold');
+            pdf.text(campanhaTitle, pageWidth / 2, yPos + 12, { align: 'center' });
+        }
+
+        pdf.setFontSize(10);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text('Relatório completo de monitoramento de painéis', pageWidth / 2, yPos + 19, { align: 'center' });
+        yPos += 32;
+
+        // Cards de resumo
+        const cardWidth = (contentWidth - 20) / 3;
+
+        const drawSummaryCard = (x, y, title, value) => {
+            pdf.setFillColor(248, 250, 252);
+            pdf.setDrawColor(226, 232, 240);
+            pdf.roundedRect(x, y, cardWidth, 18, 2, 2, 'FD');
+
+            pdf.setTextColor(107, 114, 128);
+            pdf.setFontSize(8);
+            pdf.setFont('helvetica', 'normal');
+            pdf.text(title, x + cardWidth / 2, y + 6, { align: 'center' });
+
+            pdf.setTextColor(30, 64, 175);
+            pdf.setFontSize(18);
+            pdf.setFont('helvetica', 'bold');
+            pdf.text(value.toString(), x + cardWidth / 2, y + 14, { align: 'center' });
+        };
+
+        drawSummaryCard(margin, yPos, 'Total de Pontos', appData.pontos.length);
+        drawSummaryCard(margin + cardWidth + 10, yPos, 'Pontos com Entrada', pontosComEntrada);
+        drawSummaryCard(margin + 2 * cardWidth + 20, yPos, 'Pontos com Saída', pontosComSaida);
+        yPos += 28;
+
+        // ========================================
+        // RENDERIZAR CADA PONTO
+        // ========================================
+        for (let i = 0; i < pontosData.length; i++) {
+            const { ponto, entrada, saida } = pontosData[i];
+
+            showPDFNotification(`📝 Adicionando ponto ${i + 1}/${pontosData.length} ao PDF...`, 'progress');
+
+            // Calcular altura necessária para o ponto
+            const maxFotos = Math.max(entrada.images.length, saida.images.length);
+            const numRows = Math.ceil(maxFotos / 2);
+            const photoHeight = 35;
+            const pontoHeight = 12 + (numRows * photoHeight) + 20;
+
+            // Verificar se precisa de nova página
+            if (yPos + pontoHeight > pageHeight - 15) {
+                pdf.addPage();
+                pageNum++;
+                yPos = addHeader();
+            }
+
+            // Header do ponto
+            pdf.setFillColor(248, 250, 252);
+            pdf.setDrawColor(6, 5, 91); // Borda azul E-MÍDIAS
+            pdf.roundedRect(margin, yPos, contentWidth, 12, 2, 2, 'FD');
+
+            pdf.setTextColor(6, 5, 91); // Texto azul E-MÍDIAS
+            pdf.setFontSize(11);
+            pdf.setFont('helvetica', 'bold');
+            pdf.text(`${ponto.endereco}`, margin + 2, yPos + 6);
+
+            pdf.setFontSize(8);
+            pdf.setFont('helvetica', 'normal');
+            pdf.setTextColor(100, 116, 139); // Gray mais escuro
+            pdf.text(`Exibidora: ${ponto.exibidora}`, margin + 2, yPos + 10);
+
+            yPos += 15;
+
+            // Grid 2 colunas: ENTRADA | SAÍDA
+            const colWidth = (contentWidth - 5) / 2;
+
+            // Helper: Desenhar seção
+            const drawSection = (x, title, files, images, color) => {
+                let sectionY = yPos;
+
+                // Header da seção
+                pdf.setFillColor(color.r, color.g, color.b);
+                pdf.roundedRect(x, sectionY, colWidth, 8, 2, 2, 'F');
+                pdf.setTextColor(255, 255, 255);
+                pdf.setFontSize(9);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text(title, x + 2, sectionY + 5.5);
+                sectionY += 10;
+
+                // Status badge
+                if (files.length > 0) {
+                    pdf.setFillColor(220, 252, 231);
+                    pdf.setTextColor(22, 101, 52);
+                } else {
+                    pdf.setFillColor(254, 243, 199);
+                    pdf.setTextColor(146, 64, 14);
+                }
+                pdf.roundedRect(x + 2, sectionY, 20, 5, 1, 1, 'F');
+                pdf.setFontSize(7);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text(files.length > 0 ? 'Completo' : 'Pendente', x + 12, sectionY + 3.5, { align: 'center' });
+                sectionY += 8;
+
+                // Fotos em grid 2x2
+                if (images.length > 0) {
+                    const photoW = (colWidth - 6) / 2;
+                    const photoH = 30;
+
+                    for (let idx = 0; idx < Math.min(4, images.length); idx++) {
+                        const col = idx % 2;
+                        const row = Math.floor(idx / 2);
+                        const photoX = x + 2 + (col * (photoW + 2));
+                        const photoY = sectionY + (row * (photoH + 2));
+
+                        try {
+                            pdf.addImage(images[idx], 'JPEG', photoX, photoY, photoW, photoH);
+                        } catch (e) {
+                            Logger.debug('Erro ao adicionar imagem ao PDF');
+                        }
+                    }
+                } else {
+                    // Mensagem "sem fotos"
+                    pdf.setTextColor(156, 163, 175);
+                    pdf.setFontSize(8);
+                    pdf.setFont('helvetica', 'italic');
+                    const msg = title.includes('ENTRADA')
+                        ? 'Aguardando fotos de instalação'
+                        : 'Aguardando fotos de retirada';
+                    pdf.text(msg, x + colWidth / 2, sectionY + 10, { align: 'center' });
+                }
+            };
+
+            // Renderizar colunas com cores E-MÍDIAS
+            drawSection(margin, 'ENTRADA', entrada.files, entrada.images, { r: 16, g: 185, b: 129 }); // #10B981 - Success
+            drawSection(margin + colWidth + 5, 'SAIDA', saida.files, saida.images, { r: 239, g: 68, b: 68 }); // #EF4444 - Danger
+
+            yPos += Math.max(
+                entrada.images.length > 0 ? Math.ceil(entrada.images.length / 2) * 32 + 18 : 28,
+                saida.images.length > 0 ? Math.ceil(saida.images.length / 2) * 32 + 18 : 28
+            );
+
+            // Linha divisória
+            pdf.setDrawColor(226, 232, 240);
+            pdf.line(margin, yPos, pageWidth - margin, yPos);
+            yPos += 8;
+        }
+
+        // Rodapé na última página
+        pdf.setFontSize(8);
+        pdf.setTextColor(107, 114, 128);
+        pdf.text('E-MÍDIAS • Sistema de Monitoramento OOH • checking.emidiastec.com.br', pageWidth / 2, pageHeight - 10, { align: 'center' });
+        pdf.text(`Relatório gerado automaticamente em ${dataAtual}`, pageWidth / 2, pageHeight - 6, { align: 'center' });
+
+        // ========================================
+        // SALVAR PDF
+        // ========================================
+        showPDFNotification('💾 Baixando PDF...', 'progress');
+        const fileName = `CheckingOOH-${campanhaTitle.replace(/[^a-z0-9]/gi, '-')}-${new Date().toISOString().split('T')[0]}.pdf`;
+        pdf.save(fileName);
+
+        showPDFNotification(`✅ PDF baixado com sucesso! ${appData.pontos.length} pontos`, 'success');
+        setTimeout(hidePDFNotification, 4000);
+
+        Logger.success('PDF gerado com sucesso', {
+            fileName,
+            pontos: appData.pontos.length,
+            pages: pageNum
+        });
+
+    } catch (error) {
+        Logger.error('Erro ao gerar PDF', error);
+        showPDFNotification('❌ Erro ao gerar PDF', 'error');
+        setTimeout(() => {
+            hidePDFNotification();
+            alert('Erro ao gerar PDF: ' + error.message);
+        }, 2000);
+    }
+}
+
+/**
+ * 🖼️ CARREGAR IMAGEM COMO BASE64 (VERSÃO RÁPIDA E OTIMIZADA)
+ * - Usa timeout de 30s (aceita demora para qualidade)
+ * - Compressão JPEG 0.9 (alta qualidade)
+ * - Redimensiona para máx 1200px (fotos maiores no PDF)
+ */
+async function loadImageAsBase64Fast(url) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'Anonymous';
+
+        // Timeout de 30 segundos (aceita demora)
+        const timeout = setTimeout(() => {
+            img.src = '';
+            reject(new Error('Timeout ao carregar imagem'));
+        }, 30000);
+
+        img.onload = () => {
+            clearTimeout(timeout);
+            try {
+                const canvas = document.createElement('canvas');
+
+                // Redimensionar para otimizar (máx 1200px de largura - fotos maiores)
+                const maxWidth = 1200;
+                let width = img.width;
+                let height = img.height;
+
+                if (width > maxWidth) {
+                    height = (height * maxWidth) / width;
+                    width = maxWidth;
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+
+                // Compressão JPEG 0.9 (alta qualidade)
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+                resolve(dataUrl);
+            } catch (error) {
+                reject(error);
+            }
+        };
+
+        img.onerror = (e) => {
+            clearTimeout(timeout);
+            Logger.error(`Erro ao carregar imagem: ${url?.substring(0, 80)}`);
+            reject(new Error(`Erro ao carregar imagem: ${e.type}`));
+        };
+
+        // Log da tentativa
+        Logger.debug(`Tentando carregar: ${url?.substring(0, 80)}...`);
+
+        img.src = url;
+    });
+}
+
+/**
+ * 🖼️ CARREGAR IMAGEM COMO BASE64 (VERSÃO LEGADO)
+ * Mantida para compatibilidade
+ */
+async function loadImageAsBase64(url) {
+    return loadImageAsBase64Fast(url);
+}
+
 // 🚀 EXPORTAR FUNÇÕES GLOBAIS
 window.togglePontoContent = togglePontoContent;
 window.togglePontoLazy = togglePontoLazy;
@@ -1847,7 +2344,8 @@ window.openFullImage = openFullImage;
 window.openMediaCarousel = openMediaCarousel; // ✅ V10: Agora é zoom simples
 window.closeMediaCarousel = closeMediaCarousel; // Compatibilidade
 window.closeZoomModal = closeZoomModal; // ✅ V10: Nova função de zoom
-window.generateCampanhaPDF = generateCampanhaPDF; // ✅ V10: Gerador de PDF
+window.generateCampanhaPDF = generateCampanhaPDF; // ✅ V10: Gerador de PDF (legado)
+window.generatePDFReport = generatePDFReport; // ✅ NOVO: Gerador de PDF melhorado
 window.calcularBisemana = calcularBisemana; // ✅ V10: Cálculo de bi-semana
 window.hideDemoWarning = hideDemoWarning;
 window.updateMediaPreview = updateMediaPreview;
