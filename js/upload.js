@@ -182,9 +182,9 @@ async function startUpload() {
             try {
                 console.log(`📤 Enviando arquivo: ${file.name}...`);
                 Logger.info('Enviando arquivo', { fileName: file.name });
-                
+
                 updateUploadProgress((uploadedFiles / totalFiles) * 100);
-                showUploadProgress(`Enviando ${file.name}...`);
+                showUploadProgress('Enviando arquivos...');
                 
                 // ✅ ALTERADO: Passar databaseId para uploadFileToDrive
                 console.log('📤 Chamando DriveAPI.uploadFileToDrive com:', {

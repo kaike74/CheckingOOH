@@ -1252,45 +1252,52 @@ function updatePageHeader(title, subtitle) {
 }
 
 /**
- * 📤 MOSTRAR PROGRESSO DE UPLOAD V10.7.4
- * Exibe tela de loading bonita com logo animado
+ * 📤 MOSTRAR PROGRESSO DE UPLOAD V10.7.5
+ * Exibe loading bonito DENTRO do modal de upload
  */
 function showUploadProgress(message = 'Enviando...') {
-    // Criar tela de loading bonita
-    let loadingOverlay = document.getElementById('upload-loading-overlay');
+    // Buscar o modal de upload
+    const uploadModal = document.getElementById('upload-modal');
+    if (!uploadModal) {
+        Logger.error('Modal de upload não encontrado');
+        return;
+    }
 
-    if (!loadingOverlay) {
-        loadingOverlay = document.createElement('div');
-        loadingOverlay.id = 'upload-loading-overlay';
-        loadingOverlay.style.cssText = `
-            position: fixed;
+    // Buscar ou criar container de loading dentro do modal
+    let loadingContainer = document.getElementById('modal-loading-container');
+
+    if (!loadingContainer) {
+        loadingContainer = document.createElement('div');
+        loadingContainer.id = 'modal-loading-container';
+        loadingContainer.style.cssText = `
+            position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
             background: rgba(255, 255, 255, 0.98);
-            z-index: 10000;
+            z-index: 100;
             display: flex;
             align-items: center;
             justify-content: center;
-            backdrop-filter: blur(10px);
+            border-radius: 16px;
         `;
 
-        loadingOverlay.innerHTML = `
-            <div style="text-align: center; max-width: 400px; padding: 40px;">
-                <div style="margin-bottom: 30px;">
+        loadingContainer.innerHTML = `
+            <div style="text-align: center; max-width: 300px; padding: 40px;">
+                <div style="margin-bottom: 24px;">
                     <img src="./LogoEmidias.png"
                          alt="E-MÍDIAS Logo"
-                         style="max-width: 120px; animation: pulse 1.5s ease-in-out infinite;"
+                         style="max-width: 100px; animation: pulse 1.5s ease-in-out infinite;"
                          onerror="this.style.display='none'">
                 </div>
-                <h2 id="upload-loading-title" style="
+                <h3 id="modal-loading-title" style="
                     color: #06055B;
-                    font-size: 24px;
+                    font-size: 20px;
                     font-weight: 700;
                     margin-bottom: 16px;
                     font-family: 'Space Grotesk', sans-serif;
-                ">${message}</h2>
+                ">${message}</h3>
                 <div style="
                     width: 100%;
                     height: 6px;
@@ -1307,16 +1314,20 @@ function showUploadProgress(message = 'Enviando...') {
                         width: 100%;
                     "></div>
                 </div>
-                <p id="upload-loading-subtitle" style="
+                <p id="modal-loading-subtitle" style="
                     color: #64748B;
-                    font-size: 14px;
-                    margin-top: 16px;
+                    font-size: 13px;
+                    margin-top: 12px;
                     font-family: 'Space Grotesk', sans-serif;
                 ">Por favor, aguarde...</p>
             </div>
         `;
 
-        document.body.appendChild(loadingOverlay);
+        const modalContent = uploadModal.querySelector('.modal-content');
+        if (modalContent) {
+            modalContent.style.position = 'relative';
+            modalContent.appendChild(loadingContainer);
+        }
 
         // Adicionar animações CSS se não existirem
         if (!document.getElementById('upload-loading-animations')) {
@@ -1335,21 +1346,21 @@ function showUploadProgress(message = 'Enviando...') {
             document.head.appendChild(style);
         }
     } else {
-        loadingOverlay.style.display = 'flex';
-        const title = document.getElementById('upload-loading-title');
+        loadingContainer.style.display = 'flex';
+        const title = document.getElementById('modal-loading-title');
         if (title) title.textContent = message;
     }
 
-    Logger.info('🎨 Loading bonito exibido:', message);
+    Logger.info('🎨 Loading no modal exibido:', message);
 }
 
 /**
- * 🔄 ATUALIZAR PROGRESSO DE UPLOAD V10.7.4
- * Atualiza mensagem do loading bonito
+ * 🔄 ATUALIZAR PROGRESSO DE UPLOAD V10.7.5
+ * Atualiza mensagem do loading no modal
  */
 function updateUploadProgress(percent, message = null) {
     // Atualizar subtítulo com porcentagem
-    const subtitle = document.getElementById('upload-loading-subtitle');
+    const subtitle = document.getElementById('modal-loading-subtitle');
     if (subtitle) {
         if (message) {
             subtitle.textContent = message;
@@ -1362,24 +1373,24 @@ function updateUploadProgress(percent, message = null) {
 }
 
 /**
- * 🔒 ESCONDER PROGRESSO DE UPLOAD V10.7.4
- * Oculta tela de loading bonita
+ * 🔒 ESCONDER PROGRESSO DE UPLOAD V10.7.5
+ * Oculta loading do modal
  */
 function hideUploadProgress() {
-    const loadingOverlay = document.getElementById('upload-loading-overlay');
+    const loadingContainer = document.getElementById('modal-loading-container');
 
-    if (loadingOverlay) {
+    if (loadingContainer) {
         // Fade out suave
-        loadingOverlay.style.transition = 'opacity 0.3s ease';
-        loadingOverlay.style.opacity = '0';
+        loadingContainer.style.transition = 'opacity 0.3s ease';
+        loadingContainer.style.opacity = '0';
 
         setTimeout(() => {
-            loadingOverlay.style.display = 'none';
-            loadingOverlay.style.opacity = '1'; // Reset para próxima vez
+            loadingContainer.style.display = 'none';
+            loadingContainer.style.opacity = '1'; // Reset para próxima vez
         }, 300);
     }
 
-    Logger.info('🎨 Loading bonito escondido');
+    Logger.info('🎨 Loading do modal escondido');
 }
 
 /**
