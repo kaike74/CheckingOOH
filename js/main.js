@@ -1804,11 +1804,10 @@ async function generateCampanhaPDF() {
                     expandidos++;
 
                     // ✅ V10.4: CARREGAR fotos de cada ponto expandido
+                    // ✅ CORREÇÃO: Carregar SEQUENCIALMENTE para evitar duplicação de pastas
                     if (content.dataset.loaded === 'false') {
-                        await Promise.all([
-                            loadPontoMediaIfNeeded(ponto, 'entrada', true),
-                            loadPontoMediaIfNeeded(ponto, 'saida', true)
-                        ]);
+                        await loadPontoMediaIfNeeded(ponto, 'entrada', true);
+                        await loadPontoMediaIfNeeded(ponto, 'saida', true);
                     }
 
                     await sleep(200); // Delay para renderização
@@ -1941,11 +1940,10 @@ async function generatePDFReport() {
                     const normalizedPontoId = normalizeNotionId(ponto.id);
                     const normalizedDatabaseId = normalizeNotionId(appData.databaseId);
 
-                    // Buscar entrada e saída em PARALELO
-                    const [entradaData, saidaData] = await Promise.all([
-                        DriveAPI.listDriveFiles(ponto.exibidora, normalizedPontoId, 'entrada', normalizedDatabaseId),
-                        DriveAPI.listDriveFiles(ponto.exibidora, normalizedPontoId, 'saida', normalizedDatabaseId)
-                    ]);
+                    // ✅ CORREÇÃO: Buscar SEQUENCIALMENTE para evitar duplicação de pastas
+                    // Primeira chamada cria a estrutura, segunda usa as pastas existentes
+                    const entradaData = await DriveAPI.listDriveFiles(ponto.exibidora, normalizedPontoId, 'entrada', normalizedDatabaseId);
+                    const saidaData = await DriveAPI.listDriveFiles(ponto.exibidora, normalizedPontoId, 'saida', normalizedDatabaseId);
 
                     const entradaFiles = (entradaData.files || []).slice(0, 4); // Máx 4 fotos
                     const saidaFiles = (saidaData.files || []).slice(0, 4); // Máx 4 fotos
