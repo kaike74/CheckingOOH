@@ -1,19 +1,19 @@
 // =============================================================================
-// 📂 CLOUDFLARE PAGES FUNCTION - GOOGLE DRIVE LIST
+// 📂 CLOUDFLARE PAGES FUNCTION - GOOGLE DRIVE LIST (SEGURO)
 // =============================================================================
 
 import { ensureFolderHierarchy, validateHierarchyParams } from './drive-hierarchy.js';
+import {
+    getSecureCorsHeaders,
+    validateAndSanitize,
+    secureLog,
+    secureErrorResponse,
+    checkRateLimit
+} from './_security.js';
 
 export async function onRequest(context) {
-    // Permitir CORS
-    const headers = {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        'Content-Type': 'application/json'
-    };
+    const headers = getSecureCorsHeaders(context.request);
 
-    // Responder OPTIONS para CORS preflight
     if (context.request.method === 'OPTIONS') {
         return new Response('', {
             status: 200,
@@ -22,30 +22,32 @@ export async function onRequest(context) {
     }
 
     try {
-        console.log('📂 Listando arquivos do Google Drive...');
+        // 🛡️ RATE LIMITING
+        const clientIP = context.request.headers.get('CF-Connecting-IP') || 'unknown';
+        if (!checkRateLimit(clientIP, 100, 60000)) {
+            return new Response(JSON.stringify({
+                error: 'Muitas requisições. Tente novamente em alguns segundos.'
+            }), {
+                status: 429,
+                headers
+            });
+        }
 
-        // Obter parâmetros da URL
+        secureLog('info', 'Listando arquivos');
+
         const url = new URL(context.request.url);
-        let exibidora = url.searchParams.get('exibidora');
-        let pontoId = url.searchParams.get('pontoId');
-        let tipo = url.searchParams.get('tipo');
-        let databaseId = url.searchParams.get('databaseId');
 
-        // ✅ CORREÇÃO 1: Sanitizar parâmetros para evitar "null" como string
-        exibidora = sanitizeParam(exibidora);
-        pontoId = sanitizeParam(pontoId);
-        tipo = sanitizeParam(tipo);
-        databaseId = sanitizeParam(databaseId);
-
-        if (!exibidora || !pontoId || !tipo || !databaseId) {
-            return new Response(JSON.stringify({ 
-                error: 'Parâmetros obrigatórios não fornecidos',
-                missing: {
-                    exibidora: !exibidora,
-                    pontoId: !pontoId,
-                    tipo: !tipo,
-                    databaseId: !databaseId
-                }
+        // 🛡️ VALIDAR E SANITIZAR PARÂMETROS
+        let exibidora, pontoId, tipo, databaseId;
+        try {
+            exibidora = validateAndSanitize(url.searchParams.get('exibidora'), 'foldername', 100);
+            pontoId = validateAndSanitize(url.searchParams.get('pontoId'), 'notionId', 40);
+            tipo = validateAndSanitize(url.searchParams.get('tipo'), 'tipo', 10);
+            databaseId = validateAndSanitize(url.searchParams.get('databaseId'), 'notionId', 40);
+        } catch (validationError) {
+            secureLog('warning', 'Validação falhou', { error: validationError.message });
+            return new Response(JSON.stringify({
+                error: 'Parâmetros inválidos'
             }), {
                 status: 400,
                 headers

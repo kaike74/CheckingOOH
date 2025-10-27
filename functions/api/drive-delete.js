@@ -1,17 +1,18 @@
 // =============================================================================
-// 🗑️ CLOUDFLARE PAGES FUNCTION - GOOGLE DRIVE DELETE
+// 🗑️ CLOUDFLARE PAGES FUNCTION - GOOGLE DRIVE DELETE (SEGURO)
 // =============================================================================
 
-export async function onRequest(context) {
-    // Permitir CORS
-    const headers = {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'DELETE, OPTIONS',
-        'Content-Type': 'application/json'
-    };
+import {
+    getSecureCorsHeaders,
+    validateAndSanitize,
+    secureLog,
+    secureErrorResponse,
+    checkRateLimit
+} from './_security.js';
 
-    // Responder OPTIONS para CORS preflight
+export async function onRequest(context) {
+    const headers = getSecureCorsHeaders(context.request);
+
     if (context.request.method === 'OPTIONS') {
         return new Response('', {
             status: 200,
@@ -20,12 +21,22 @@ export async function onRequest(context) {
     }
 
     try {
-        console.log('🗑️ Deletando arquivo do Google Drive...');
+        // 🛡️ RATE LIMITING
+        const clientIP = context.request.headers.get('CF-Connecting-IP') || 'unknown';
+        if (!checkRateLimit(clientIP, 30, 60000)) {
+            return new Response(JSON.stringify({
+                error: 'Muitas requisições. Tente novamente em alguns segundos.'
+            }), {
+                status: 429,
+                headers
+            });
+        }
 
-        // Verificar método
+        secureLog('info', 'Deletando arquivo');
+
         if (context.request.method !== 'DELETE') {
-            return new Response(JSON.stringify({ 
-                error: 'Método não permitido' 
+            return new Response(JSON.stringify({
+                error: 'Método não permitido'
             }), {
                 status: 405,
                 headers

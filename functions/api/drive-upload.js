@@ -1,218 +1,150 @@
 // =============================================================================
-// 🔧 CLOUDFLARE WORKER: UPLOAD PARA GOOGLE DRIVE - CORREÇÃO COMPLETA
+// 🔧 CLOUDFLARE WORKER: UPLOAD PARA GOOGLE DRIVE - SEGURO
 // =============================================================================
 
 import { ensureFolderHierarchy, validateHierarchyParams } from './drive-hierarchy.js';
+import {
+    getSecureCorsHeaders,
+    validateUploadRequest,
+    secureLog,
+    secureErrorResponse,
+    checkRateLimit
+} from './_security.js';
 
 export async function onRequestPost(context) {
     const { request, env } = context;
 
-    const corsHeaders = {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    };
+    // 🛡️ CORS SEGURO
+    const corsHeaders = getSecureCorsHeaders(request);
 
     if (request.method === 'OPTIONS') {
         return new Response(null, { headers: corsHeaders });
     }
 
     try {
-        console.log('📤 === INICIANDO UPLOAD V8 - CORREÇÃO COMPLETA ===');
+        // 🛡️ RATE LIMITING
+        const clientIP = request.headers.get('CF-Connecting-IP') || 'unknown';
+        if (!checkRateLimit(clientIP, 50, 60000)) {
+            secureLog('warning', 'Rate limit excedido', { ip: clientIP });
+            return new Response(JSON.stringify({
+                success: false,
+                error: 'Muitas requisições. Tente novamente em alguns segundos.'
+            }), {
+                status: 429,
+                headers: corsHeaders
+            });
+        }
+
+        secureLog('info', 'Iniciando upload');
 
         // =============================================================================
         // ETAPA 1: VALIDAR VARIÁVEIS DE AMBIENTE
         // =============================================================================
-        console.log('🔍 ETAPA 1: Validando variáveis de ambiente...');
-        
         if (!env.GOOGLE_SERVICE_ACCOUNT_KEY) {
-            console.error('❌ GOOGLE_SERVICE_ACCOUNT_KEY não configurada');
+            secureLog('error', 'Credenciais não configuradas');
             return new Response(JSON.stringify({
                 success: false,
-                error: 'GOOGLE_SERVICE_ACCOUNT_KEY não configurada',
-                step: 'ENV_VALIDATION'
+                error: 'Serviço temporariamente indisponível'
             }), {
                 status: 500,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                headers: corsHeaders
             });
         }
 
-        const rootFolderId = env.GOOGLE_DRIVE_FOLDER_ID || 'root';
-        console.log('✅ ETAPA 1: Variáveis de ambiente OK');
-
         // =============================================================================
-        // ETAPA 2: PROCESSAR FORMDATA
+        // ETAPA 2: VALIDAR E SANITIZAR DADOS DO REQUEST
         // =============================================================================
-        console.log('🔍 ETAPA 2: Processando FormData...');
-        
         const formData = await request.formData();
-        const file = formData.get('file');
-        let exibidora = formData.get('exibidora');
-        let pontoId = formData.get('pontoId');
-        let tipo = formData.get('tipo');
-        let databaseId = formData.get('databaseId');
 
-        // ✅ CORREÇÃO 1 E 2: Sanitizar parâmetros
-        exibidora = sanitizeParam(exibidora);
-        pontoId = sanitizeParam(pontoId);
-        tipo = sanitizeParam(tipo);
-        databaseId = sanitizeParam(databaseId);
+        let validated;
+        try {
+            validated = validateUploadRequest(formData);
+        } catch (validationError) {
+            secureLog('warning', 'Validação falhou', { error: validationError.message });
+            return new Response(JSON.stringify({
+                success: false,
+                error: validationError.message
+            }), {
+                status: 400,
+                headers: corsHeaders
+            });
+        }
 
-        console.log('📝 Dados recebidos:', { 
-            fileName: file?.name,
-            fileSize: file?.size,
-            exibidora, 
-            pontoId, 
-            tipo,
-            databaseId
+        const { file, exibidora, pontoId, tipo, databaseId } = validated;
+
+        secureLog('info', 'Upload validado', {
+            fileName: file.name,
+            fileSize: file.size,
+            tipo
         });
 
-        if (!file || !exibidora || !pontoId || !tipo || !databaseId) {
-            console.error('❌ ETAPA 2: Dados obrigatórios ausentes', {
-                hasFile: !!file,
-                hasExibidora: !!exibidora,
-                hasPontoId: !!pontoId,
-                hasTipo: !!tipo,
-                hasDatabaseId: !!databaseId
-            });
-            return new Response(JSON.stringify({
-                success: false,
-                error: 'Dados obrigatórios ausentes ou inválidos: file, exibidora, pontoId, tipo, databaseId',
-                step: 'FORM_VALIDATION'
-            }), {
-                status: 400,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-            });
-        }
-
-        console.log('✅ ETAPA 2: FormData OK');
-
         // =============================================================================
-        // ETAPA 3: VALIDAR ARQUIVO
+        // ETAPA 3: OBTER TOKEN DO GOOGLE
         // =============================================================================
-        console.log('🔍 ETAPA 3: Validando arquivo...');
-        
-        const maxSize = 100 * 1024 * 1024; // 100MB
-        if (file.size > maxSize) {
-            console.log('❌ ETAPA 3: Arquivo muito grande');
-            return new Response(JSON.stringify({
-                success: false,
-                error: 'Arquivo muito grande (máximo 100MB)',
-                step: 'FILE_VALIDATION'
-            }), {
-                status: 400,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-            });
-        }
-
-        const allowedTypes = [
-            'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
-            'video/mp4', 'video/avi', 'video/mov', 'video/wmv', 'video/flv', 'video/webm'
-        ];
-
-        if (!allowedTypes.includes(file.type)) {
-            console.log('❌ ETAPA 3: Tipo de arquivo não permitido');
-            return new Response(JSON.stringify({
-                success: false,
-                error: 'Tipo de arquivo não permitido',
-                step: 'FILE_VALIDATION'
-            }), {
-                status: 400,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-            });
-        }
-
-        console.log('✅ ETAPA 3: Validação OK');
-
-        // =============================================================================
-        // ETAPA 4: OBTER TOKEN DO GOOGLE
-        // =============================================================================
-        console.log('🔍 ETAPA 4: Obtendo token do Google...');
-        
         const accessToken = await getGoogleAccessToken(env.GOOGLE_SERVICE_ACCOUNT_KEY);
-        
+
         if (!accessToken) {
-            console.log('❌ ETAPA 4: Falha ao obter token');
+            secureLog('error', 'Falha ao obter token de acesso');
             return new Response(JSON.stringify({
                 success: false,
-                error: 'Falha ao obter token de acesso do Google',
-                step: 'TOKEN_ACQUISITION'
+                error: 'Erro ao processar requisição'
             }), {
                 status: 500,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                headers: corsHeaders
             });
         }
 
-        console.log('✅ ETAPA 4: Token obtido com sucesso');
-
         // =============================================================================
-        // ETAPA 5: UPLOAD DO ARQUIVO
+        // ETAPA 4: CRIAR ESTRUTURA DE PASTAS E FAZER UPLOAD
         // =============================================================================
-        console.log('🔍 ETAPA 5: Iniciando upload...');
-
-        // ✅ CORREÇÃO: Passar pontoId para criar estrutura correta
         const folderPath = await ensureFolderPathInSharedDrive(exibidora, tipo, databaseId, pontoId, accessToken);
-        
+
         if (!folderPath) {
-            console.log('❌ ETAPA 5: Falha ao criar estrutura de pastas');
+            secureLog('error', 'Falha ao criar estrutura de pastas');
             return new Response(JSON.stringify({
                 success: false,
-                error: 'Falha ao criar estrutura de pastas no Shared Drive',
-                step: 'FOLDER_CREATION'
+                error: 'Erro ao processar requisição'
             }), {
                 status: 500,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                headers: corsHeaders
             });
         }
 
         // Upload do arquivo
         const uploadResult = await uploadToGoogleDrive(
-            file, 
-            folderPath.id, 
-            pontoId, 
-            tipo, 
+            file,
+            folderPath.id,
+            pontoId,
+            tipo,
             accessToken
         );
 
         if (!uploadResult.success) {
-            console.log('❌ ETAPA 5: Upload falhou');
+            secureLog('error', 'Upload falhou', { error: uploadResult.error });
             return new Response(JSON.stringify({
                 success: false,
-                error: uploadResult.error,
-                step: 'FILE_UPLOAD'
+                error: 'Erro ao fazer upload do arquivo'
             }), {
                 status: 500,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                headers: corsHeaders
             });
         }
 
-        console.log('✅ ETAPA 5: Upload concluído');
-        console.log('🎉 === UPLOAD V8 CONCLUÍDO COM SUCESSO ===');
+        secureLog('success', 'Upload concluído com sucesso');
 
         return new Response(JSON.stringify({
             success: true,
             fileId: uploadResult.fileId,
             fileName: uploadResult.fileName,
             fileUrl: uploadResult.fileUrl,
-            databaseId: databaseId,
-            folderPath: folderPath.path,
             message: 'Upload realizado com sucesso!'
         }), {
             status: 200,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            headers: corsHeaders
         });
 
     } catch (error) {
-        console.error('❌ Erro geral no upload:', error);
-        console.error('❌ Stack trace:', error.stack);
-        return new Response(JSON.stringify({
-            success: false,
-            error: error.message,
-            step: 'GENERAL_ERROR'
-        }), {
-            status: 500,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
+        return secureErrorResponse(error, 500, corsHeaders);
     }
 }
 
