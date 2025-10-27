@@ -1858,7 +1858,7 @@ async function generatePDFReport() {
         // ========================================
         // FASE 1: PRÉ-CARREGAR TODAS AS FOTOS EM PARALELO (OTIMIZAÇÃO)
         // ========================================
-        showPDFNotification('🚀 Carregando fotos em paralelo...', 'progress');
+        showPDFNotification('📸 Carregando fotos em alta qualidade...', 'progress');
 
         const pontosData = await Promise.all(
             appData.pontos.map(async (ponto) => {
@@ -1872,10 +1872,20 @@ async function generatePDFReport() {
                     const entradaFiles = (entradaData.files || []).slice(0, 4); // Máx 4 fotos
                     const saidaFiles = (saidaData.files || []).slice(0, 4); // Máx 4 fotos
 
-                    // Carregar imagens em PARALELO (com tratamento de erros)
+                    Logger.info(`📸 Ponto ${ponto.endereco}: ${entradaFiles.length} entrada, ${saidaFiles.length} saída`);
+
+                    // Carregar imagens em PARALELO (usar webContentLink para fotos grandes)
                     const [entradaResults, saidaResults] = await Promise.all([
-                        Promise.allSettled(entradaFiles.map(f => loadImageAsBase64Fast(f.thumbnailLink || f.webContentLink))),
-                        Promise.allSettled(saidaFiles.map(f => loadImageAsBase64Fast(f.thumbnailLink || f.webContentLink)))
+                        Promise.allSettled(entradaFiles.map(f => {
+                            const url = f.webContentLink || f.thumbnailLink; // Usar foto grande primeiro
+                            Logger.debug(`Carregando entrada: ${f.name}`);
+                            return loadImageAsBase64Fast(url);
+                        })),
+                        Promise.allSettled(saidaFiles.map(f => {
+                            const url = f.webContentLink || f.thumbnailLink; // Usar foto grande primeiro
+                            Logger.debug(`Carregando saída: ${f.name}`);
+                            return loadImageAsBase64Fast(url);
+                        }))
                     ]);
 
                     // Filtrar apenas imagens que carregaram com sucesso
@@ -1885,6 +1895,8 @@ async function generatePDFReport() {
                     const saidaImages = saidaResults
                         .filter(r => r.status === 'fulfilled')
                         .map(r => r.value);
+
+                    Logger.info(`✅ Carregadas: ${entradaImages.length} entrada, ${saidaImages.length} saída`);
 
                     return {
                         ponto,
@@ -1909,7 +1921,7 @@ async function generatePDFReport() {
         // ========================================
         // FASE 2: GERAR PDF COM LAYOUT PROFISSIONAL
         // ========================================
-        showPDFNotification('📄 Gerando PDF...', 'progress');
+        showPDFNotification('📄 Montando relatório...', 'progress');
 
         const { jsPDF } = window.jspdf;
         const pdf = new jsPDF('p', 'mm', 'a4');
@@ -1942,7 +1954,8 @@ async function generatePDFReport() {
 
         // Helper: Adicionar cabeçalho
         const addHeader = () => {
-            pdf.setFillColor(30, 64, 175); // #1e40af
+            // Usar cores E-MÍDIAS (#06055B)
+            pdf.setFillColor(6, 5, 91); // #06055B - Primary E-MÍDIAS
             pdf.rect(0, 0, pageWidth, 35, 'F');
 
             // Adicionar logo se disponível
@@ -2001,8 +2014,8 @@ async function generatePDFReport() {
             }
         }
 
-        // Título da campanha
-        pdf.setFillColor(30, 64, 175);
+        // Título da campanha com gradiente E-MÍDIAS
+        pdf.setFillColor(6, 5, 91); // #06055B - Primary E-MÍDIAS
         pdf.roundedRect(margin, yPos, contentWidth, 25, 3, 3, 'F');
 
         // Adicionar ícone da página se disponível
@@ -2064,7 +2077,7 @@ async function generatePDFReport() {
         for (let i = 0; i < pontosData.length; i++) {
             const { ponto, entrada, saida } = pontosData[i];
 
-            showPDFNotification(`📝 Renderizando ponto ${i + 1}/${pontosData.length}...`, 'progress');
+            showPDFNotification(`📝 Adicionando ponto ${i + 1}/${pontosData.length} ao PDF...`, 'progress');
 
             // Calcular altura necessária para o ponto
             const maxFotos = Math.max(entrada.images.length, saida.images.length);
@@ -2081,17 +2094,17 @@ async function generatePDFReport() {
 
             // Header do ponto
             pdf.setFillColor(248, 250, 252);
-            pdf.setDrawColor(226, 232, 240);
+            pdf.setDrawColor(6, 5, 91); // Borda azul E-MÍDIAS
             pdf.roundedRect(margin, yPos, contentWidth, 12, 2, 2, 'FD');
 
-            pdf.setTextColor(30, 64, 175);
+            pdf.setTextColor(6, 5, 91); // Texto azul E-MÍDIAS
             pdf.setFontSize(11);
             pdf.setFont('helvetica', 'bold');
             pdf.text(`${ponto.endereco}`, margin + 2, yPos + 6);
 
             pdf.setFontSize(8);
             pdf.setFont('helvetica', 'normal');
-            pdf.setTextColor(107, 114, 128);
+            pdf.setTextColor(100, 116, 139); // Gray mais escuro
             pdf.text(`Exibidora: ${ponto.exibidora}`, margin + 2, yPos + 10);
 
             yPos += 15;
@@ -2155,9 +2168,9 @@ async function generatePDFReport() {
                 }
             };
 
-            // Renderizar colunas
-            drawSection(margin, 'ENTRADA', entrada.files, entrada.images, { r: 5, g: 150, b: 105 });
-            drawSection(margin + colWidth + 5, 'SAIDA', saida.files, saida.images, { r: 220, g: 38, b: 38 });
+            // Renderizar colunas com cores E-MÍDIAS
+            drawSection(margin, 'ENTRADA', entrada.files, entrada.images, { r: 16, g: 185, b: 129 }); // #10B981 - Success
+            drawSection(margin + colWidth + 5, 'SAIDA', saida.files, saida.images, { r: 239, g: 68, b: 68 }); // #EF4444 - Danger
 
             yPos += Math.max(
                 entrada.images.length > 0 ? Math.ceil(entrada.images.length / 2) * 32 + 18 : 28,
@@ -2179,11 +2192,11 @@ async function generatePDFReport() {
         // ========================================
         // SALVAR PDF
         // ========================================
-        showPDFNotification('💾 Salvando PDF...', 'progress');
+        showPDFNotification('💾 Baixando PDF...', 'progress');
         const fileName = `CheckingOOH-${campanhaTitle.replace(/[^a-z0-9]/gi, '-')}-${new Date().toISOString().split('T')[0]}.pdf`;
         pdf.save(fileName);
 
-        showPDFNotification(`✅ PDF baixado! ${appData.pontos.length} pontos`, 'success');
+        showPDFNotification(`✅ PDF baixado com sucesso! ${appData.pontos.length} pontos`, 'success');
         setTimeout(hidePDFNotification, 4000);
 
         Logger.success('PDF gerado com sucesso', {
@@ -2204,28 +2217,28 @@ async function generatePDFReport() {
 
 /**
  * 🖼️ CARREGAR IMAGEM COMO BASE64 (VERSÃO RÁPIDA E OTIMIZADA)
- * - Usa timeout de 10s (evita travamentos)
- * - Compressão JPEG 0.85 (balanço qualidade/tamanho)
- * - Redimensiona para máx 800px (acelera conversão)
+ * - Usa timeout de 30s (aceita demora para qualidade)
+ * - Compressão JPEG 0.9 (alta qualidade)
+ * - Redimensiona para máx 1200px (fotos maiores no PDF)
  */
 async function loadImageAsBase64Fast(url) {
     return new Promise((resolve, reject) => {
         const img = new Image();
         img.crossOrigin = 'Anonymous';
 
-        // Timeout de 10 segundos
+        // Timeout de 30 segundos (aceita demora)
         const timeout = setTimeout(() => {
             img.src = '';
             reject(new Error('Timeout ao carregar imagem'));
-        }, 10000);
+        }, 30000);
 
         img.onload = () => {
             clearTimeout(timeout);
             try {
                 const canvas = document.createElement('canvas');
 
-                // Redimensionar para otimizar (máx 800px de largura)
-                const maxWidth = 800;
+                // Redimensionar para otimizar (máx 1200px de largura - fotos maiores)
+                const maxWidth = 1200;
                 let width = img.width;
                 let height = img.height;
 
@@ -2240,8 +2253,8 @@ async function loadImageAsBase64Fast(url) {
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(img, 0, 0, width, height);
 
-                // Compressão JPEG 0.85 (balanço qualidade/velocidade)
-                const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+                // Compressão JPEG 0.9 (alta qualidade)
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
                 resolve(dataUrl);
             } catch (error) {
                 reject(error);
@@ -2252,6 +2265,12 @@ async function loadImageAsBase64Fast(url) {
             clearTimeout(timeout);
             reject(new Error('Erro ao carregar imagem'));
         };
+
+        // Adicionar parâmetros para melhor qualidade se for Google Drive
+        if (url && url.includes('drive.google.com')) {
+            // Forçar download direto para evitar CORS
+            url = url.replace('/view', '/uc').replace('?', '&').replace('&', '?') + '&export=download';
+        }
 
         img.src = url;
     });
