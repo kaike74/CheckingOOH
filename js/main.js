@@ -8,7 +8,8 @@ const appData = {
     pontos: [],
     pontoAtual: null,
     databaseId: null, // ID da campanha
-    editMode: {} // { 'pontoId-tipo': boolean }
+    editMode: {}, // { 'pontoId-tipo': boolean }
+    pendingDeletes: {} // { 'pontoId-tipo': [{fileId, fileName, element}] }
 };
 
 /**
@@ -275,6 +276,9 @@ async function createSecaoElement(ponto, tipo, readOnly = false) {
             <button class="btn btn-secondary btn-small" onclick="toggleEditMode('${ponto.id}', '${tipo}')" id="edit-btn-${ponto.id}-${tipo}">
                 ✏️ Editar
             </button>
+            <button class="btn btn-danger btn-small" onclick="cancelEditMode('${ponto.id}', '${tipo}')" id="cancel-btn-${ponto.id}-${tipo}" style="display: none;">
+                ❌ Cancelar
+            </button>
         `;
     } else {
         // Modo campanha/read-only: sem botões de ação
@@ -285,8 +289,8 @@ async function createSecaoElement(ponto, tipo, readOnly = false) {
     
     // Preview de mídia
     const previewDiv = document.createElement('div');
-    // ✅ MELHORIA: Grid maior no modo cliente (fotos maiores)
-    previewDiv.className = readOnly ? 'media-preview media-preview-large' : 'media-preview';
+    // ✅ V10.7.2: Mesmo tamanho em todos os modos
+    previewDiv.className = 'media-preview';
     previewDiv.id = `preview-${ponto.id}-${tipo}`;
 
     // ✅ LAZY LOADING: Sempre usar placeholder, carregar sob demanda
@@ -445,46 +449,67 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false, containerPar
             // ✅ V10.7: Não definir onclick aqui - será tratado pelo img.onclick abaixo
         
         if (DriveAPI.isVideoFile(file.mimeType)) {
-            // ✅ CORREÇÃO: Vídeo com thumbnail e ícone de play
+            // ✅ V10.7.3: Vídeo com thumbnail simples e download ao clicar
             const videoThumb = file.thumbnailUrl || `https://drive.google.com/thumbnail?id=${file.id}&sz=w400`;
 
-            // ✅ MELHORIA: Removido timestamp conforme solicitado
-            mediaItem.innerHTML = `
-                <div style="
-                    position: relative;
-                    width: 100%;
-                    height: 100%;
-                    background: url('${videoThumb}') center/cover no-repeat, #000;
-                    cursor: pointer;
-                ">
-                    <div style="
-                        position: absolute;
-                        top: 50%;
-                        left: 50%;
-                        transform: translate(-50%, -50%);
-                        background: rgba(0,0,0,0.7);
-                        border-radius: 50%;
-                        width: 40px;
-                        height: 40px;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        color: white;
-                        font-size: 20px;
-                    ">▶</div>
-                    <div style="
-                        position: absolute;
-                        top: 4px;
-                        right: 4px;
-                        background: rgba(0,0,0,0.7);
-                        color: white;
-                        padding: 2px 6px;
-                        border-radius: 4px;
-                        font-size: 9px;
-                        font-weight: bold;
-                    ">VÍDEO</div>
-                </div>
+            const videoDiv = document.createElement('div');
+            videoDiv.className = 'video-thumbnail';
+            videoDiv.dataset.fileId = file.id;
+            videoDiv.dataset.fileName = file.name;
+            videoDiv.dataset.isVideo = 'true';
+            videoDiv.style.cssText = `
+                position: relative;
+                width: 100%;
+                height: 100%;
+                background: url('${videoThumb}') center/cover no-repeat, #000;
+                cursor: pointer;
             `;
+
+            // Ícone de play centralizado + badge VÍDEO
+            videoDiv.innerHTML = `
+                <div style="
+                    position: absolute;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    background: rgba(0,0,0,0.7);
+                    border-radius: 50%;
+                    width: 40px;
+                    height: 40px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: white;
+                    font-size: 20px;
+                ">▶</div>
+                <div style="
+                    position: absolute;
+                    top: 4px;
+                    right: 4px;
+                    background: rgba(0,0,0,0.7);
+                    color: white;
+                    padding: 2px 6px;
+                    border-radius: 4px;
+                    font-size: 9px;
+                    font-weight: bold;
+                ">VÍDEO</div>
+            `;
+
+            // ✅ V10.7.3: Click para baixar vídeo automaticamente
+            videoDiv.onclick = (e) => {
+                e.stopPropagation();
+                // Download direto
+                const a = document.createElement('a');
+                a.href = `https://drive.google.com/uc?export=download&id=${file.id}`;
+                a.download = file.name;
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                console.log(`📥 Download iniciado: ${file.name}`);
+            };
+
+            mediaItem.appendChild(videoDiv);
         } else {
             // Imagem com fallback
             const img = document.createElement('img');
@@ -526,38 +551,50 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false, containerPar
             mediaItem.appendChild(img);
         }
         
-        // ✅ V10.2: Badge de delete - controlado por CSS class .editing
+        // ✅ V10.7.2: Badge de delete - controlado por CSS class .editing
+        // Verifica se há img, video ou video-thumbnail no mediaItem
         if (!readOnly) {
-            const deleteBtn = document.createElement('div');
-            deleteBtn.className = 'delete-badge';
-            deleteBtn.innerHTML = '−'; // Sinal de menos
-            deleteBtn.dataset.pontoId = pontoId;
-            deleteBtn.dataset.tipo = tipo;
-            deleteBtn.onclick = (e) => {
-                e.stopPropagation(); // Não abrir carrossel ao clicar no -
-                deleteFile(file.id, file.name, pontoId, tipo);
-            };
-            mediaItem.appendChild(deleteBtn);
+            const hasMedia = mediaItem.querySelector('img') ||
+                            mediaItem.querySelector('video') ||
+                            mediaItem.querySelector('.video-thumbnail');
+            if (hasMedia) {
+                const deleteBtn = document.createElement('div');
+                deleteBtn.className = 'delete-badge';
+                deleteBtn.innerHTML = '−'; // Sinal de menos
+                deleteBtn.dataset.pontoId = pontoId;
+                deleteBtn.dataset.tipo = tipo;
+                deleteBtn.onclick = (e) => {
+                    e.stopPropagation(); // Não abrir carrossel ao clicar no -
+                    deleteFile(file.id, file.name, pontoId, tipo);
+                };
+                mediaItem.appendChild(deleteBtn);
 
-            // ✅ V10.2: Se modo edição já está ativo, adicionar classe .editing
-            const currentEditMode = isEditMode(pontoId, tipo);
-            if (currentEditMode) {
-                mediaItem.classList.add('editing');
+                // ✅ V10.2: Se modo edição já está ativo, adicionar classe .editing
+                const currentEditMode = isEditMode(pontoId, tipo);
+                if (currentEditMode) {
+                    mediaItem.classList.add('editing');
+                }
+                console.log(`🗑️ V10.7.2: Badge criado para ${file.name} - editMode: ${currentEditMode}`);
             }
-            console.log(`🗑️ V10.2: Badge criado para ${file.name} - editMode: ${currentEditMode}`);
         }
 
-        // ✅ MELHORIA: Botão de download individual (modo cliente)
+        // ✅ V10.7.2: Botão de download individual (modo campanha)
+        // Verifica se há img, video ou video-thumbnail no mediaItem
         if (readOnly) {
-            const downloadBtn = document.createElement('a');
-            downloadBtn.href = `https://drive.google.com/uc?export=download&id=${file.id}`;
-            downloadBtn.className = 'download-badge';
-            downloadBtn.innerHTML = '⬇';
-            downloadBtn.title = 'Baixar arquivo';
-            downloadBtn.onclick = (e) => {
-                e.stopPropagation(); // Não abrir carrossel ao clicar no download
-            };
-            mediaItem.appendChild(downloadBtn);
+            const hasMedia = mediaItem.querySelector('img') ||
+                            mediaItem.querySelector('video') ||
+                            mediaItem.querySelector('.video-thumbnail');
+            if (hasMedia) {
+                const downloadBtn = document.createElement('a');
+                downloadBtn.href = `https://drive.google.com/uc?export=download&id=${file.id}`;
+                downloadBtn.className = 'download-badge';
+                downloadBtn.innerHTML = '⬇';
+                downloadBtn.title = 'Baixar arquivo';
+                downloadBtn.onclick = (e) => {
+                    e.stopPropagation(); // Não abrir carrossel ao clicar no download
+                };
+                mediaItem.appendChild(downloadBtn);
+            }
         }
 
             container.appendChild(mediaItem);
@@ -671,7 +708,7 @@ async function loadPontoMediaIfNeeded(ponto, tipo, readOnly = false) {
         console.log(`📥 Lazy loading: Carregando arquivos ${tipo} para ponto ${ponto.id} [readOnly: ${readOnly}]`);
 
         // ✅ OTIMIZAÇÃO: Mostrar skeleton loaders durante carregamento
-        previewDiv.className = readOnly ? 'media-preview-large loading' : 'media-preview loading';
+        previewDiv.className = 'media-preview loading';
         previewDiv.innerHTML = `
             <div class="skeleton skeleton-media-item"></div>
             <div class="skeleton skeleton-media-item"></div>
@@ -679,7 +716,7 @@ async function loadPontoMediaIfNeeded(ponto, tipo, readOnly = false) {
         `;
 
         await loadMediaPreview(ponto, tipo, previewDiv, readOnly);
-        previewDiv.className = readOnly ? 'media-preview-large' : 'media-preview'; // Remover classe loading
+        previewDiv.className = 'media-preview'; // Remover classe loading
         previewDiv.dataset.loaded = 'true';
 
         Logger.info('Arquivos carregados via lazy loading', { pontoId: ponto.id, tipo, readOnly });
@@ -691,44 +728,187 @@ async function loadPontoMediaIfNeeded(ponto, tipo, readOnly = false) {
  * Ativa/desativa o modo edição para uma seção
  */
 /**
- * ✏️ ALTERNAR MODO EDIÇÃO V10.6
- * ✅ CORRIGIDO: Usa classe .editing para controle CSS + atualiza UI global
+ * ✏️ ALTERNAR MODO EDIÇÃO V10.7.4
+ * ✅ Resposta imediata no front-end, exclusões em background
  */
-function toggleEditMode(pontoId, tipo) {
+async function toggleEditMode(pontoId, tipo) {
     const key = `${pontoId}-${tipo}`;
     const isCurrentlyEditing = appData.editMode[key] || false;
 
-    appData.editMode[key] = !isCurrentlyEditing;
+    if (isCurrentlyEditing) {
+        // CONCLUIR edição - resposta IMEDIATA
+        const deleteCount = appData.pendingDeletes[key] ? appData.pendingDeletes[key].length : 0;
 
-    const editBtn = document.getElementById(`edit-btn-${pontoId}-${tipo}`);
-    if (editBtn) {
-        editBtn.textContent = appData.editMode[key] ? '✅ Finalizar' : '✏️ Editar';
-        editBtn.className = appData.editMode[key] ? 'btn btn-success btn-small' : 'btn btn-secondary btn-small';
+        // Desativar modo edição IMEDIATAMENTE
+        appData.editMode[key] = false;
+
+        // Atualizar botões IMEDIATAMENTE
+        const editBtn = document.getElementById(`edit-btn-${pontoId}-${tipo}`);
+        const cancelBtn = document.getElementById(`cancel-btn-${pontoId}-${tipo}`);
+
+        if (editBtn) {
+            editBtn.textContent = '✏️ Editar';
+            editBtn.className = 'btn btn-secondary btn-small';
+        }
+        if (cancelBtn) {
+            cancelBtn.style.display = 'none';
+        }
+
+        // Remover classe editing IMEDIATAMENTE
+        const container = document.getElementById(`preview-${pontoId}-${tipo}`);
+        if (container) {
+            const mediaItems = container.querySelectorAll('.media-item');
+            mediaItems.forEach(item => item.classList.remove('editing'));
+        }
+
+        // Mostrar mensagem de sucesso IMEDIATAMENTE
+        if (deleteCount > 0) {
+            showSuccessMessage(`✅ ${deleteCount} arquivo(s) sendo excluído(s)...`);
+        }
+
+        // Aplicar exclusões em BACKGROUND (sem await)
+        confirmPendingDeletesBackground(pontoId, tipo);
+
+        Logger.info('✅ Modo edição CONCLUÍDO (resposta imediata)', { pontoId, tipo });
+    } else {
+        // ATIVAR modo edição
+        appData.editMode[key] = true;
+
+        // Inicializar lista de exclusões pendentes
+        if (!appData.pendingDeletes[key]) {
+            appData.pendingDeletes[key] = [];
+        }
+
+        // Atualizar botões
+        const editBtn = document.getElementById(`edit-btn-${pontoId}-${tipo}`);
+        const cancelBtn = document.getElementById(`cancel-btn-${pontoId}-${tipo}`);
+
+        if (editBtn) {
+            editBtn.textContent = '✅ Concluir';
+            editBtn.className = 'btn btn-success btn-small';
+        }
+        if (cancelBtn) {
+            cancelBtn.style.display = 'inline-flex';
+        }
+
+        // Adicionar classe editing
+        const container = document.getElementById(`preview-${pontoId}-${tipo}`);
+        if (container) {
+            const mediaItems = container.querySelectorAll('.media-item');
+            mediaItems.forEach(item => item.classList.add('editing'));
+        }
+
+        Logger.info('✏️ Modo edição ATIVADO', { pontoId, tipo });
     }
 
-    // ✅ V10.2: Adicionar/remover classe .editing nos media-items
+    // ✅ Atualizar UI global
+    updateEditModeUI();
+}
+
+/**
+ * ❌ CANCELAR MODO EDIÇÃO V10.7.3
+ * Cancela a edição e restaura fotos marcadas para exclusão
+ */
+function cancelEditMode(pontoId, tipo) {
+    const key = `${pontoId}-${tipo}`;
+
+    Logger.info('❌ Cancelando modo edição', { pontoId, tipo });
+
+    // Restaurar fotos marcadas para exclusão
+    if (appData.pendingDeletes[key] && appData.pendingDeletes[key].length > 0) {
+        appData.pendingDeletes[key].forEach(item => {
+            if (item.element && item.element.parentElement) {
+                item.element.style.display = ''; // Mostrar novamente
+                Logger.info('↩️ Foto restaurada:', item.fileName);
+            }
+        });
+        // Limpar lista de exclusões pendentes
+        appData.pendingDeletes[key] = [];
+    }
+
+    // Desativar modo edição
+    appData.editMode[key] = false;
+
+    // Atualizar botões
+    const editBtn = document.getElementById(`edit-btn-${pontoId}-${tipo}`);
+    const cancelBtn = document.getElementById(`cancel-btn-${pontoId}-${tipo}`);
+
+    if (editBtn) {
+        editBtn.textContent = '✏️ Editar';
+        editBtn.className = 'btn btn-secondary btn-small';
+    }
+    if (cancelBtn) {
+        cancelBtn.style.display = 'none';
+    }
+
+    // Remover classe editing
     const container = document.getElementById(`preview-${pontoId}-${tipo}`);
     if (container) {
         const mediaItems = container.querySelectorAll('.media-item');
-        console.log(`🔧 V10.6: Toggle modo edição - ${mediaItems.length} media-items para ${pontoId}-${tipo}`);
-
-        mediaItems.forEach(item => {
-            if (appData.editMode[key]) {
-                item.classList.add('editing'); // Classe ativa CSS: .media-item.editing .delete-badge
-                console.log('✅ Modo edição ATIVADO:', item);
-            } else {
-                item.classList.remove('editing');
-                console.log('⏹️ Modo edição DESATIVADO:', item);
-            }
-        });
-    } else {
-        console.error(`❌ Container preview-${pontoId}-${tipo} não encontrado ao alternar modo edição!`);
+        mediaItems.forEach(item => item.classList.remove('editing'));
     }
 
-    // ✅ V10.6: Atualizar UI global
+    // Atualizar UI global
     updateEditModeUI();
 
-    Logger.info('Modo edição alternado V10.6', { pontoId, tipo, editMode: appData.editMode[key], method: 'CSS class .editing' });
+    Logger.success('✅ Edição cancelada, fotos restauradas');
+}
+
+/**
+ * ✅ CONFIRMAR EXCLUSÕES PENDENTES EM BACKGROUND V10.7.4
+ * Aplica exclusões sem bloquear UI (roda em background)
+ */
+async function confirmPendingDeletesBackground(pontoId, tipo) {
+    const key = `${pontoId}-${tipo}`;
+
+    if (!appData.pendingDeletes[key] || appData.pendingDeletes[key].length === 0) {
+        Logger.info('Nenhuma exclusão pendente');
+        return;
+    }
+
+    const deleteCount = appData.pendingDeletes[key].length;
+    const pendingItems = [...appData.pendingDeletes[key]]; // Cópia para processar
+
+    Logger.info(`📝 Excluindo ${deleteCount} arquivo(s) em background...`);
+
+    // Limpar lista de exclusões pendentes IMEDIATAMENTE
+    appData.pendingDeletes[key] = [];
+
+    // Excluir todos os arquivos em background
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const item of pendingItems) {
+        try {
+            const result = await DriveAPI.deleteFileFromDrive(item.fileId, item.fileName);
+            if (result.success) {
+                Logger.success(`✅ Arquivo excluído: ${item.fileName}`);
+                successCount++;
+            } else {
+                Logger.error(`❌ Erro ao excluir: ${item.fileName}`);
+                errorCount++;
+            }
+        } catch (error) {
+            Logger.error(`❌ Erro ao excluir ${item.fileName}:`, error);
+            errorCount++;
+        }
+    }
+
+    // Recarregar preview silenciosamente
+    const ponto = appData.pontos.find(p => p.id === pontoId);
+    if (ponto) {
+        const container = document.getElementById(`preview-${pontoId}-${tipo}`);
+        if (container) {
+            await loadMediaPreview(ponto, tipo, container, false);
+        }
+    }
+
+    // Notificar resultado final
+    if (errorCount === 0) {
+        Logger.success(`🗑️ ${successCount} arquivo(s) excluído(s) com sucesso!`);
+    } else {
+        Logger.warning(`⚠️ ${successCount} excluído(s), ${errorCount} erro(s)`);
+    }
 }
 
 /**
@@ -740,45 +920,59 @@ function isEditMode(pontoId, tipo) {
 }
 
 /**
- * 🗑️ EXCLUIR ARQUIVO
- * Confirma e exclui um arquivo
+ * 🗑️ MARCAR ARQUIVO PARA EXCLUSÃO V10.7.3
+ * Marca arquivo para exclusão pendente (não apaga imediatamente)
  */
-async function deleteFile(fileId, fileName, pontoId, tipo) {
-    try {
-        if (!confirm(`Tem certeza que deseja excluir "${fileName}"?`)) {
-            return;
-        }
-        
-        Logger.info('Excluindo arquivo', { fileId, fileName });
-        
-        showUploadProgress('Excluindo arquivo...');
-        
-        const result = await DriveAPI.deleteFileFromDrive(fileId, fileName);
-        
-        hideUploadProgress();
-        
-        if (result.success) {
-            Logger.success('Arquivo excluído', { fileName });
-            
-            // Recarregar preview
-            const ponto = appData.pontos.find(p => p.id === pontoId);
-            if (ponto) {
-                const container = document.getElementById(`preview-${pontoId}-${tipo}`);
-                if (container) {
-                    await loadMediaPreview(ponto, tipo, container, false);
-                }
-            }
-            
-            showSuccessMessage('🗑️ Arquivo excluído com sucesso!');
-        } else {
-            throw new Error(result.error || 'Falha na exclusão');
-        }
-        
-    } catch (error) {
-        hideUploadProgress();
-        Logger.error('Erro ao excluir arquivo', error);
-        alert('Erro ao excluir arquivo: ' + error.message);
+function deleteFile(fileId, fileName, pontoId, tipo) {
+    const key = `${pontoId}-${tipo}`;
+
+    Logger.info('Marcando arquivo para exclusão', { fileId, fileName });
+
+    // Encontrar o elemento media-item correspondente
+    const container = document.getElementById(`preview-${pontoId}-${tipo}`);
+    if (!container) {
+        Logger.error('Container não encontrado');
+        return;
     }
+
+    // Buscar o media-item que contém este arquivo
+    const mediaItems = container.querySelectorAll('.media-item');
+    let targetElement = null;
+
+    mediaItems.forEach(item => {
+        const deleteBtn = item.querySelector('.delete-badge');
+        if (deleteBtn && deleteBtn.dataset.pontoId === pontoId && deleteBtn.dataset.tipo === tipo) {
+            // Verificar se é este arquivo (por fileId no data attribute)
+            const img = item.querySelector('img');
+            const videoThumb = item.querySelector('.video-thumbnail');
+
+            if ((img && img.dataset.fileId === fileId) ||
+                (videoThumb && videoThumb.dataset.fileId === fileId)) {
+                targetElement = item;
+            }
+        }
+    });
+
+    if (!targetElement) {
+        Logger.error('Elemento não encontrado');
+        return;
+    }
+
+    // Adicionar à lista de exclusões pendentes
+    if (!appData.pendingDeletes[key]) {
+        appData.pendingDeletes[key] = [];
+    }
+
+    appData.pendingDeletes[key].push({
+        fileId: fileId,
+        fileName: fileName,
+        element: targetElement
+    });
+
+    // Esconder o elemento imediatamente
+    targetElement.style.display = 'none';
+
+    Logger.info(`✅ Arquivo marcado para exclusão: ${fileName} (${appData.pendingDeletes[key].length} pendente(s))`);
 }
 
 /**
@@ -1058,48 +1252,145 @@ function updatePageHeader(title, subtitle) {
 }
 
 /**
- * 📤 MOSTRAR PROGRESSO DE UPLOAD
- * Exibe barra de progresso durante upload
+ * 📤 MOSTRAR PROGRESSO DE UPLOAD V10.7.5
+ * Exibe loading bonito DENTRO do modal de upload
  */
 function showUploadProgress(message = 'Enviando...') {
-    const progressContainer = document.getElementById('upload-progress');
-    const progressText = document.getElementById('progress-text');
-    
-    if (progressContainer) {
-        progressContainer.style.display = 'block';
+    // Buscar o modal de upload
+    const uploadModal = document.getElementById('upload-modal');
+    if (!uploadModal) {
+        Logger.error('Modal de upload não encontrado');
+        return;
     }
-    
-    if (progressText) {
-        progressText.textContent = message;
+
+    // Buscar ou criar container de loading dentro do modal
+    let loadingContainer = document.getElementById('modal-loading-container');
+
+    if (!loadingContainer) {
+        loadingContainer = document.createElement('div');
+        loadingContainer.id = 'modal-loading-container';
+        loadingContainer.style.cssText = `
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.98);
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 16px;
+        `;
+
+        loadingContainer.innerHTML = `
+            <div style="text-align: center; max-width: 300px; padding: 40px;">
+                <div style="margin-bottom: 24px;">
+                    <img src="./LogoEmidias.png"
+                         alt="E-MÍDIAS Logo"
+                         style="max-width: 100px; animation: pulse 1.5s ease-in-out infinite;"
+                         onerror="this.style.display='none'">
+                </div>
+                <h3 id="modal-loading-title" style="
+                    color: #06055B;
+                    font-size: 20px;
+                    font-weight: 700;
+                    margin-bottom: 16px;
+                    font-family: 'Space Grotesk', sans-serif;
+                ">${message}</h3>
+                <div style="
+                    width: 100%;
+                    height: 6px;
+                    background: #F1F5F9;
+                    border-radius: 3px;
+                    overflow: hidden;
+                    position: relative;
+                ">
+                    <div style="
+                        height: 100%;
+                        background: linear-gradient(90deg, #06055B 0%, #AA1EA5 50%, #06055B 100%);
+                        background-size: 200% 100%;
+                        animation: progressSlide 2s ease-in-out infinite;
+                        width: 100%;
+                    "></div>
+                </div>
+                <p id="modal-loading-subtitle" style="
+                    color: #64748B;
+                    font-size: 13px;
+                    margin-top: 12px;
+                    font-family: 'Space Grotesk', sans-serif;
+                ">Por favor, aguarde...</p>
+            </div>
+        `;
+
+        const modalContent = uploadModal.querySelector('.modal-content');
+        if (modalContent) {
+            modalContent.style.position = 'relative';
+            modalContent.appendChild(loadingContainer);
+        }
+
+        // Adicionar animações CSS se não existirem
+        if (!document.getElementById('upload-loading-animations')) {
+            const style = document.createElement('style');
+            style.id = 'upload-loading-animations';
+            style.textContent = `
+                @keyframes pulse {
+                    0%, 100% { transform: scale(1); opacity: 1; }
+                    50% { transform: scale(1.1); opacity: 0.8; }
+                }
+                @keyframes progressSlide {
+                    0% { transform: translateX(-100%); }
+                    100% { transform: translateX(100%); }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+    } else {
+        loadingContainer.style.display = 'flex';
+        const title = document.getElementById('modal-loading-title');
+        if (title) title.textContent = message;
     }
+
+    Logger.info('🎨 Loading no modal exibido:', message);
 }
 
 /**
- * 🔄 ATUALIZAR PROGRESSO DE UPLOAD
- * Atualiza a barra de progresso
+ * 🔄 ATUALIZAR PROGRESSO DE UPLOAD V10.7.5
+ * Atualiza mensagem do loading no modal
  */
-function updateUploadProgress(percent) {
-    const progressFill = document.getElementById('progress-fill');
-    if (progressFill) {
-        progressFill.style.width = `${percent}%`;
+function updateUploadProgress(percent, message = null) {
+    // Atualizar subtítulo com porcentagem
+    const subtitle = document.getElementById('modal-loading-subtitle');
+    if (subtitle) {
+        if (message) {
+            subtitle.textContent = message;
+        } else {
+            subtitle.textContent = `${Math.round(percent)}% concluído...`;
+        }
     }
+
+    Logger.debug('🔄 Progresso atualizado:', percent + '%');
 }
 
 /**
- * 🔒 ESCONDER PROGRESSO DE UPLOAD
- * Oculta barra de progresso
+ * 🔒 ESCONDER PROGRESSO DE UPLOAD V10.7.5
+ * Oculta loading do modal
  */
 function hideUploadProgress() {
-    const progressContainer = document.getElementById('upload-progress');
-    const progressFill = document.getElementById('progress-fill');
-    
-    if (progressContainer) {
-        progressContainer.style.display = 'none';
+    const loadingContainer = document.getElementById('modal-loading-container');
+
+    if (loadingContainer) {
+        // Fade out suave
+        loadingContainer.style.transition = 'opacity 0.3s ease';
+        loadingContainer.style.opacity = '0';
+
+        setTimeout(() => {
+            loadingContainer.style.display = 'none';
+            loadingContainer.style.opacity = '1'; // Reset para próxima vez
+        }, 300);
     }
-    
-    if (progressFill) {
-        progressFill.style.width = '0%';
-    }
+
+    Logger.info('🎨 Loading do modal escondido');
 }
 
 /**
@@ -1543,6 +1834,7 @@ async function generateCampanhaPDF() {
 window.togglePontoContent = togglePontoContent;
 window.togglePontoLazy = togglePontoLazy;
 window.toggleEditMode = toggleEditMode;
+window.cancelEditMode = cancelEditMode; // ✅ V10.7.3: Cancelar edição
 window.openMediaChoiceModal = openMediaChoiceModal;
 window.closeMediaChoiceModal = closeMediaChoiceModal;
 window.chooseCamera = chooseCamera;
@@ -1775,8 +2067,8 @@ function hidePDFNotification() {
 }
 
 /**
- * 📥 V10.6: ADICIONAR BOTÕES DE DOWNLOAD NO MODO CAMPANHA
- * CRIA botões de download no canto superior direito se não existirem
+ * 📥 V10.7.1: ADICIONAR BOTÕES DE DOWNLOAD NO MODO CAMPANHA
+ * CRIA botões de download APENAS em fotos/vídeos (não em containers externos)
  */
 function addDownloadButtonsToCampaign() {
     // Verificar se estamos no modo campanha
@@ -1788,13 +2080,23 @@ function addDownloadButtonsToCampaign() {
         return;
     }
 
-    Logger.info('📥 V10.6: Adicionando botões de download no modo campanha...');
+    Logger.info('📥 V10.7.1: Adicionando botões de download no modo campanha...');
 
-    // Encontrar todas as imagens de evidência
+    // Encontrar APENAS media-items que contenham imagens ou vídeos
     const mediaContainers = document.querySelectorAll('.media-preview .media-item, .media-preview-large .media-item');
     let createdButtons = 0;
 
     mediaContainers.forEach((container) => {
+        // ✅ V10.7.2: VERIFICAR se o container realmente tem img, video ou video-thumbnail
+        const img = container.querySelector('img');
+        const video = container.querySelector('video');
+        const videoThumb = container.querySelector('.video-thumbnail');
+
+        if (!img && !video && !videoThumb) {
+            Logger.debug('Container sem mídia, pulando...');
+            return; // Pular containers sem mídia
+        }
+
         // Verificar se já tem download badge
         let downloadBadge = container.querySelector('.download-badge');
 
@@ -1807,12 +2109,23 @@ function addDownloadButtonsToCampaign() {
             Logger.debug('Download badge já existe, forçando visibilidade');
         } else {
             // CRIAR o botão de download
-            const img = container.querySelector('img');
-            if (!img) return;
+            let fileId;
+            if (img) {
+                fileId = extractFileId(img.src);
+            } else if (video) {
+                fileId = extractFileId(video.src);
+            } else if (videoThumb) {
+                fileId = videoThumb.dataset.fileId;
+            }
+
+            if (!fileId) {
+                Logger.debug('Sem file ID, pulando...');
+                return;
+            }
 
             downloadBadge = document.createElement('a');
             downloadBadge.className = 'download-badge';
-            downloadBadge.href = `https://drive.google.com/uc?export=download&id=${extractFileId(img.src)}`;
+            downloadBadge.href = `https://drive.google.com/uc?export=download&id=${fileId}`;
             downloadBadge.innerHTML = '⬇';
             downloadBadge.title = 'Baixar arquivo';
             downloadBadge.style.cssText = `
@@ -1848,7 +2161,7 @@ function addDownloadButtonsToCampaign() {
         }
     });
 
-    Logger.success(`📥 V10.6: ${createdButtons} botões de download adicionados/visíveis`);
+    Logger.success(`📥 V10.7.1: ${createdButtons} botões de download adicionados/visíveis`);
 }
 
 /**
@@ -2005,11 +2318,16 @@ function closeImageModalV106() {
 }
 
 /**
- * 🔄 V10.6: ZOOM SIMPLES - SEM CARROSSEL
- * Apenas abre a imagem clicada em tela cheia
+ * 🔄 V10.7.2: ZOOM SIMPLES - SEM CARROSSEL
+ * Abre imagem em zoom, vídeos fazem download automaticamente
  */
 function attachImageClickHandlersV106() {
     document.addEventListener('click', (e) => {
+        // ✅ V10.7.2: Ignorar vídeos (já têm download próprio)
+        if (e.target.closest('.video-thumbnail')) {
+            return;
+        }
+
         const imgElement = e.target.closest('img');
 
         // Ignorar se não é imagem
