@@ -2,6 +2,7 @@
 // 📁 DRIVE FOLDER UTILS - Utilitário centralizado para gerenciar pastas
 // =============================================================================
 // Proteção contra race conditions com Map de locks em memória
+// Este módulo implementa um sistema de locks para evitar duplicação de pastas
 
 const createFolderLocks = new Map(); // key -> Promise resolving to folder object { id, name }
 
