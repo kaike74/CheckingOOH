@@ -1874,29 +1874,52 @@ async function generatePDFReport() {
 
                     Logger.info(`📸 Ponto ${ponto.endereco}: ${entradaFiles.length} entrada, ${saidaFiles.length} saída`);
 
-                    // Carregar imagens em PARALELO (usar webContentLink para fotos grandes)
+                    // Log das URLs para debug
+                    if (entradaFiles.length > 0) {
+                        Logger.debug(`URLs entrada disponíveis:`, {
+                            thumbnailLink: entradaFiles[0].thumbnailLink,
+                            webContentLink: entradaFiles[0].webContentLink,
+                            webViewLink: entradaFiles[0].webViewLink
+                        });
+                    }
+
+                    // Carregar imagens em PARALELO (usar thumbnailLink que funciona melhor)
                     const [entradaResults, saidaResults] = await Promise.all([
                         Promise.allSettled(entradaFiles.map(f => {
-                            const url = f.webContentLink || f.thumbnailLink; // Usar foto grande primeiro
-                            Logger.debug(`Carregando entrada: ${f.name}`);
+                            // Usar thumbnailLink (funciona melhor que webContentLink)
+                            const url = f.thumbnailLink || f.webContentLink;
+                            Logger.debug(`🔄 Carregando entrada: ${f.name} | URL: ${url?.substring(0, 50)}...`);
                             return loadImageAsBase64Fast(url);
                         })),
                         Promise.allSettled(saidaFiles.map(f => {
-                            const url = f.webContentLink || f.thumbnailLink; // Usar foto grande primeiro
-                            Logger.debug(`Carregando saída: ${f.name}`);
+                            const url = f.thumbnailLink || f.webContentLink;
+                            Logger.debug(`🔄 Carregando saída: ${f.name} | URL: ${url?.substring(0, 50)}...`);
                             return loadImageAsBase64Fast(url);
                         }))
                     ]);
 
-                    // Filtrar apenas imagens que carregaram com sucesso
-                    const entradaImages = entradaResults
-                        .filter(r => r.status === 'fulfilled')
-                        .map(r => r.value);
-                    const saidaImages = saidaResults
-                        .filter(r => r.status === 'fulfilled')
-                        .map(r => r.value);
+                    // Filtrar apenas imagens que carregaram com sucesso e logar falhas
+                    const entradaImages = [];
+                    entradaResults.forEach((r, idx) => {
+                        if (r.status === 'fulfilled') {
+                            entradaImages.push(r.value);
+                            Logger.debug(`✅ Entrada ${idx + 1} carregada com sucesso`);
+                        } else {
+                            Logger.error(`❌ Entrada ${idx + 1} falhou: ${r.reason?.message || 'erro desconhecido'}`);
+                        }
+                    });
 
-                    Logger.info(`✅ Carregadas: ${entradaImages.length} entrada, ${saidaImages.length} saída`);
+                    const saidaImages = [];
+                    saidaResults.forEach((r, idx) => {
+                        if (r.status === 'fulfilled') {
+                            saidaImages.push(r.value);
+                            Logger.debug(`✅ Saída ${idx + 1} carregada com sucesso`);
+                        } else {
+                            Logger.error(`❌ Saída ${idx + 1} falhou: ${r.reason?.message || 'erro desconhecido'}`);
+                        }
+                    });
+
+                    Logger.info(`✅ Carregadas: ${entradaImages.length}/${entradaFiles.length} entrada, ${saidaImages.length}/${saidaFiles.length} saída`);
 
                     return {
                         ponto,
@@ -1936,20 +1959,15 @@ async function generatePDFReport() {
         const campanhaTitle = appData.pageTitle || 'Campanha Completa';
         const dataAtual = new Date().toLocaleDateString('pt-BR');
 
-        // Carregar logo E-MÍDIAS (fora da função para carregar uma vez)
+        // Carregar logo E-MÍDIAS do site (não usar fallback local)
         let logoBase64 = null;
         try {
-            // Tentar carregar a logo horizontal
             const logoUrl = 'https://emidiastec.com.br/wp-content/smush-avif/2025/03/logo-E-MIDIAS-png-fundo-escuro-HORIZONTAL.png.avif';
             logoBase64 = await loadImageAsBase64Fast(logoUrl);
+            Logger.info('✅ Logo E-MÍDIAS carregada do site');
         } catch (error) {
-            Logger.debug('Logo não carregada, usando fallback');
-            // Fallback: usar logo local se existir
-            try {
-                logoBase64 = await loadImageAsBase64Fast('./LogoEmidias.png');
-            } catch (e) {
-                Logger.debug('Logo local também não disponível');
-            }
+            Logger.info('ℹ️ Logo não disponível, usando texto');
+            // Não usar fallback local - ir direto para texto
         }
 
         // Helper: Adicionar cabeçalho
@@ -2261,16 +2279,14 @@ async function loadImageAsBase64Fast(url) {
             }
         };
 
-        img.onerror = () => {
+        img.onerror = (e) => {
             clearTimeout(timeout);
-            reject(new Error('Erro ao carregar imagem'));
+            Logger.error(`Erro ao carregar imagem: ${url?.substring(0, 80)}`);
+            reject(new Error(`Erro ao carregar imagem: ${e.type}`));
         };
 
-        // Adicionar parâmetros para melhor qualidade se for Google Drive
-        if (url && url.includes('drive.google.com')) {
-            // Forçar download direto para evitar CORS
-            url = url.replace('/view', '/uc').replace('?', '&').replace('&', '?') + '&export=download';
-        }
+        // Log da tentativa
+        Logger.debug(`Tentando carregar: ${url?.substring(0, 80)}...`);
 
         img.src = url;
     });
