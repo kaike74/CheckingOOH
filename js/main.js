@@ -285,8 +285,8 @@ async function createSecaoElement(ponto, tipo, readOnly = false) {
     
     // Preview de mídia
     const previewDiv = document.createElement('div');
-    // ✅ MELHORIA: Grid maior no modo cliente (fotos maiores)
-    previewDiv.className = readOnly ? 'media-preview media-preview-large' : 'media-preview';
+    // ✅ V10.7.2: Mesmo tamanho em todos os modos
+    previewDiv.className = 'media-preview';
     previewDiv.id = `preview-${ponto.id}-${tipo}`;
 
     // ✅ LAZY LOADING: Sempre usar placeholder, carregar sob demanda
@@ -445,46 +445,59 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false, containerPar
             // ✅ V10.7: Não definir onclick aqui - será tratado pelo img.onclick abaixo
         
         if (DriveAPI.isVideoFile(file.mimeType)) {
-            // ✅ CORREÇÃO: Vídeo com thumbnail e ícone de play
+            // ✅ V10.7.2: Vídeo com visual melhorado e download ao clicar
             const videoThumb = file.thumbnailUrl || `https://drive.google.com/thumbnail?id=${file.id}&sz=w400`;
 
-            // ✅ MELHORIA: Removido timestamp conforme solicitado
-            mediaItem.innerHTML = `
-                <div style="
-                    position: relative;
-                    width: 100%;
-                    height: 100%;
-                    background: url('${videoThumb}') center/cover no-repeat, #000;
-                    cursor: pointer;
-                ">
-                    <div style="
-                        position: absolute;
-                        top: 50%;
-                        left: 50%;
-                        transform: translate(-50%, -50%);
-                        background: rgba(0,0,0,0.7);
-                        border-radius: 50%;
-                        width: 40px;
-                        height: 40px;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        color: white;
-                        font-size: 20px;
-                    ">▶</div>
-                    <div style="
-                        position: absolute;
-                        top: 4px;
-                        right: 4px;
-                        background: rgba(0,0,0,0.7);
-                        color: white;
-                        padding: 2px 6px;
-                        border-radius: 4px;
-                        font-size: 9px;
-                        font-weight: bold;
-                    ">VÍDEO</div>
-                </div>
+            const videoDiv = document.createElement('div');
+            videoDiv.className = 'video-thumbnail';
+            videoDiv.dataset.fileId = file.id;
+            videoDiv.dataset.fileName = file.name;
+            videoDiv.dataset.isVideo = 'true'; // ✅ Marcar como vídeo para badges
+            videoDiv.style.cssText = `
+                position: relative;
+                width: 100%;
+                height: 100%;
+                background: linear-gradient(135deg, rgba(6, 5, 91, 0.8) 0%, rgba(170, 30, 165, 0.8) 100%), url('${videoThumb}') center/cover no-repeat;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
             `;
+
+            // ✅ V10.7.2: Emoji de vídeo grande e bonito
+            videoDiv.innerHTML = `
+                <div style="
+                    font-size: 48px;
+                    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.5));
+                ">🎬</div>
+                <div style="
+                    position: absolute;
+                    top: 8px;
+                    left: 8px;
+                    background: rgba(0, 0, 0, 0.8);
+                    color: white;
+                    padding: 4px 8px;
+                    border-radius: 6px;
+                    font-size: 10px;
+                    font-weight: bold;
+                ">VÍDEO</div>
+            `;
+
+            // ✅ V10.7.2: Click para baixar vídeo automaticamente
+            videoDiv.onclick = (e) => {
+                e.stopPropagation();
+                // Download direto
+                const a = document.createElement('a');
+                a.href = `https://drive.google.com/uc?export=download&id=${file.id}`;
+                a.download = file.name;
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                console.log(`📥 Download iniciado: ${file.name}`);
+            };
+
+            mediaItem.appendChild(videoDiv);
         } else {
             // Imagem com fallback
             const img = document.createElement('img');
@@ -526,10 +539,12 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false, containerPar
             mediaItem.appendChild(img);
         }
         
-        // ✅ V10.2: Badge de delete - controlado por CSS class .editing
-        // ✅ V10.7.1: APENAS adicionar badge se houver img ou vídeo no mediaItem
+        // ✅ V10.7.2: Badge de delete - controlado por CSS class .editing
+        // Verifica se há img, video ou video-thumbnail no mediaItem
         if (!readOnly) {
-            const hasMedia = mediaItem.querySelector('img') || mediaItem.querySelector('video');
+            const hasMedia = mediaItem.querySelector('img') ||
+                            mediaItem.querySelector('video') ||
+                            mediaItem.querySelector('.video-thumbnail');
             if (hasMedia) {
                 const deleteBtn = document.createElement('div');
                 deleteBtn.className = 'delete-badge';
@@ -547,14 +562,16 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false, containerPar
                 if (currentEditMode) {
                     mediaItem.classList.add('editing');
                 }
-                console.log(`🗑️ V10.7.1: Badge criado para ${file.name} - editMode: ${currentEditMode}`);
+                console.log(`🗑️ V10.7.2: Badge criado para ${file.name} - editMode: ${currentEditMode}`);
             }
         }
 
-        // ✅ MELHORIA: Botão de download individual (modo cliente)
-        // ✅ V10.7.1: APENAS adicionar badge se houver img ou vídeo no mediaItem
+        // ✅ V10.7.2: Botão de download individual (modo campanha)
+        // Verifica se há img, video ou video-thumbnail no mediaItem
         if (readOnly) {
-            const hasMedia = mediaItem.querySelector('img') || mediaItem.querySelector('video');
+            const hasMedia = mediaItem.querySelector('img') ||
+                            mediaItem.querySelector('video') ||
+                            mediaItem.querySelector('.video-thumbnail');
             if (hasMedia) {
                 const downloadBtn = document.createElement('a');
                 downloadBtn.href = `https://drive.google.com/uc?export=download&id=${file.id}`;
@@ -679,7 +696,7 @@ async function loadPontoMediaIfNeeded(ponto, tipo, readOnly = false) {
         console.log(`📥 Lazy loading: Carregando arquivos ${tipo} para ponto ${ponto.id} [readOnly: ${readOnly}]`);
 
         // ✅ OTIMIZAÇÃO: Mostrar skeleton loaders durante carregamento
-        previewDiv.className = readOnly ? 'media-preview-large loading' : 'media-preview loading';
+        previewDiv.className = 'media-preview loading';
         previewDiv.innerHTML = `
             <div class="skeleton skeleton-media-item"></div>
             <div class="skeleton skeleton-media-item"></div>
@@ -687,7 +704,7 @@ async function loadPontoMediaIfNeeded(ponto, tipo, readOnly = false) {
         `;
 
         await loadMediaPreview(ponto, tipo, previewDiv, readOnly);
-        previewDiv.className = readOnly ? 'media-preview-large' : 'media-preview'; // Remover classe loading
+        previewDiv.className = 'media-preview'; // Remover classe loading
         previewDiv.dataset.loaded = 'true';
 
         Logger.info('Arquivos carregados via lazy loading', { pontoId: ponto.id, tipo, readOnly });
@@ -1803,11 +1820,12 @@ function addDownloadButtonsToCampaign() {
     let createdButtons = 0;
 
     mediaContainers.forEach((container) => {
-        // ✅ V10.7.1: VERIFICAR se o container realmente tem img ou video
+        // ✅ V10.7.2: VERIFICAR se o container realmente tem img, video ou video-thumbnail
         const img = container.querySelector('img');
         const video = container.querySelector('video');
+        const videoThumb = container.querySelector('.video-thumbnail');
 
-        if (!img && !video) {
+        if (!img && !video && !videoThumb) {
             Logger.debug('Container sem mídia, pulando...');
             return; // Pular containers sem mídia
         }
@@ -1824,7 +1842,15 @@ function addDownloadButtonsToCampaign() {
             Logger.debug('Download badge já existe, forçando visibilidade');
         } else {
             // CRIAR o botão de download
-            const fileId = extractFileId(img ? img.src : video.src);
+            let fileId;
+            if (img) {
+                fileId = extractFileId(img.src);
+            } else if (video) {
+                fileId = extractFileId(video.src);
+            } else if (videoThumb) {
+                fileId = videoThumb.dataset.fileId;
+            }
+
             if (!fileId) {
                 Logger.debug('Sem file ID, pulando...');
                 return;
@@ -2025,11 +2051,16 @@ function closeImageModalV106() {
 }
 
 /**
- * 🔄 V10.6: ZOOM SIMPLES - SEM CARROSSEL
- * Apenas abre a imagem clicada em tela cheia
+ * 🔄 V10.7.2: ZOOM SIMPLES - SEM CARROSSEL
+ * Abre imagem em zoom, vídeos fazem download automaticamente
  */
 function attachImageClickHandlersV106() {
     document.addEventListener('click', (e) => {
+        // ✅ V10.7.2: Ignorar vídeos (já têm download próprio)
+        if (e.target.closest('.video-thumbnail')) {
+            return;
+        }
+
         const imgElement = e.target.closest('img');
 
         // Ignorar se não é imagem
