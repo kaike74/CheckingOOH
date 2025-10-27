@@ -728,21 +728,21 @@ async function loadPontoMediaIfNeeded(ponto, tipo, readOnly = false) {
  * Ativa/desativa o modo edição para uma seção
  */
 /**
- * ✏️ ALTERNAR MODO EDIÇÃO V10.7.3
- * ✅ Com sistema de exclusão pendente e botão cancelar
+ * ✏️ ALTERNAR MODO EDIÇÃO V10.7.4
+ * ✅ Resposta imediata no front-end, exclusões em background
  */
 async function toggleEditMode(pontoId, tipo) {
     const key = `${pontoId}-${tipo}`;
     const isCurrentlyEditing = appData.editMode[key] || false;
 
     if (isCurrentlyEditing) {
-        // CONCLUIR edição - aplicar exclusões pendentes
-        await confirmPendingDeletes(pontoId, tipo);
+        // CONCLUIR edição - resposta IMEDIATA
+        const deleteCount = appData.pendingDeletes[key] ? appData.pendingDeletes[key].length : 0;
 
-        // Desativar modo edição
+        // Desativar modo edição IMEDIATAMENTE
         appData.editMode[key] = false;
 
-        // Atualizar botões
+        // Atualizar botões IMEDIATAMENTE
         const editBtn = document.getElementById(`edit-btn-${pontoId}-${tipo}`);
         const cancelBtn = document.getElementById(`cancel-btn-${pontoId}-${tipo}`);
 
@@ -754,14 +754,22 @@ async function toggleEditMode(pontoId, tipo) {
             cancelBtn.style.display = 'none';
         }
 
-        // Remover classe editing
+        // Remover classe editing IMEDIATAMENTE
         const container = document.getElementById(`preview-${pontoId}-${tipo}`);
         if (container) {
             const mediaItems = container.querySelectorAll('.media-item');
             mediaItems.forEach(item => item.classList.remove('editing'));
         }
 
-        Logger.info('✅ Modo edição CONCLUÍDO', { pontoId, tipo });
+        // Mostrar mensagem de sucesso IMEDIATAMENTE
+        if (deleteCount > 0) {
+            showSuccessMessage(`✅ ${deleteCount} arquivo(s) sendo excluído(s)...`);
+        }
+
+        // Aplicar exclusões em BACKGROUND (sem await)
+        confirmPendingDeletesBackground(pontoId, tipo);
+
+        Logger.info('✅ Modo edição CONCLUÍDO (resposta imediata)', { pontoId, tipo });
     } else {
         // ATIVAR modo edição
         appData.editMode[key] = true;
@@ -847,10 +855,10 @@ function cancelEditMode(pontoId, tipo) {
 }
 
 /**
- * ✅ CONFIRMAR EXCLUSÕES PENDENTES V10.7.3
- * Aplica todas as exclusões marcadas
+ * ✅ CONFIRMAR EXCLUSÕES PENDENTES EM BACKGROUND V10.7.4
+ * Aplica exclusões sem bloquear UI (roda em background)
  */
-async function confirmPendingDeletes(pontoId, tipo) {
+async function confirmPendingDeletesBackground(pontoId, tipo) {
     const key = `${pontoId}-${tipo}`;
 
     if (!appData.pendingDeletes[key] || appData.pendingDeletes[key].length === 0) {
@@ -859,30 +867,34 @@ async function confirmPendingDeletes(pontoId, tipo) {
     }
 
     const deleteCount = appData.pendingDeletes[key].length;
-    Logger.info(`📝 Confirmando ${deleteCount} exclusão(ões) pendente(s)`);
+    const pendingItems = [...appData.pendingDeletes[key]]; // Cópia para processar
 
-    showUploadProgress('Excluindo arquivos...');
+    Logger.info(`📝 Excluindo ${deleteCount} arquivo(s) em background...`);
 
-    // Excluir todos os arquivos marcados
-    for (const item of appData.pendingDeletes[key]) {
+    // Limpar lista de exclusões pendentes IMEDIATAMENTE
+    appData.pendingDeletes[key] = [];
+
+    // Excluir todos os arquivos em background
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const item of pendingItems) {
         try {
             const result = await DriveAPI.deleteFileFromDrive(item.fileId, item.fileName);
             if (result.success) {
                 Logger.success(`✅ Arquivo excluído: ${item.fileName}`);
+                successCount++;
             } else {
                 Logger.error(`❌ Erro ao excluir: ${item.fileName}`);
+                errorCount++;
             }
         } catch (error) {
             Logger.error(`❌ Erro ao excluir ${item.fileName}:`, error);
+            errorCount++;
         }
     }
 
-    hideUploadProgress();
-
-    // Limpar lista de exclusões pendentes
-    appData.pendingDeletes[key] = [];
-
-    // Recarregar preview
+    // Recarregar preview silenciosamente
     const ponto = appData.pontos.find(p => p.id === pontoId);
     if (ponto) {
         const container = document.getElementById(`preview-${pontoId}-${tipo}`);
@@ -891,7 +903,12 @@ async function confirmPendingDeletes(pontoId, tipo) {
         }
     }
 
-    showSuccessMessage(`🗑️ ${deleteCount} arquivo(s) excluído(s) com sucesso!`);
+    // Notificar resultado final
+    if (errorCount === 0) {
+        Logger.success(`🗑️ ${successCount} arquivo(s) excluído(s) com sucesso!`);
+    } else {
+        Logger.warning(`⚠️ ${successCount} excluído(s), ${errorCount} erro(s)`);
+    }
 }
 
 /**
@@ -1235,48 +1252,134 @@ function updatePageHeader(title, subtitle) {
 }
 
 /**
- * 📤 MOSTRAR PROGRESSO DE UPLOAD
- * Exibe barra de progresso durante upload
+ * 📤 MOSTRAR PROGRESSO DE UPLOAD V10.7.4
+ * Exibe tela de loading bonita com logo animado
  */
 function showUploadProgress(message = 'Enviando...') {
-    const progressContainer = document.getElementById('upload-progress');
-    const progressText = document.getElementById('progress-text');
-    
-    if (progressContainer) {
-        progressContainer.style.display = 'block';
+    // Criar tela de loading bonita
+    let loadingOverlay = document.getElementById('upload-loading-overlay');
+
+    if (!loadingOverlay) {
+        loadingOverlay = document.createElement('div');
+        loadingOverlay.id = 'upload-loading-overlay';
+        loadingOverlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.98);
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(10px);
+        `;
+
+        loadingOverlay.innerHTML = `
+            <div style="text-align: center; max-width: 400px; padding: 40px;">
+                <div style="margin-bottom: 30px;">
+                    <img src="./LogoEmidias.png"
+                         alt="E-MÍDIAS Logo"
+                         style="max-width: 120px; animation: pulse 1.5s ease-in-out infinite;"
+                         onerror="this.style.display='none'">
+                </div>
+                <h2 id="upload-loading-title" style="
+                    color: #06055B;
+                    font-size: 24px;
+                    font-weight: 700;
+                    margin-bottom: 16px;
+                    font-family: 'Space Grotesk', sans-serif;
+                ">${message}</h2>
+                <div style="
+                    width: 100%;
+                    height: 6px;
+                    background: #F1F5F9;
+                    border-radius: 3px;
+                    overflow: hidden;
+                    position: relative;
+                ">
+                    <div style="
+                        height: 100%;
+                        background: linear-gradient(90deg, #06055B 0%, #AA1EA5 50%, #06055B 100%);
+                        background-size: 200% 100%;
+                        animation: progressSlide 2s ease-in-out infinite;
+                        width: 100%;
+                    "></div>
+                </div>
+                <p id="upload-loading-subtitle" style="
+                    color: #64748B;
+                    font-size: 14px;
+                    margin-top: 16px;
+                    font-family: 'Space Grotesk', sans-serif;
+                ">Por favor, aguarde...</p>
+            </div>
+        `;
+
+        document.body.appendChild(loadingOverlay);
+
+        // Adicionar animações CSS se não existirem
+        if (!document.getElementById('upload-loading-animations')) {
+            const style = document.createElement('style');
+            style.id = 'upload-loading-animations';
+            style.textContent = `
+                @keyframes pulse {
+                    0%, 100% { transform: scale(1); opacity: 1; }
+                    50% { transform: scale(1.1); opacity: 0.8; }
+                }
+                @keyframes progressSlide {
+                    0% { transform: translateX(-100%); }
+                    100% { transform: translateX(100%); }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+    } else {
+        loadingOverlay.style.display = 'flex';
+        const title = document.getElementById('upload-loading-title');
+        if (title) title.textContent = message;
     }
-    
-    if (progressText) {
-        progressText.textContent = message;
-    }
+
+    Logger.info('🎨 Loading bonito exibido:', message);
 }
 
 /**
- * 🔄 ATUALIZAR PROGRESSO DE UPLOAD
- * Atualiza a barra de progresso
+ * 🔄 ATUALIZAR PROGRESSO DE UPLOAD V10.7.4
+ * Atualiza mensagem do loading bonito
  */
-function updateUploadProgress(percent) {
-    const progressFill = document.getElementById('progress-fill');
-    if (progressFill) {
-        progressFill.style.width = `${percent}%`;
+function updateUploadProgress(percent, message = null) {
+    // Atualizar subtítulo com porcentagem
+    const subtitle = document.getElementById('upload-loading-subtitle');
+    if (subtitle) {
+        if (message) {
+            subtitle.textContent = message;
+        } else {
+            subtitle.textContent = `${Math.round(percent)}% concluído...`;
+        }
     }
+
+    Logger.debug('🔄 Progresso atualizado:', percent + '%');
 }
 
 /**
- * 🔒 ESCONDER PROGRESSO DE UPLOAD
- * Oculta barra de progresso
+ * 🔒 ESCONDER PROGRESSO DE UPLOAD V10.7.4
+ * Oculta tela de loading bonita
  */
 function hideUploadProgress() {
-    const progressContainer = document.getElementById('upload-progress');
-    const progressFill = document.getElementById('progress-fill');
-    
-    if (progressContainer) {
-        progressContainer.style.display = 'none';
+    const loadingOverlay = document.getElementById('upload-loading-overlay');
+
+    if (loadingOverlay) {
+        // Fade out suave
+        loadingOverlay.style.transition = 'opacity 0.3s ease';
+        loadingOverlay.style.opacity = '0';
+
+        setTimeout(() => {
+            loadingOverlay.style.display = 'none';
+            loadingOverlay.style.opacity = '1'; // Reset para próxima vez
+        }, 300);
     }
-    
-    if (progressFill) {
-        progressFill.style.width = '0%';
-    }
+
+    Logger.info('🎨 Loading bonito escondido');
 }
 
 /**
