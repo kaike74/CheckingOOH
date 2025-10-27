@@ -1193,26 +1193,58 @@ function showWelcomeScreen() {
     const container = document.getElementById('pontos-section');
     container.style.display = 'block';
     container.innerHTML = `
-        <div style="text-align: center; padding: 60px 20px;">
-            <h2 style="color: #1E293B; margin-bottom: 20px;">👋 Bem-vindo ao Checking OOH</h2>
-            <p style="color: #64748B; margin-bottom: 30px;">Para acessar o sistema, use um dos links abaixo:</p>
+        <div class="landing-page">
+            <div class="landing-hero">
+                <div class="landing-icon">📱</div>
+                <h1 class="landing-title">CheckingOOH</h1>
+                <p class="landing-subtitle">Sistema Profissional de Monitoramento de Mídia Out of Home</p>
+            </div>
 
-            <div style="max-width: 600px; margin: 0 auto; text-align: left;">
-                <div style="background: #F1F5F9; padding: 20px; border-radius: 12px; margin-bottom: 20px;">
-                    <h3 style="color: #1E293B; margin-bottom: 10px;">📢 Modo Exibidora</h3>
-                    <p style="color: #64748B; font-size: 14px;">Acesse com o ID do ponto do Notion:</p>
-                    <code style="background: white; padding: 8px 12px; border-radius: 6px; display: block; margin-top: 10px;">
-                        ?id=SEU_PONTO_ID
-                    </code>
+            <div class="landing-features">
+                <div class="feature-card">
+                    <div class="feature-icon">📸</div>
+                    <h3>Verificação em Tempo Real</h3>
+                    <p>Acompanhe e registre suas campanhas com fotos e vídeos de alta qualidade</p>
                 </div>
 
-                <div style="background: linear-gradient(135deg, #F1F5F9 0%, #E0E7FF 100%); padding: 20px; border-radius: 12px; border: 2px solid #06055B;">
-                    <h3 style="color: #06055B; margin-bottom: 10px;">📋 Modo Campanha</h3>
-                    <p style="color: #64748B; font-size: 14px;">Visualize todos os pontos de uma campanha:</p>
-                    <code style="background: white; padding: 8px 12px; border-radius: 6px; display: block; margin-top: 10px;">
-                        ?campanha=DATABASE_ID
-                    </code>
+                <div class="feature-card">
+                    <div class="feature-icon">☁️</div>
+                    <h3>Armazenamento Seguro</h3>
+                    <p>Todos os arquivos são salvos de forma segura e acessível a qualquer momento</p>
                 </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">📊</div>
+                    <h3>Relatórios Completos</h3>
+                    <p>Gere relatórios PDF profissionais com todas as informações de suas campanhas</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🔒</div>
+                    <h3>Acesso Controlado</h3>
+                    <p>Diferentes níveis de acesso para exibidoras e clientes</p>
+                </div>
+            </div>
+
+            <div class="landing-cta">
+                <div class="cta-content">
+                    <h2>Pronto para começar?</h2>
+                    <p>Acesse através do link personalizado enviado por email</p>
+                    <div class="cta-info">
+                        <div class="info-badge">
+                            <span class="badge-icon">📧</span>
+                            <span>Link de acesso exclusivo por email</span>
+                        </div>
+                        <div class="info-badge">
+                            <span class="badge-icon">🔐</span>
+                            <span>Acesso seguro e personalizado</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="landing-footer">
+                <p>Desenvolvido por <strong>E-MÍDIAS</strong> • Tecnologia e Inovação em Mídia OOH</p>
             </div>
         </div>
     `;

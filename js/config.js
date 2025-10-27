@@ -12,35 +12,24 @@
  */
 
 const CONFIG = {
-    // 🗄️ CONFIGURAÇÕES DO NOTION
-    NOTION: {
-        // ⚠️ IMPORTANTE: Não precisa mais de DATABASE_ID fixo
-        // O sistema detecta automaticamente a tabela pela página acessada
-        
-        // Campos do seu database (AJUSTADOS para sua estrutura real)
+    // 🚀 MODO DE PRODUÇÃO
+    PRODUCTION_MODE: true, // true = logs mínimos, false = logs completos
+
+    // 🗄️ CONFIGURAÇÕES INTERNAS
+    INTERNAL: {
         FIELDS: {
-            EXIBIDORA: 'Exibidora',        // Campo Select
-            ENDERECO: 'Endereço',          // Campo Title (não "Ponto"!)
-            URL_EXIBIDORA: 'URL Exibidora', // Fórmula gerada automaticamente
-            URL_CLIENTE: 'URL Cliente'      // Fórmula gerada automaticamente
+            EXIBIDORA: 'Exibidora',
+            ENDERECO: 'Endereço',
+            URL_EXIBIDORA: 'URL Exibidora',
+            URL_CLIENTE: 'URL Cliente'
         }
     },
-    
-    // 📂 CONFIGURAÇÕES DO GOOGLE DRIVE
-    DRIVE: {
-        // Estrutura de pastas criada automaticamente:
-        // /CheckingOOH/
-        //   ├── ExibidoraA/
-        //   │   ├── Entrada/
-        //   │   └── Saida/
-        //   └── ExibidoraB/
-        //       ├── Entrada/
-        //       └── Saida/
-        
-        // Tipos de arquivo aceitos
+
+    // 📂 CONFIGURAÇÕES DE UPLOAD
+    UPLOAD: {
         ALLOWED_TYPES: [
             'image/jpeg',
-            'image/jpg', 
+            'image/jpg',
             'image/png',
             'image/gif',
             'image/webp',
@@ -49,19 +38,19 @@ const CONFIG = {
             'video/avi',
             'video/quicktime'
         ],
-        
+
         // Tamanho máximo por arquivo (em bytes)
         MAX_FILE_SIZE: 100 * 1024 * 1024, // 100MB
-        
+
         // Máximo de arquivos por upload
         MAX_FILES_PER_UPLOAD: 5
     },
-    
+
     // 🧪 MODO DEMONSTRAÇÃO
     DEMO: {
         // true = usar dados fictícios, false = usar APIs reais
-        ENABLED: false, // ⚠️ Altere para false após configurar as variáveis de ambiente
-        
+        ENABLED: false,
+
         // Dados fictícios para demonstração
         SAMPLE_DATA: [
             {
@@ -93,12 +82,12 @@ const CONFIG = {
     UI: {
         // Animações
         ANIMATION_DURATION: 300,
-        
+
         // Mensagens
         MESSAGES: {
             LOADING: 'Carregando dados...',
-            ERROR_NOTION: 'Erro ao conectar com o Notion',
-            ERROR_DRIVE: 'Erro ao conectar com o Google Drive',
+            ERROR_CONNECTION: 'Erro ao conectar com o servidor',
+            ERROR_DATA: 'Erro ao carregar dados',
             SUCCESS_UPLOAD: 'Arquivo(s) enviado(s) com sucesso!',
             ERROR_UPLOAD: 'Erro ao enviar arquivo(s)',
             CONFIRM_DELETE: 'Tem certeza que deseja excluir este arquivo?'
@@ -186,27 +175,33 @@ function getApiBaseUrl() {
 
 /**
  * 📝 LOG DE DEBUG
- * Sistema de log para facilitar o debug
+ * Sistema de log que respeita o modo de produção
  */
 const Logger = {
     info: (message, data = null) => {
-        console.log(`ℹ️ [CheckingOOH] ${message}`, data || '');
+        if (!CONFIG.PRODUCTION_MODE) {
+            console.log(`ℹ️ [CheckingOOH] ${message}`, data || '');
+        }
     },
-    
+
     success: (message, data = null) => {
-        console.log(`✅ [CheckingOOH] ${message}`, data || '');
+        if (!CONFIG.PRODUCTION_MODE) {
+            console.log(`✅ [CheckingOOH] ${message}`, data || '');
+        }
     },
-    
+
     warning: (message, data = null) => {
+        // Warnings sempre aparecem, mesmo em produção
         console.warn(`⚠️ [CheckingOOH] ${message}`, data || '');
     },
-    
+
     error: (message, error = null) => {
+        // Erros sempre aparecem, mesmo em produção
         console.error(`❌ [CheckingOOH] ${message}`, error || '');
     },
-    
+
     debug: (message, data = null) => {
-        if (CONFIG.DEMO.ENABLED) {
+        if (!CONFIG.PRODUCTION_MODE && CONFIG.DEMO.ENABLED) {
             console.log(`🐛 [CheckingOOH Debug] ${message}`, data || '');
         }
     }
@@ -219,4 +214,6 @@ window.validateConfig = validateConfig;
 window.getApiBaseUrl = getApiBaseUrl;
 window.Logger = Logger;
 
-Logger.info('Configurações carregadas', { demo: CONFIG.DEMO.ENABLED });
+if (!CONFIG.PRODUCTION_MODE) {
+    Logger.info('Configurações carregadas', { demo: CONFIG.DEMO.ENABLED, production: CONFIG.PRODUCTION_MODE });
+}

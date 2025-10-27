@@ -77,63 +77,51 @@ function clearUploadState() {
  */
 function processSelectedFiles(files) {
     try {
-        console.log('📁 === PROCESSANDO ARQUIVOS SELECIONADOS ===');
-        console.log('📁 Quantidade de arquivos:', files.length);
         Logger.info('Processando arquivos selecionados', { count: files.length });
-        
+
         // Converter FileList para Array
         const fileArray = Array.from(files);
-        
-        // Log de cada arquivo
-        fileArray.forEach((file, index) => {
-            console.log(`📄 Arquivo ${index + 1}:`, {
-                name: file.name,
-                size: file.size,
-                type: file.type
-            });
-        });
-        
+
         // Verificar limite de arquivos
-        if (fileArray.length > CONFIG.DRIVE.MAX_FILES_PER_UPLOAD) {
-            const message = `Máximo de ${CONFIG.DRIVE.MAX_FILES_PER_UPLOAD} arquivos por vez.`;
-            console.warn('⚠️', message);
+        if (fileArray.length > CONFIG.UPLOAD.MAX_FILES_PER_UPLOAD) {
+            const message = `Máximo de ${CONFIG.UPLOAD.MAX_FILES_PER_UPLOAD} arquivos por vez.`;
+            Logger.warning(message);
             alert(message);
             return;
         }
-        
+
         // Validar cada arquivo
         const validFiles = [];
         const errors = [];
-        
+
         fileArray.forEach(file => {
             const validation = DriveAPI.validateFile(file);
             if (validation.valid) {
                 validFiles.push(file);
-                console.log(`✅ Arquivo válido: ${file.name}`);
+                Logger.debug(`Arquivo válido: ${file.name}`);
             } else {
                 errors.push(`${file.name}: ${validation.error}`);
-                console.error(`❌ Arquivo inválido: ${file.name} - ${validation.error}`);
+                Logger.debug(`Arquivo inválido: ${file.name}`);
             }
         });
-        
+
         // Mostrar erros se houver
         if (errors.length > 0) {
             const errorMessage = 'Alguns arquivos não são válidos:\n\n' + errors.join('\n');
-            console.error('❌ Erros de validação:', errors);
+            Logger.warning('Erros de validação encontrados');
             alert(errorMessage);
         }
-        
+
         // Se há arquivos válidos, iniciar upload
         if (validFiles.length > 0) {
-            console.log(`✅ ${validFiles.length} arquivo(s) válido(s), iniciando upload...`);
+            Logger.info(`${validFiles.length} arquivo(s) válido(s), iniciando upload`);
             addFilesToQueue(validFiles);
             startUpload();
         } else {
-            console.warn('⚠️ Nenhum arquivo válido para upload');
+            Logger.warning('Nenhum arquivo válido para upload');
         }
-        
+
     } catch (error) {
-        console.error('❌ Erro ao processar arquivos selecionados:', error);
         Logger.error('Erro ao processar arquivos selecionados', error);
         alert('Erro ao processar arquivos: ' + error.message);
     }
@@ -160,41 +148,28 @@ async function startUpload() {
     }
     
     if (uploadQueue.length === 0) {
-        console.warn('⚠️ Nenhum arquivo na fila de upload');
         Logger.warning('Nenhum arquivo na fila de upload');
         return;
     }
-    
+
     isUploading = true;
     showUploadProgress('Iniciando upload...');
-    
+
     try {
-        console.log('🚀 === INICIANDO PROCESSO DE UPLOAD ===');
-        console.log('📤 Contexto do upload:', currentUploadContext);
         Logger.info('Iniciando upload de arquivos', { count: uploadQueue.length });
-        
+
         const totalFiles = uploadQueue.length;
         let uploadedFiles = 0;
         let failedFiles = 0;
-        
+
         // Upload sequencial de cada arquivo
         for (const file of uploadQueue) {
             try {
-                console.log(`📤 Enviando arquivo: ${file.name}...`);
                 Logger.info('Enviando arquivo', { fileName: file.name });
 
                 updateUploadProgress((uploadedFiles / totalFiles) * 100);
                 showUploadProgress('Enviando arquivos...');
-                
-                // ✅ ALTERADO: Passar databaseId para uploadFileToDrive
-                console.log('📤 Chamando DriveAPI.uploadFileToDrive com:', {
-                    fileName: file.name,
-                    exibidora: currentUploadContext.exibidora,
-                    pontoId: currentUploadContext.pontoId,
-                    tipo: currentUploadContext.tipo,
-                    databaseId: currentUploadContext.databaseId
-                });
-                
+
                 const result = await DriveAPI.uploadFileToDrive(
                     file,
                     currentUploadContext.exibidora,
@@ -202,30 +177,25 @@ async function startUpload() {
                     currentUploadContext.tipo,
                     currentUploadContext.databaseId
                 );
-                
-                console.log('📤 Resultado do upload:', result);
-                
+
                 if (result.success) {
                     uploadedFiles++;
-                    console.log(`✅ Arquivo enviado com sucesso: ${file.name}`);
                     Logger.success('Arquivo enviado', { fileName: file.name });
                 } else {
                     failedFiles++;
-                    console.error(`❌ Falha no upload de ${file.name}:`, result.error);
                     Logger.error('Falha no upload', { fileName: file.name, error: result.error });
                 }
-                
+
             } catch (error) {
                 failedFiles++;
-                console.error(`❌ Erro ao enviar arquivo ${file.name}:`, error);
                 Logger.error('Erro ao enviar arquivo', { fileName: file.name, error });
             }
         }
-        
+
         // Atualizar progresso final
         updateUploadProgress(100);
 
-        console.log('📊 Resultado final do upload:', {
+        Logger.info('Upload finalizado', {
             total: totalFiles,
             enviados: uploadedFiles,
             falhas: failedFiles
@@ -243,7 +213,6 @@ async function startUpload() {
         };
 
         // Recarregar lista de arquivos ANTES de fechar modal
-        console.log('🔄 Recarregando lista de arquivos com contexto:', savedContext);
         await refreshFilesList(
             savedContext.exibidora,
             savedContext.pontoId,
@@ -260,14 +229,12 @@ async function startUpload() {
                 const message = failedFiles > 0
                     ? `✅ ${uploadedFiles} arquivo(s) enviado(s) • ❌ ${failedFiles} falhou(aram)`
                     : `✅ ${uploadedFiles} arquivo(s) enviado(s) com sucesso!`;
-                console.log('🎉', message);
                 showSuccessMessage(message);
             }
 
         }, 500);
-        
+
     } catch (error) {
-        console.error('❌ Erro no processo de upload:', error);
         Logger.error('Erro no processo de upload', error);
         alert('Erro no upload: ' + error.message);
     } finally {
@@ -366,7 +333,6 @@ function setupDragAndDrop() {
         fileInput.addEventListener('change', (e) => {
             const files = e.target.files;
             if (files && files.length > 0) {
-                console.log('📁 Arquivo(s) selecionado(s):', files.length);
                 Logger.info('Arquivo(s) selecionado(s)', { count: files.length });
                 processSelectedFiles(files);
             }

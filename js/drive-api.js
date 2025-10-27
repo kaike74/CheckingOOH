@@ -8,38 +8,23 @@
  */
 async function uploadFileToDrive(file, exibidora, pontoId, tipo, databaseId) {
     try {
-        console.log('📤 === DRIVE API: INICIANDO UPLOAD ===');
-        console.log('📤 Parâmetros:', { 
-            fileName: file.name, 
-            size: file.size, 
-            exibidora, 
-            pontoId, 
-            tipo,
-            databaseId
+        Logger.info('Iniciando upload de arquivo', {
+            fileName: file.name,
+            size: file.size
         });
-        Logger.info('Iniciando upload para Google Drive', { 
-            fileName: file.name, 
-            size: file.size, 
-            exibidora, 
-            pontoId, 
-            tipo,
-            databaseId
-        });
-        
+
         // 🧪 MODO DEMO - SIMULAR UPLOAD
         if (CONFIG.DEMO.ENABLED) {
-            console.log('🧪 Modo demo ativado, simulando upload...');
+            Logger.debug('Modo demo ativado, simulando upload');
             return mockDriveUpload(file, exibidora, pontoId, tipo);
         }
-        
+
         // Validar arquivo
         const validation = validateFile(file);
         if (!validation.valid) {
-            console.error('❌ Arquivo inválido:', validation.error);
             throw new Error(validation.error);
         }
-        console.log('✅ Arquivo válido');
-        
+
         // Criar FormData para envio
         const formData = new FormData();
         formData.append('file', file);
@@ -47,40 +32,27 @@ async function uploadFileToDrive(file, exibidora, pontoId, tipo, databaseId) {
         formData.append('pontoId', pontoId);
         formData.append('tipo', tipo);
         formData.append('databaseId', databaseId);
-        
-        console.log('📦 FormData criado com sucesso');
-        console.log('📤 Enviando requisição para /api/drive-upload...');
-        
+
         // 🔗 CHAMADA PARA A API
         const apiUrl = `${getApiBaseUrl()}/api/drive-upload`;
-        console.log('🔗 URL da API:', apiUrl);
-        
+
         const response = await fetch(apiUrl, {
             method: 'POST',
             body: formData
         });
-        
-        console.log('📥 Resposta recebida:', {
-            status: response.status,
-            statusText: response.statusText,
-            ok: response.ok
-        });
-        
+
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({ error: 'Erro desconhecido' }));
-            console.error('❌ Erro na resposta da API:', errorData);
             throw new Error(errorData.error || `Erro HTTP ${response.status}`);
         }
-        
+
         const result = await response.json();
-        console.log('✅ Upload concluído com sucesso:', result);
         Logger.success('Upload concluído', result);
-        
+
         return result;
-        
+
     } catch (error) {
-        console.error('❌ Erro no upload para Google Drive:', error);
-        Logger.error('Erro no upload para Google Drive', error);
+        Logger.error('Erro no upload de arquivo', error);
         throw error;
     }
 }
@@ -173,7 +145,7 @@ async function deleteFileFromDrive(fileId, fileName) {
  */
 function validateFile(file) {
     // Verificar tipo
-    if (!CONFIG.DRIVE.ALLOWED_TYPES.includes(file.type)) {
+    if (!CONFIG.UPLOAD.ALLOWED_TYPES.includes(file.type)) {
         return {
             valid: false,
             error: `Tipo de arquivo não permitido: ${file.type}. Tipos aceitos: imagens e vídeos.`
@@ -181,8 +153,8 @@ function validateFile(file) {
     }
     
     // Verificar tamanho
-    if (file.size > CONFIG.DRIVE.MAX_FILE_SIZE) {
-        const maxSizeMB = CONFIG.DRIVE.MAX_FILE_SIZE / (1024 * 1024);
+    if (file.size > CONFIG.UPLOAD.MAX_FILE_SIZE) {
+        const maxSizeMB = CONFIG.UPLOAD.MAX_FILE_SIZE / (1024 * 1024);
         return {
             valid: false,
             error: `Arquivo muito grande. Tamanho máximo: ${maxSizeMB}MB`
@@ -349,4 +321,4 @@ window.DriveAPI = {
     formatDate
 };
 
-Logger.info('Módulo Google Drive API carregado');
+Logger.info('Módulo de armazenamento carregado');
