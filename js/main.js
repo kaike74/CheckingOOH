@@ -1874,26 +1874,45 @@ async function generatePDFReport() {
 
                     Logger.info(`📸 Ponto ${ponto.endereco}: ${entradaFiles.length} entrada, ${saidaFiles.length} saída`);
 
-                    // Log das URLs para debug
+                    // Log COMPLETO do arquivo para ver todas as propriedades
                     if (entradaFiles.length > 0) {
-                        Logger.debug(`URLs entrada disponíveis:`, {
+                        Logger.info(`🔍 Arquivo completo:`, entradaFiles[0]);
+                        Logger.info(`🔍 URLs disponíveis:`, {
                             thumbnailLink: entradaFiles[0].thumbnailLink,
                             webContentLink: entradaFiles[0].webContentLink,
-                            webViewLink: entradaFiles[0].webViewLink
+                            webViewLink: entradaFiles[0].webViewLink,
+                            id: entradaFiles[0].id,
+                            name: entradaFiles[0].name
                         });
                     }
 
-                    // Carregar imagens em PARALELO (usar thumbnailLink que funciona melhor)
+                    // Carregar imagens em PARALELO
                     const [entradaResults, saidaResults] = await Promise.all([
                         Promise.allSettled(entradaFiles.map(f => {
-                            // Usar thumbnailLink (funciona melhor que webContentLink)
-                            const url = f.thumbnailLink || f.webContentLink;
-                            Logger.debug(`🔄 Carregando entrada: ${f.name} | URL: ${url?.substring(0, 50)}...`);
+                            // Tentar várias propriedades possíveis
+                            const url = f.thumbnailLink || f.webContentLink || f.webViewLink ||
+                                       (f.id ? `https://drive.google.com/uc?id=${f.id}&export=view` : null);
+
+                            Logger.info(`🔄 Carregando entrada: ${f.name}`);
+                            Logger.info(`   URL escolhida: ${url || 'NENHUMA URL DISPONÍVEL!'}`);
+
+                            if (!url) {
+                                return Promise.reject(new Error('URL não disponível'));
+                            }
+
                             return loadImageAsBase64Fast(url);
                         })),
                         Promise.allSettled(saidaFiles.map(f => {
-                            const url = f.thumbnailLink || f.webContentLink;
-                            Logger.debug(`🔄 Carregando saída: ${f.name} | URL: ${url?.substring(0, 50)}...`);
+                            const url = f.thumbnailLink || f.webContentLink || f.webViewLink ||
+                                       (f.id ? `https://drive.google.com/uc?id=${f.id}&export=view` : null);
+
+                            Logger.info(`🔄 Carregando saída: ${f.name}`);
+                            Logger.info(`   URL escolhida: ${url || 'NENHUMA URL DISPONÍVEL!'}`);
+
+                            if (!url) {
+                                return Promise.reject(new Error('URL não disponível'));
+                            }
+
                             return loadImageAsBase64Fast(url);
                         }))
                     ]);
