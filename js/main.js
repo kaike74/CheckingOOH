@@ -1874,27 +1874,25 @@ async function generatePDFReport() {
 
                     Logger.info(`📸 Ponto ${ponto.endereco}: ${entradaFiles.length} entrada, ${saidaFiles.length} saída`);
 
-                    // Log COMPLETO do arquivo para ver todas as propriedades
-                    if (entradaFiles.length > 0) {
-                        Logger.info(`🔍 Arquivo completo:`, entradaFiles[0]);
-                        Logger.info(`🔍 URLs disponíveis:`, {
-                            thumbnailLink: entradaFiles[0].thumbnailLink,
-                            webContentLink: entradaFiles[0].webContentLink,
-                            webViewLink: entradaFiles[0].webViewLink,
-                            id: entradaFiles[0].id,
-                            name: entradaFiles[0].name
-                        });
-                    }
-
                     // Carregar imagens em PARALELO
                     const [entradaResults, saidaResults] = await Promise.all([
                         Promise.allSettled(entradaFiles.map(f => {
-                            // Tentar várias propriedades possíveis
-                            const url = f.thumbnailLink || f.webContentLink || f.webViewLink ||
+                            // ✅ CORRIGIDO: Usar propriedades corretas retornadas pelo backend
+                            // Backend retorna: url, thumbnailUrl, downloadUrl, alternativeUrls
+                            const url = f.url ||
+                                       f.thumbnailUrl ||
+                                       f.downloadUrl ||
+                                       (f.alternativeUrls && f.alternativeUrls[0]) ||
                                        (f.id ? `https://drive.google.com/uc?id=${f.id}&export=view` : null);
 
                             Logger.info(`🔄 Carregando entrada: ${f.name}`);
-                            Logger.info(`   URL escolhida: ${url || 'NENHUMA URL DISPONÍVEL!'}`);
+                            Logger.info(`   Propriedades disponíveis:`, {
+                                url: f.url?.substring(0, 80),
+                                thumbnailUrl: f.thumbnailUrl?.substring(0, 80),
+                                downloadUrl: f.downloadUrl?.substring(0, 80),
+                                alternativeUrls: f.alternativeUrls?.length || 0
+                            });
+                            Logger.info(`   URL escolhida: ${url?.substring(0, 100) || 'NENHUMA URL DISPONÍVEL!'}`);
 
                             if (!url) {
                                 return Promise.reject(new Error('URL não disponível'));
@@ -1903,11 +1901,21 @@ async function generatePDFReport() {
                             return loadImageAsBase64Fast(url);
                         })),
                         Promise.allSettled(saidaFiles.map(f => {
-                            const url = f.thumbnailLink || f.webContentLink || f.webViewLink ||
+                            // ✅ CORRIGIDO: Usar propriedades corretas retornadas pelo backend
+                            const url = f.url ||
+                                       f.thumbnailUrl ||
+                                       f.downloadUrl ||
+                                       (f.alternativeUrls && f.alternativeUrls[0]) ||
                                        (f.id ? `https://drive.google.com/uc?id=${f.id}&export=view` : null);
 
                             Logger.info(`🔄 Carregando saída: ${f.name}`);
-                            Logger.info(`   URL escolhida: ${url || 'NENHUMA URL DISPONÍVEL!'}`);
+                            Logger.info(`   Propriedades disponíveis:`, {
+                                url: f.url?.substring(0, 80),
+                                thumbnailUrl: f.thumbnailUrl?.substring(0, 80),
+                                downloadUrl: f.downloadUrl?.substring(0, 80),
+                                alternativeUrls: f.alternativeUrls?.length || 0
+                            });
+                            Logger.info(`   URL escolhida: ${url?.substring(0, 100) || 'NENHUMA URL DISPONÍVEL!'}`);
 
                             if (!url) {
                                 return Promise.reject(new Error('URL não disponível'));
