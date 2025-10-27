@@ -192,12 +192,29 @@ async function fetchPageTitle(databaseId, notionToken) {
 
         const pageData = await pageResponse.json();
 
-        // 4. Extrair título
+        // 4. Extrair título e ícone
         const titleProperty = pageData.properties?.title || pageData.properties?.Name;
         const title = titleProperty?.title?.[0]?.text?.content || null;
 
+        // 5. Extrair ícone (pode ser emoji ou external/file)
+        const icon = pageData.icon;
+        let iconUrl = null;
+
+        if (icon) {
+            if (icon.type === 'external') {
+                iconUrl = icon.external?.url;
+            } else if (icon.type === 'file') {
+                iconUrl = icon.file?.url;
+            } else if (icon.type === 'emoji') {
+                // Emojis não podemos usar diretamente
+                iconUrl = null;
+            }
+        }
+
         console.log('✅ Título da página pai extraído:', title);
-        return title;
+        console.log('✅ Ícone da página pai:', iconUrl || 'Nenhum');
+
+        return { title, iconUrl };
 
     } catch (error) {
         console.error('❌ Erro ao buscar título da página pai:', error);
@@ -215,8 +232,10 @@ async function fetchPontosByCampanha(campanhaId, notionToken) {
         const normalizedId = normalizeNotionId(campanhaId);
         console.log('🔧 Database ID normalizado:', normalizedId);
 
-        // Buscar título da página pai
-        const pageTitle = await fetchPageTitle(normalizedId, notionToken);
+        // Buscar título e ícone da página pai
+        const pageInfo = await fetchPageTitle(normalizedId, notionToken);
+        const pageTitle = pageInfo?.title || null;
+        const pageIcon = pageInfo?.iconUrl || null;
 
         // Buscar TODOS os pontos do database (sem filtro)
         const queryResponse = await fetch(`https://api.notion.com/v1/databases/${normalizedId}/query`, {
@@ -247,7 +266,8 @@ async function fetchPontosByCampanha(campanhaId, notionToken) {
             pontos: pontos,
             databaseId: campanhaId,
             totalPontos: pontos.length,
-            pageTitle: pageTitle // ✅ Incluir título da página pai
+            pageTitle: pageTitle, // ✅ Incluir título da página pai
+            pageIcon: pageIcon // ✅ Incluir ícone da página pai
         };
 
     } catch (error) {

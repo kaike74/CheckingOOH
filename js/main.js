@@ -101,7 +101,7 @@ async function loadExibidoraData(pontoId) {
         Logger.info('✅ Database ID da campanha:', appData.databaseId);
         
         // Atualizar header
-        updatePageHeader(`📢 ${appData.exibidora}`, `Modo Exibidora • ${appData.pontos.length} ponto(s)`);
+        updatePageHeader(appData.exibidora, `Modo Exibidora • ${appData.pontos.length} ponto(s)`);
         
         // Mostrar informações da exibidora
         showExibidoraInfo();
@@ -137,10 +137,11 @@ async function loadCampanhaData(campanhaId) {
         appData.databaseId = campanhaId;
         appData.pontoAtual = null; // Não há ponto atual específico
         appData.pageTitle = notionData.pageTitle; // ✅ Armazenar título da página pai
+        appData.pageIcon = notionData.pageIcon; // ✅ Armazenar ícone da página pai
 
-        // Atualizar header com título da página pai
+        // Atualizar header com título da página pai (sem emoji)
         const campanhaTitle = notionData.pageTitle || 'Campanha Completa';
-        updatePageHeader(`📋 ${campanhaTitle}`, `Visualização Geral • ${appData.pontos.length} ponto(s) de todas as exibidoras`);
+        updatePageHeader(campanhaTitle, `Visualização Geral • ${appData.pontos.length} ponto(s) de todas as exibidoras`);
 
         // ✅ V10: Adicionar botão PDF no header
         addPDFButton();
@@ -1923,20 +1924,41 @@ async function generatePDFReport() {
         const campanhaTitle = appData.pageTitle || 'Campanha Completa';
         const dataAtual = new Date().toLocaleDateString('pt-BR');
 
+        // Carregar logo E-MÍDIAS (fora da função para carregar uma vez)
+        let logoBase64 = null;
+        try {
+            // Tentar carregar a logo horizontal
+            const logoUrl = './LogoEmidias.png'; // Logo local como fallback
+            logoBase64 = await loadImageAsBase64Fast(logoUrl);
+        } catch (error) {
+            Logger.warn('Não foi possível carregar logo', error);
+        }
+
         // Helper: Adicionar cabeçalho
         const addHeader = () => {
             pdf.setFillColor(30, 64, 175); // #1e40af
             pdf.rect(0, 0, pageWidth, 35, 'F');
 
+            // Adicionar logo se disponível
+            if (logoBase64) {
+                try {
+                    pdf.addImage(logoBase64, 'PNG', margin, 8, 40, 20); // Logo 40x20mm
+                } catch (e) {
+                    Logger.warn('Erro ao adicionar logo', e);
+                }
+            } else {
+                // Fallback: texto
+                pdf.setTextColor(255, 255, 255);
+                pdf.setFontSize(22);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text('E-MÍDIAS', margin, 15);
+
+                pdf.setFontSize(10);
+                pdf.setFont('helvetica', 'normal');
+                pdf.text('Soluções em Mídia Externa', margin, 22);
+            }
+
             pdf.setTextColor(255, 255, 255);
-            pdf.setFontSize(22);
-            pdf.setFont('helvetica', 'bold');
-            pdf.text('E-MÍDIAS', margin, 15);
-
-            pdf.setFontSize(10);
-            pdf.setFont('helvetica', 'normal');
-            pdf.text('Soluções em Mídia Externa', margin, 22);
-
             pdf.setFontSize(11);
             pdf.setFont('helvetica', 'bold');
             pdf.text('Relatório de Monitoramento', pageWidth - margin, 15, { align: 'right' });
@@ -1952,13 +1974,45 @@ async function generatePDFReport() {
         // Primeira página - Cabeçalho
         yPos = addHeader();
 
+        // Carregar ícone da página do Notion (se existir)
+        let pageIconBase64 = null;
+        if (appData.pageIcon) {
+            try {
+                pageIconBase64 = await loadImageAsBase64Fast(appData.pageIcon);
+            } catch (error) {
+                Logger.warn('Erro ao carregar ícone da página', error);
+            }
+        }
+
         // Título da campanha
         pdf.setFillColor(30, 64, 175);
         pdf.roundedRect(margin, yPos, contentWidth, 25, 3, 3, 'F');
-        pdf.setTextColor(255, 255, 255);
-        pdf.setFontSize(16);
-        pdf.setFont('helvetica', 'bold');
-        pdf.text(campanhaTitle, pageWidth / 2, yPos + 12, { align: 'center' });
+
+        // Adicionar ícone da página se disponível
+        if (pageIconBase64) {
+            try {
+                pdf.addImage(pageIconBase64, 'PNG', margin + 5, yPos + 5, 15, 15);
+                // Título com espaço para o ícone
+                pdf.setTextColor(255, 255, 255);
+                pdf.setFontSize(16);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text(campanhaTitle, margin + 25, yPos + 13);
+            } catch (e) {
+                Logger.warn('Erro ao adicionar ícone da página', e);
+                // Fallback: título centralizado sem ícone
+                pdf.setTextColor(255, 255, 255);
+                pdf.setFontSize(16);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text(campanhaTitle, pageWidth / 2, yPos + 12, { align: 'center' });
+            }
+        } else {
+            // Título centralizado sem ícone
+            pdf.setTextColor(255, 255, 255);
+            pdf.setFontSize(16);
+            pdf.setFont('helvetica', 'bold');
+            pdf.text(campanhaTitle, pageWidth / 2, yPos + 12, { align: 'center' });
+        }
+
         pdf.setFontSize(10);
         pdf.setFont('helvetica', 'normal');
         pdf.text('Relatório completo de monitoramento de painéis', pageWidth / 2, yPos + 19, { align: 'center' });
@@ -2022,7 +2076,7 @@ async function generatePDFReport() {
             pdf.setFontSize(8);
             pdf.setFont('helvetica', 'normal');
             pdf.setTextColor(107, 114, 128);
-            pdf.text(`Exibidora: ${ponto.exibidora} • Período: ${ponto.periodo || 'N/A'}`, margin + 2, yPos + 10);
+            pdf.text(`Exibidora: ${ponto.exibidora}`, margin + 2, yPos + 10);
 
             yPos += 15;
 
@@ -2053,7 +2107,7 @@ async function generatePDFReport() {
                 pdf.roundedRect(x + 2, sectionY, 20, 5, 1, 1, 'F');
                 pdf.setFontSize(7);
                 pdf.setFont('helvetica', 'bold');
-                pdf.text(files.length > 0 ? '✓ Completo' : '⏳ Pendente', x + 12, sectionY + 3.5, { align: 'center' });
+                pdf.text(files.length > 0 ? 'Completo' : 'Pendente', x + 12, sectionY + 3.5, { align: 'center' });
                 sectionY += 8;
 
                 // Fotos em grid 2x2
@@ -2086,8 +2140,8 @@ async function generatePDFReport() {
             };
 
             // Renderizar colunas
-            drawSection(margin, '📥 ENTRADA', entrada.files, entrada.images, { r: 5, g: 150, b: 105 });
-            drawSection(margin + colWidth + 5, '📤 SAÍDA', saida.files, saida.images, { r: 220, g: 38, b: 38 });
+            drawSection(margin, 'ENTRADA', entrada.files, entrada.images, { r: 5, g: 150, b: 105 });
+            drawSection(margin + colWidth + 5, 'SAIDA', saida.files, saida.images, { r: 220, g: 38, b: 38 });
 
             yPos += Math.max(
                 entrada.images.length > 0 ? Math.ceil(entrada.images.length / 2) * 32 + 18 : 28,
