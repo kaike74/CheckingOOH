@@ -2,6 +2,8 @@
 // 📂 CLOUDFLARE PAGES FUNCTION - GOOGLE DRIVE LIST
 // =============================================================================
 
+import { ensureFolderHierarchy, validateHierarchyParams } from './drive-hierarchy.js';
+
 export async function onRequest(context) {
     // Permitir CORS
     const headers = {
@@ -370,80 +372,37 @@ async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, ac
 }
 
 // =============================================================================
-// 🔍 ENCONTRAR OU CRIAR CAMINHO DA PASTA
+// 🔍 ENCONTRAR OU CRIAR CAMINHO DA PASTA (REFATORADO)
 // ✅ V10: HIERARQUIA CORRETA CheckingOOH/Exibidora/Campanha/Ponto/Tipo
+// ✅ REFATORADO: Agora usa o módulo compartilhado drive-hierarchy.js
 // =============================================================================
 async function findOrCreateFolderPath(exibidora, tipo, databaseId, pontoId, accessToken, rootFolderId) {
     try {
-        console.log('🔍 ✅ V10: CheckingOOH/Exibidora/Campanha/Ponto/Tipo', { exibidora, tipo, databaseId, pontoId });
+        console.log('📁 [REFATORADO] Usando módulo compartilhado de hierarquia...');
+        console.log('📋 Parâmetros:', { exibidora, tipo, databaseId, pontoId });
 
-        // PASSO 1: Buscar pasta CheckingOOH em todos os drives
-        console.log('🔍 [1/5] Buscando pasta CheckingOOH...');
-        let checkingFolder = await findFolderInAllDrives('CheckingOOH', accessToken);
-
-        if (!checkingFolder) {
-            console.log('❌ Pasta CheckingOOH não encontrada. Não é possível criar estrutura sem pasta raiz.');
+        // ✅ VALIDAR parâmetros antes de prosseguir
+        const validation = validateHierarchyParams(exibidora, databaseId, pontoId, tipo);
+        if (!validation.valid) {
+            console.error('❌ Parâmetros inválidos:', validation.errors);
             return null;
         }
 
-        console.log('✅ Pasta CheckingOOH encontrada:', checkingFolder.id);
+        // ✅ USAR módulo compartilhado (com mutex para prevenir duplicações)
+        const result = await ensureFolderHierarchy(
+            exibidora,
+            databaseId,
+            pontoId,
+            tipo,
+            accessToken
+        );
 
-        // PASSO 2: Buscar ou criar pasta da Exibidora
-        console.log(`🔍 [2/5] Buscando/criando pasta Exibidora: ${exibidora}...`);
-        let exibidoraFolder = await findFolder(exibidora, checkingFolder.id, accessToken);
-
-        if (!exibidoraFolder) {
-            console.log(`📁 Criando pasta Exibidora: ${exibidora}...`);
-            exibidoraFolder = await createFolder(exibidora, checkingFolder.id, accessToken, checkingFolder.driveId);
-            console.log('✅ Pasta Exibidora criada:', exibidoraFolder.id);
-        } else {
-            console.log('✅ Pasta Exibidora já existe:', exibidoraFolder.id);
-        }
-
-        // PASSO 3: Buscar ou criar pasta da Campanha (databaseId)
-        console.log(`🔍 [3/5] Buscando/criando pasta Campanha: ${databaseId}...`);
-        let campanhaFolder = await findFolder(databaseId, exibidoraFolder.id, accessToken);
-
-        if (!campanhaFolder) {
-            console.log(`📁 Criando pasta Campanha: ${databaseId}...`);
-            campanhaFolder = await createFolder(databaseId, exibidoraFolder.id, accessToken, checkingFolder.driveId);
-            console.log('✅ Pasta Campanha criada:', campanhaFolder.id);
-        } else {
-            console.log('✅ Pasta Campanha já existe:', campanhaFolder.id);
-        }
-
-        // PASSO 4: Buscar ou criar pasta do Ponto (pontoId) ✅ V10: Ponto ANTES do Tipo
-        console.log(`🔍 [4/5] Buscando/criando pasta Ponto: ${pontoId}...`);
-        let pontoFolder = await findFolder(pontoId, campanhaFolder.id, accessToken);
-
-        if (!pontoFolder) {
-            console.log(`📁 Criando pasta Ponto: ${pontoId}...`);
-            pontoFolder = await createFolder(pontoId, campanhaFolder.id, accessToken, checkingFolder.driveId);
-            console.log('✅ Pasta Ponto criada:', pontoFolder.id);
-        } else {
-            console.log('✅ Pasta Ponto já existe:', pontoFolder.id);
-        }
-
-        // PASSO 5: Buscar ou criar pasta do Tipo (Entrada/Saida) ✅ V10: Tipo DEPOIS do Ponto
-        const tipoFolderName = tipo === 'entrada' ? 'Entrada' : 'Saida';
-        console.log(`🔍 [5/5] Buscando/criando pasta Tipo: ${tipoFolderName}...`);
-        let tipoFolder = await findFolder(tipoFolderName, pontoFolder.id, accessToken);
-
-        if (!tipoFolder) {
-            console.log(`📁 Criando pasta Tipo: ${tipoFolderName}...`);
-            tipoFolder = await createFolder(tipoFolderName, pontoFolder.id, accessToken, checkingFolder.driveId);
-            console.log('✅ Pasta Tipo criada:', tipoFolder.id);
-        } else {
-            console.log('✅ Pasta Tipo já existe:', tipoFolder.id);
-        }
-
-        const fullPath = `CheckingOOH/${exibidora}/${databaseId}/${pontoId}/${tipoFolderName}`;
-        console.log('🎉 Estrutura completa pronta V10 (CORRETA)! Caminho:', fullPath);
+        console.log('🎉 Estrutura garantida via módulo compartilhado');
 
         return {
-            id: tipoFolder.id,
-            path: fullPath,
-            driveId: checkingFolder.driveId
+            id: result.id,
+            path: result.path,
+            driveId: result.folders.checking.driveId
         };
 
     } catch (error) {
@@ -453,8 +412,10 @@ async function findOrCreateFolderPath(exibidora, tipo, databaseId, pontoId, acce
 }
 
 // =============================================================================
-// 📁 CRIAR PASTA NO GOOGLE DRIVE
+// 📁 CRIAR PASTA NO GOOGLE DRIVE (MANTIDO PARA COMPATIBILIDADE)
 // =============================================================================
+// ⚠️ DEPRECATED: Esta função será removida em versões futuras
+// Use drive-hierarchy.js para criar pastas
 async function createFolder(folderName, parentId, accessToken, driveId = null) {
     try {
         console.log(`📁 Criando pasta "${folderName}" dentro de ${parentId}...`);
@@ -495,9 +456,11 @@ async function createFolder(folderName, parentId, accessToken, driveId = null) {
 }
 
 // =============================================================================
-// 📁 ENCONTRAR PASTA V10.1
+// 📁 ENCONTRAR PASTA V10.1 (MANTIDO PARA COMPATIBILIDADE)
 // ✅ CORRIGIDO: Proteção contra duplicação + escape de caracteres especiais
 // =============================================================================
+// ⚠️ DEPRECATED: Esta função será removida em versões futuras
+// Use drive-hierarchy.js para buscar pastas
 async function findFolder(folderName, parentId, accessToken) {
     try {
         // ✅ V10.1: Escapar aspas simples no nome da pasta
@@ -537,8 +500,10 @@ async function findFolder(folderName, parentId, accessToken) {
 }
 
 // =============================================================================
-// 🌐 ENCONTRAR PASTA EM TODOS OS DRIVES (MY DRIVE + SHARED DRIVES)
+// 🌐 ENCONTRAR PASTA EM TODOS OS DRIVES (MANTIDO PARA COMPATIBILIDADE)
 // =============================================================================
+// ⚠️ DEPRECATED: Esta função será removida em versões futuras
+// Use drive-hierarchy.js para buscar pastas
 async function findFolderInAllDrives(folderName, accessToken) {
     try {
         console.log(`🌐 Buscando pasta "${folderName}" em My Drive e Shared Drives...`);

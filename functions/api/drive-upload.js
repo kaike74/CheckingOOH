@@ -2,6 +2,8 @@
 // 🔧 CLOUDFLARE WORKER: UPLOAD PARA GOOGLE DRIVE - CORREÇÃO COMPLETA
 // =============================================================================
 
+import { ensureFolderHierarchy, validateHierarchyParams } from './drive-hierarchy.js';
+
 export async function onRequestPost(context) {
     const { request, env } = context;
 
@@ -426,27 +428,32 @@ async function makeFileViewable(fileId, accessToken) {
 }
 
 // =============================================================================
-// 📁 GARANTIR ESTRUTURA DE PASTAS NO SHARED DRIVE
+// 📁 GARANTIR ESTRUTURA DE PASTAS NO SHARED DRIVE (REFATORADO)
 // =============================================================================
+// ✅ REFATORADO: Agora usa o módulo compartilhado drive-hierarchy.js
+// Isso previne duplicações paralelas e garante consistência
 async function ensureFolderPathInSharedDrive(exibidora, tipo, databaseId, pontoId, accessToken) {
     try {
-        console.log('📁 Criando estrutura de pastas...', { exibidora, tipo, databaseId, pontoId });
+        console.log('📁 [REFATORADO] Usando módulo compartilhado de hierarquia...');
+        console.log('📋 Parâmetros:', { exibidora, tipo, databaseId, pontoId });
 
-        console.log('🔍 Buscando pasta CheckingOOH...');
-        const checkingFolderDirect = await findFolderInAllDrives('CheckingOOH', accessToken);
-
-        if (checkingFolderDirect) {
-            console.log('✅ Pasta CheckingOOH encontrada:', checkingFolderDirect.id);
-
-            // ✅ CORREÇÃO: Passar pontoId para criar estrutura correta
-            const result = await buildFolderStructureForUpload(checkingFolderDirect.id, exibidora, tipo, databaseId, pontoId, accessToken, 'CheckingOOH');
-            if (result) {
-                console.log('🎉 Estrutura criada com sucesso');
-                return result;
-            }
+        // ✅ VALIDAR parâmetros antes de prosseguir
+        const validation = validateHierarchyParams(exibidora, databaseId, pontoId, tipo);
+        if (!validation.valid) {
+            throw new Error(`Parâmetros inválidos: ${validation.errors.join(', ')}`);
         }
 
-        throw new Error('Pasta raiz CheckingOOH não encontrada');
+        // ✅ USAR módulo compartilhado (com mutex para prevenir duplicações)
+        const result = await ensureFolderHierarchy(
+            exibidora,
+            databaseId,
+            pontoId,
+            tipo,
+            accessToken
+        );
+
+        console.log('🎉 Estrutura garantida via módulo compartilhado');
+        return result;
 
     } catch (error) {
         console.error('❌ Erro ao garantir estrutura de pastas:', error);
@@ -455,166 +462,17 @@ async function ensureFolderPathInSharedDrive(exibidora, tipo, databaseId, pontoI
 }
 
 // =============================================================================
-// 🏗️ CONSTRUIR ESTRUTURA DE PASTAS PARA UPLOAD
-// ✅ V10: HIERARQUIA CORRETA CheckingOOH/Exibidora/Campanha/Ponto/Tipo
+// 🗑️ FUNÇÕES REMOVIDAS - AGORA USAM drive-hierarchy.js
 // =============================================================================
-async function buildFolderStructureForUpload(checkingFolderId, exibidora, tipo, databaseId, pontoId, accessToken, basePath) {
-    try {
-        console.log(`🏗️ ✅ V10: ${basePath}/Exibidora/Campanha/Ponto/Tipo`);
-
-        // PASSO 1: Exibidora
-        console.log(`📁 [1/4] Buscando/criando pasta Exibidora: ${exibidora}...`);
-        const exibidoraFolder = await findOrCreateFolder(exibidora, checkingFolderId, accessToken);
-        if (!exibidoraFolder) {
-            throw new Error(`Falha ao criar pasta da exibidora: ${exibidora}`);
-        }
-        console.log('✅ Pasta Exibidora:', exibidoraFolder.id);
-
-        // PASSO 2: Campanha (databaseId)
-        console.log(`📁 [2/4] Buscando/criando pasta Campanha: ${databaseId}...`);
-        const campanhaFolder = await findOrCreateFolder(databaseId, exibidoraFolder.id, accessToken);
-        if (!campanhaFolder) {
-            throw new Error(`Falha ao criar pasta da campanha: ${databaseId}`);
-        }
-        console.log('✅ Pasta Campanha:', campanhaFolder.id);
-
-        // PASSO 3: Ponto (pontoId) ✅ V10: Ponto ANTES do Tipo
-        console.log(`📁 [3/4] Buscando/criando pasta Ponto: ${pontoId}...`);
-        const pontoFolder = await findOrCreateFolder(pontoId, campanhaFolder.id, accessToken);
-        if (!pontoFolder) {
-            throw new Error(`Falha ao criar pasta do ponto: ${pontoId}`);
-        }
-        console.log('✅ Pasta Ponto:', pontoFolder.id);
-
-        // PASSO 4: Tipo (Entrada ou Saída) ✅ V10: Tipo DEPOIS do Ponto
-        const tipoFolderName = tipo === 'entrada' ? 'Entrada' : 'Saida';
-        console.log(`📁 [4/4] Buscando/criando pasta Tipo: ${tipoFolderName}...`);
-        const tipoFolder = await findOrCreateFolder(tipoFolderName, pontoFolder.id, accessToken);
-        if (!tipoFolder) {
-            throw new Error(`Falha ao criar pasta do tipo: ${tipoFolderName}`);
-        }
-        console.log('✅ Pasta Tipo:', tipoFolder.id);
-
-        const fullPath = `${basePath}/${exibidora}/${databaseId}/${pontoId}/${tipoFolderName}`;
-        console.log('🎉 Caminho completo V10 (CORRETO):', fullPath);
-
-        return {
-            id: tipoFolder.id,
-            path: fullPath
-        };
-
-    } catch (error) {
-        console.error('❌ Erro ao construir estrutura:', error);
-        throw error;
-    }
-}
-
-// =============================================================================
-// 📁 ENCONTRAR OU CRIAR PASTA V10.1
-// ✅ CORRIGIDO: Proteção contra duplicação + escape de caracteres especiais
-// =============================================================================
-async function findOrCreateFolder(folderName, parentId, accessToken) {
-    try {
-        // ✅ V10.1: Escapar aspas simples no nome da pasta para evitar problemas na query
-        const escapedFolderName = folderName.replace(/'/g, "\\'");
-        const query = `name='${escapedFolderName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
-
-        const searchResponse = await fetch(
-            `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&fields=files(id,name)`,
-            {
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`
-                }
-            }
-        );
-
-        if (searchResponse.ok) {
-            const searchResult = await searchResponse.json();
-            if (searchResult.files && searchResult.files.length > 0) {
-                // ✅ V10.1: Se houver múltiplas pastas com mesmo nome (duplicadas), usar a primeira
-                if (searchResult.files.length > 1) {
-                    console.warn(`⚠️ Encontradas ${searchResult.files.length} pastas duplicadas "${folderName}". Usando a primeira.`);
-                }
-                console.log(`📁 Pasta "${folderName}" já existe:`, searchResult.files[0].id);
-                return searchResult.files[0];
-            }
-        }
-
-        // ✅ V10.1: Verificar novamente antes de criar (proteção contra race condition)
-        console.log(`📁 Criando pasta "${folderName}"...`);
-
-        const createResponse = await fetch(
-            'https://www.googleapis.com/drive/v3/files?supportsAllDrives=true',
-            {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    name: folderName,
-                    mimeType: 'application/vnd.google-apps.folder',
-                    parents: [parentId]
-                })
-            }
-        );
-
-        if (!createResponse.ok) {
-            const errorText = await createResponse.text();
-            throw new Error(`Erro ao criar pasta: ${createResponse.status} - ${errorText}`);
-        }
-
-        const newFolder = await createResponse.json();
-        console.log(`✅ Pasta "${folderName}" criada:`, newFolder.id);
-        return newFolder;
-
-    } catch (error) {
-        console.error(`❌ Erro ao encontrar/criar pasta ${folderName}:`, error);
-        return null;
-    }
-}
-
-// =============================================================================
-// 🌐 ENCONTRAR PASTA EM TODOS OS DRIVES
-// =============================================================================
-async function findFolderInAllDrives(folderName, accessToken) {
-    try {
-        console.log(`🌐 Buscando pasta "${folderName}"...`);
-        
-        const query = `name='${folderName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
-        
-        const response = await fetch(
-            `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&fields=files(id,name,driveId)`,
-            {
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`
-                }
-            }
-        );
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Erro ao buscar pasta: ${response.status} - ${errorText}`);
-        }
-
-        const result = await response.json();
-        
-        if (result.files && result.files.length > 0) {
-            const sharedDriveFolder = result.files.find(f => f.driveId);
-            const selectedFolder = sharedDriveFolder || result.files[0];
-            
-            console.log(`✅ Pasta "${folderName}" encontrada:`, selectedFolder.id);
-            return selectedFolder;
-        }
-
-        console.log(`❌ Pasta "${folderName}" não encontrada`);
-        return null;
-
-    } catch (error) {
-        console.error(`❌ Erro ao encontrar pasta ${folderName}:`, error);
-        return null;
-    }
-}
+// ❌ REMOVIDO: buildFolderStructureForUpload() - Substituído por ensureFolderHierarchy()
+// ❌ REMOVIDO: findOrCreateFolder() - Movido para drive-hierarchy.js com mutex
+// ❌ REMOVIDO: findFolderInAllDrives() - Movido para drive-hierarchy.js
+//
+// ✅ BENEFÍCIOS:
+// - Elimina duplicação de código entre drive-upload.js e drive-list.js
+// - Adiciona mutex para prevenir duplicações em chamadas paralelas
+// - Centraliza lógica de hierarquia em um único lugar
+// - Facilita manutenção e debugging
 
 // =============================================================================
 // 🔧 FUNÇÕES AUXILIARES
