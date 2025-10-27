@@ -1837,9 +1837,11 @@ async function generateCampanhaPDF() {
 // 📄 NOVA GERAÇÃO DE PDF COM jsPDF - RÁPIDO E COM FOTOS GRANDES
 // =============================================================================
 /**
- * 📄 GERAR PDF MELHORADO
- * Nova implementação: trabalha direto com os dados, sem abrir cards
- * Fotos grandes e layout dedicado para PDF
+ * 📄 GERAR PDF MELHORADO V2
+ * - Layout profissional com grid 2 colunas (entrada/saída)
+ * - Carregamento paralelo de fotos (OTIMIZADO)
+ * - Fotos em grid 2x2 dentro de cada seção
+ * - Status visual com badges
  */
 async function generatePDFReport() {
     try {
@@ -1849,263 +1851,260 @@ async function generatePDFReport() {
             return;
         }
 
-        Logger.info('🚀 Gerando PDF melhorado com jsPDF');
+        Logger.info('🚀 Gerando PDF melhorado V2 com layout profissional');
         showPDFNotification('📄 Preparando PDF...', 'progress');
+
+        // ========================================
+        // FASE 1: PRÉ-CARREGAR TODAS AS FOTOS EM PARALELO (OTIMIZAÇÃO)
+        // ========================================
+        showPDFNotification('🚀 Carregando fotos em paralelo...', 'progress');
+
+        const pontosData = await Promise.all(
+            appData.pontos.map(async (ponto) => {
+                try {
+                    // Buscar entrada e saída em PARALELO
+                    const [entradaData, saidaData] = await Promise.all([
+                        DriveAPI.listDriveFiles(ponto.exibidora, ponto.id, 'entrada', appData.databaseId),
+                        DriveAPI.listDriveFiles(ponto.exibidora, ponto.id, 'saida', appData.databaseId)
+                    ]);
+
+                    const entradaFiles = (entradaData.files || []).slice(0, 4); // Máx 4 fotos
+                    const saidaFiles = (saidaData.files || []).slice(0, 4); // Máx 4 fotos
+
+                    // Carregar imagens em PARALELO (com tratamento de erros)
+                    const [entradaResults, saidaResults] = await Promise.all([
+                        Promise.allSettled(entradaFiles.map(f => loadImageAsBase64Fast(f.thumbnailLink || f.webContentLink))),
+                        Promise.allSettled(saidaFiles.map(f => loadImageAsBase64Fast(f.thumbnailLink || f.webContentLink)))
+                    ]);
+
+                    // Filtrar apenas imagens que carregaram com sucesso
+                    const entradaImages = entradaResults
+                        .filter(r => r.status === 'fulfilled')
+                        .map(r => r.value);
+                    const saidaImages = saidaResults
+                        .filter(r => r.status === 'fulfilled')
+                        .map(r => r.value);
+
+                    return {
+                        ponto,
+                        entrada: { files: entradaFiles, images: entradaImages },
+                        saida: { files: saidaFiles, images: saidaImages }
+                    };
+                } catch (error) {
+                    Logger.warn(`Erro ao carregar fotos do ponto ${ponto.id}`, error);
+                    return {
+                        ponto,
+                        entrada: { files: [], images: [] },
+                        saida: { files: [], images: [] }
+                    };
+                }
+            })
+        );
+
+        // Calcular resumo
+        const pontosComEntrada = pontosData.filter(p => p.entrada.files.length > 0).length;
+        const pontosComSaida = pontosData.filter(p => p.saida.files.length > 0).length;
+
+        // ========================================
+        // FASE 2: GERAR PDF COM LAYOUT PROFISSIONAL
+        // ========================================
+        showPDFNotification('📄 Gerando PDF...', 'progress');
 
         const { jsPDF } = window.jspdf;
         const pdf = new jsPDF('p', 'mm', 'a4');
 
-        const pageWidth = 210; // A4 width
-        const pageHeight = 297; // A4 height
+        const pageWidth = 210;
+        const pageHeight = 297;
         const margin = 15;
+        const contentWidth = pageWidth - 2 * margin;
         let yPos = margin;
+        let pageNum = 1;
 
-        // ========================================
-        // CABEÇALHO E-MÍDIAS
-        // ========================================
-        pdf.setFillColor(6, 5, 91); // #06055B
-        pdf.rect(0, 0, pageWidth, 40, 'F');
-
-        pdf.setTextColor(255, 255, 255);
-        pdf.setFontSize(24);
-        pdf.setFont('helvetica', 'bold');
-        pdf.text('E-MÍDIAS', pageWidth / 2, 20, { align: 'center' });
-
-        pdf.setFontSize(14);
-        pdf.setFont('helvetica', 'normal');
-        pdf.text('CheckingOOH - Relatório de Campanha', pageWidth / 2, 30, { align: 'center' });
-
-        yPos = 50;
-
-        // ========================================
-        // TÍTULO DA CAMPANHA
-        // ========================================
-        pdf.setTextColor(0, 0, 0);
-        pdf.setFontSize(18);
-        pdf.setFont('helvetica', 'bold');
         const campanhaTitle = appData.pageTitle || 'Campanha Completa';
-        pdf.text(campanhaTitle, margin, yPos);
-        yPos += 10;
+        const dataAtual = new Date().toLocaleDateString('pt-BR');
 
-        // ========================================
-        // CARDS DE RESUMO
-        // ========================================
-        const pontosComEntrada = appData.pontos.filter(p => {
-            // Verificar se tem fotos de entrada (simplificado)
-            return true; // Vamos calcular isso ao buscar as fotos
-        }).length;
-
-        const pontosComSaida = appData.pontos.filter(p => {
-            // Verificar se tem fotos de saída (simplificado)
-            return true; // Vamos calcular isso ao buscar as fotos
-        }).length;
-
-        pdf.setFontSize(10);
-        pdf.setFont('helvetica', 'normal');
-
-        // Card 1: Total de Pontos
-        pdf.setFillColor(240, 240, 240);
-        pdf.roundedRect(margin, yPos, 55, 20, 3, 3, 'F');
-        pdf.setFontSize(8);
-        pdf.setTextColor(100, 100, 100);
-        pdf.text('Total de Pontos', margin + 27.5, yPos + 6, { align: 'center' });
-        pdf.setFontSize(16);
-        pdf.setTextColor(0, 0, 0);
-        pdf.setFont('helvetica', 'bold');
-        pdf.text(appData.pontos.length.toString(), margin + 27.5, yPos + 15, { align: 'center' });
-
-        // Card 2: Pontos com Entrada
-        pdf.setFont('helvetica', 'normal');
-        pdf.setFillColor(240, 240, 240);
-        pdf.roundedRect(margin + 60, yPos, 55, 20, 3, 3, 'F');
-        pdf.setFontSize(8);
-        pdf.setTextColor(100, 100, 100);
-        pdf.text('Pontos com Entrada', margin + 87.5, yPos + 6, { align: 'center' });
-        pdf.setFontSize(16);
-        pdf.setTextColor(0, 0, 0);
-        pdf.setFont('helvetica', 'bold');
-        pdf.text('...', margin + 87.5, yPos + 15, { align: 'center' });
-
-        // Card 3: Pontos com Saída
-        pdf.setFont('helvetica', 'normal');
-        pdf.setFillColor(240, 240, 240);
-        pdf.roundedRect(margin + 120, yPos, 55, 20, 3, 3, 'F');
-        pdf.setFontSize(8);
-        pdf.setTextColor(100, 100, 100);
-        pdf.text('Pontos com Saída', margin + 147.5, yPos + 6, { align: 'center' });
-        pdf.setFontSize(16);
-        pdf.setTextColor(0, 0, 0);
-        pdf.setFont('helvetica', 'bold');
-        pdf.text('...', margin + 147.5, yPos + 15, { align: 'center' });
-
-        yPos += 30;
-
-        // ========================================
-        // PROCESSAR CADA PONTO
-        // ========================================
-        showPDFNotification('📸 Carregando fotos dos pontos...', 'progress');
-
-        let pontoCount = 0;
-        for (const ponto of appData.pontos) {
-            pontoCount++;
-            showPDFNotification(`📸 Processando ponto ${pontoCount}/${appData.pontos.length}...`, 'progress');
-
-            // Verificar se precisa adicionar nova página
-            if (yPos > pageHeight - 60) {
-                pdf.addPage();
-                yPos = margin;
-            }
-
-            // ========================================
-            // CABEÇALHO DO PONTO
-            // ========================================
-            pdf.setFillColor(6, 5, 91);
-            pdf.rect(margin, yPos, pageWidth - 2 * margin, 15, 'F');
+        // Helper: Adicionar cabeçalho
+        const addHeader = () => {
+            pdf.setFillColor(30, 64, 175); // #1e40af
+            pdf.rect(0, 0, pageWidth, 35, 'F');
 
             pdf.setTextColor(255, 255, 255);
-            pdf.setFontSize(12);
+            pdf.setFontSize(22);
             pdf.setFont('helvetica', 'bold');
-            pdf.text(`${ponto.exibidora} - ${ponto.endereco}`, margin + 3, yPos + 10);
+            pdf.text('E-MÍDIAS', margin, 15);
 
-            yPos += 20;
+            pdf.setFontSize(10);
+            pdf.setFont('helvetica', 'normal');
+            pdf.text('Soluções em Mídia Externa', margin, 22);
 
-            // ========================================
-            // BUSCAR E ADICIONAR FOTOS
-            // ========================================
-            try {
-                // Buscar fotos de entrada
-                const entradaData = await DriveAPI.listDriveFiles(
-                    ponto.exibidora,
-                    ponto.id,
-                    'entrada',
-                    appData.databaseId
-                );
+            pdf.setFontSize(11);
+            pdf.setFont('helvetica', 'bold');
+            pdf.text('Relatório de Monitoramento', pageWidth - margin, 15, { align: 'right' });
 
-                // Buscar fotos de saída
-                const saidaData = await DriveAPI.listDriveFiles(
-                    ponto.exibidora,
-                    ponto.id,
-                    'saida',
-                    appData.databaseId
-                );
+            pdf.setFontSize(9);
+            pdf.setFont('helvetica', 'normal');
+            pdf.text(`Data: ${dataAtual}`, pageWidth - margin, 22, { align: 'right' });
+            pdf.text(`Página ${pageNum}`, pageWidth - margin, 28, { align: 'right' });
 
-                const entradaFiles = entradaData.files || [];
-                const saidaFiles = saidaData.files || [];
+            return 45; // yPos após cabeçalho
+        };
 
-                // Adicionar seção de ENTRADA
-                if (entradaFiles.length > 0) {
-                    pdf.setTextColor(0, 0, 0);
-                    pdf.setFontSize(11);
-                    pdf.setFont('helvetica', 'bold');
-                    pdf.text('✅ Entrada', margin, yPos);
-                    yPos += 7;
+        // Primeira página - Cabeçalho
+        yPos = addHeader();
 
-                    for (const file of entradaFiles.slice(0, 2)) { // Limitar a 2 fotos por tipo
-                        if (file.thumbnailLink || file.webContentLink) {
-                            try {
-                                // Verificar espaço na página
-                                if (yPos > pageHeight - 90) {
-                                    pdf.addPage();
-                                    yPos = margin;
-                                }
+        // Título da campanha
+        pdf.setFillColor(30, 64, 175);
+        pdf.roundedRect(margin, yPos, contentWidth, 25, 3, 3, 'F');
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFontSize(16);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(campanhaTitle, pageWidth / 2, yPos + 12, { align: 'center' });
+        pdf.setFontSize(10);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text('Relatório completo de monitoramento de painéis', pageWidth / 2, yPos + 19, { align: 'center' });
+        yPos += 32;
 
-                                const imgUrl = file.thumbnailLink || file.webContentLink;
-                                const imgData = await loadImageAsBase64(imgUrl);
+        // Cards de resumo
+        const cardWidth = (contentWidth - 20) / 3;
 
-                                // Adicionar imagem GRANDE (80mm de largura)
-                                const imgWidth = 80;
-                                const imgHeight = 60;
-                                pdf.addImage(imgData, 'JPEG', margin, yPos, imgWidth, imgHeight);
+        const drawSummaryCard = (x, y, title, value) => {
+            pdf.setFillColor(248, 250, 252);
+            pdf.setDrawColor(226, 232, 240);
+            pdf.roundedRect(x, y, cardWidth, 18, 2, 2, 'FD');
 
-                                // Nome do arquivo abaixo da foto
-                                pdf.setFontSize(8);
-                                pdf.setFont('helvetica', 'normal');
-                                pdf.setTextColor(100, 100, 100);
-                                pdf.text(file.name || 'Sem nome', margin, yPos + imgHeight + 5);
+            pdf.setTextColor(107, 114, 128);
+            pdf.setFontSize(8);
+            pdf.setFont('helvetica', 'normal');
+            pdf.text(title, x + cardWidth / 2, y + 6, { align: 'center' });
 
-                                yPos += imgHeight + 10;
-                            } catch (imgError) {
-                                Logger.warn('Erro ao carregar imagem', imgError);
-                            }
-                        }
-                    }
+            pdf.setTextColor(30, 64, 175);
+            pdf.setFontSize(18);
+            pdf.setFont('helvetica', 'bold');
+            pdf.text(value.toString(), x + cardWidth / 2, y + 14, { align: 'center' });
+        };
 
-                    yPos += 5;
-                }
+        drawSummaryCard(margin, yPos, 'Total de Pontos', appData.pontos.length);
+        drawSummaryCard(margin + cardWidth + 10, yPos, 'Pontos com Entrada', pontosComEntrada);
+        drawSummaryCard(margin + 2 * cardWidth + 20, yPos, 'Pontos com Saída', pontosComSaida);
+        yPos += 28;
 
-                // Adicionar seção de SAÍDA
-                if (saidaFiles.length > 0) {
-                    // Verificar espaço
-                    if (yPos > pageHeight - 90) {
-                        pdf.addPage();
-                        yPos = margin;
-                    }
+        // ========================================
+        // RENDERIZAR CADA PONTO
+        // ========================================
+        for (let i = 0; i < pontosData.length; i++) {
+            const { ponto, entrada, saida } = pontosData[i];
 
-                    pdf.setTextColor(0, 0, 0);
-                    pdf.setFontSize(11);
-                    pdf.setFont('helvetica', 'bold');
-                    pdf.text('🚪 Saída', margin, yPos);
-                    yPos += 7;
+            showPDFNotification(`📝 Renderizando ponto ${i + 1}/${pontosData.length}...`, 'progress');
 
-                    for (const file of saidaFiles.slice(0, 2)) { // Limitar a 2 fotos por tipo
-                        if (file.thumbnailLink || file.webContentLink) {
-                            try {
-                                // Verificar espaço na página
-                                if (yPos > pageHeight - 90) {
-                                    pdf.addPage();
-                                    yPos = margin;
-                                }
+            // Calcular altura necessária para o ponto
+            const maxFotos = Math.max(entrada.images.length, saida.images.length);
+            const numRows = Math.ceil(maxFotos / 2);
+            const photoHeight = 35;
+            const pontoHeight = 12 + (numRows * photoHeight) + 20;
 
-                                const imgUrl = file.thumbnailLink || file.webContentLink;
-                                const imgData = await loadImageAsBase64(imgUrl);
-
-                                // Adicionar imagem GRANDE (80mm de largura)
-                                const imgWidth = 80;
-                                const imgHeight = 60;
-                                pdf.addImage(imgData, 'JPEG', margin, yPos, imgWidth, imgHeight);
-
-                                // Nome do arquivo abaixo da foto
-                                pdf.setFontSize(8);
-                                pdf.setFont('helvetica', 'normal');
-                                pdf.setTextColor(100, 100, 100);
-                                pdf.text(file.name || 'Sem nome', margin, yPos + imgHeight + 5);
-
-                                yPos += imgHeight + 10;
-                            } catch (imgError) {
-                                Logger.warn('Erro ao carregar imagem', imgError);
-                            }
-                        }
-                    }
-
-                    yPos += 5;
-                }
-
-                // Status do ponto
-                const temEntrada = entradaFiles.length > 0;
-                const temSaida = saidaFiles.length > 0;
-                const status = temEntrada && temSaida ? '✅ Completo' : '⏳ Pendente';
-
-                pdf.setFontSize(9);
-                pdf.setFont('helvetica', 'italic');
-                pdf.setTextColor(temEntrada && temSaida ? 0 : 200, temEntrada && temSaida ? 150 : 100, 0);
-                pdf.text(`Status: ${status}`, margin, yPos);
-                yPos += 10;
-
-            } catch (error) {
-                Logger.error(`Erro ao processar fotos do ponto ${ponto.id}`, error);
-
-                // Adicionar mensagem de erro no PDF
-                pdf.setFontSize(9);
-                pdf.setTextColor(200, 0, 0);
-                pdf.text('Erro ao carregar fotos deste ponto', margin, yPos);
-                yPos += 10;
+            // Verificar se precisa de nova página
+            if (yPos + pontoHeight > pageHeight - 15) {
+                pdf.addPage();
+                pageNum++;
+                yPos = addHeader();
             }
 
-            // Linha divisória entre pontos
-            pdf.setDrawColor(200, 200, 200);
+            // Header do ponto
+            pdf.setFillColor(248, 250, 252);
+            pdf.setDrawColor(226, 232, 240);
+            pdf.roundedRect(margin, yPos, contentWidth, 12, 2, 2, 'FD');
+
+            pdf.setTextColor(30, 64, 175);
+            pdf.setFontSize(11);
+            pdf.setFont('helvetica', 'bold');
+            pdf.text(`${ponto.endereco}`, margin + 2, yPos + 6);
+
+            pdf.setFontSize(8);
+            pdf.setFont('helvetica', 'normal');
+            pdf.setTextColor(107, 114, 128);
+            pdf.text(`Exibidora: ${ponto.exibidora} • Período: ${ponto.periodo || 'N/A'}`, margin + 2, yPos + 10);
+
+            yPos += 15;
+
+            // Grid 2 colunas: ENTRADA | SAÍDA
+            const colWidth = (contentWidth - 5) / 2;
+
+            // Helper: Desenhar seção
+            const drawSection = (x, title, files, images, color) => {
+                let sectionY = yPos;
+
+                // Header da seção
+                pdf.setFillColor(color.r, color.g, color.b);
+                pdf.roundedRect(x, sectionY, colWidth, 8, 2, 2, 'F');
+                pdf.setTextColor(255, 255, 255);
+                pdf.setFontSize(9);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text(title, x + 2, sectionY + 5.5);
+                sectionY += 10;
+
+                // Status badge
+                if (files.length > 0) {
+                    pdf.setFillColor(220, 252, 231);
+                    pdf.setTextColor(22, 101, 52);
+                } else {
+                    pdf.setFillColor(254, 243, 199);
+                    pdf.setTextColor(146, 64, 14);
+                }
+                pdf.roundedRect(x + 2, sectionY, 20, 5, 1, 1, 'F');
+                pdf.setFontSize(7);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text(files.length > 0 ? '✓ Completo' : '⏳ Pendente', x + 12, sectionY + 3.5, { align: 'center' });
+                sectionY += 8;
+
+                // Fotos em grid 2x2
+                if (images.length > 0) {
+                    const photoW = (colWidth - 6) / 2;
+                    const photoH = 30;
+
+                    for (let idx = 0; idx < Math.min(4, images.length); idx++) {
+                        const col = idx % 2;
+                        const row = Math.floor(idx / 2);
+                        const photoX = x + 2 + (col * (photoW + 2));
+                        const photoY = sectionY + (row * (photoH + 2));
+
+                        try {
+                            pdf.addImage(images[idx], 'JPEG', photoX, photoY, photoW, photoH);
+                        } catch (e) {
+                            Logger.warn('Erro ao adicionar imagem', e);
+                        }
+                    }
+                } else {
+                    // Mensagem "sem fotos"
+                    pdf.setTextColor(156, 163, 175);
+                    pdf.setFontSize(8);
+                    pdf.setFont('helvetica', 'italic');
+                    const msg = title.includes('ENTRADA')
+                        ? 'Aguardando fotos de instalação'
+                        : 'Aguardando fotos de retirada';
+                    pdf.text(msg, x + colWidth / 2, sectionY + 10, { align: 'center' });
+                }
+            };
+
+            // Renderizar colunas
+            drawSection(margin, '📥 ENTRADA', entrada.files, entrada.images, { r: 5, g: 150, b: 105 });
+            drawSection(margin + colWidth + 5, '📤 SAÍDA', saida.files, saida.images, { r: 220, g: 38, b: 38 });
+
+            yPos += Math.max(
+                entrada.images.length > 0 ? Math.ceil(entrada.images.length / 2) * 32 + 18 : 28,
+                saida.images.length > 0 ? Math.ceil(saida.images.length / 2) * 32 + 18 : 28
+            );
+
+            // Linha divisória
+            pdf.setDrawColor(226, 232, 240);
             pdf.line(margin, yPos, pageWidth - margin, yPos);
-            yPos += 10;
+            yPos += 8;
         }
+
+        // Rodapé na última página
+        pdf.setFontSize(8);
+        pdf.setTextColor(107, 114, 128);
+        pdf.text('E-MÍDIAS • Sistema de Monitoramento OOH • checking.emidiastec.com.br', pageWidth / 2, pageHeight - 10, { align: 'center' });
+        pdf.text(`Relatório gerado automaticamente em ${dataAtual}`, pageWidth / 2, pageHeight - 6, { align: 'center' });
 
         // ========================================
         // SALVAR PDF
@@ -2119,7 +2118,8 @@ async function generatePDFReport() {
 
         Logger.success('PDF gerado com sucesso', {
             fileName,
-            pontos: appData.pontos.length
+            pontos: appData.pontos.length,
+            pages: pageNum
         });
 
     } catch (error) {
@@ -2133,24 +2133,45 @@ async function generatePDFReport() {
 }
 
 /**
- * 🖼️ CARREGAR IMAGEM COMO BASE64
- * Converte uma URL de imagem para base64 para usar no jsPDF
+ * 🖼️ CARREGAR IMAGEM COMO BASE64 (VERSÃO RÁPIDA E OTIMIZADA)
+ * - Usa timeout de 10s (evita travamentos)
+ * - Compressão JPEG 0.85 (balanço qualidade/tamanho)
+ * - Redimensiona para máx 800px (acelera conversão)
  */
-async function loadImageAsBase64(url) {
+async function loadImageAsBase64Fast(url) {
     return new Promise((resolve, reject) => {
         const img = new Image();
         img.crossOrigin = 'Anonymous';
 
+        // Timeout de 10 segundos
+        const timeout = setTimeout(() => {
+            img.src = '';
+            reject(new Error('Timeout ao carregar imagem'));
+        }, 10000);
+
         img.onload = () => {
+            clearTimeout(timeout);
             try {
                 const canvas = document.createElement('canvas');
-                canvas.width = img.width;
-                canvas.height = img.height;
+
+                // Redimensionar para otimizar (máx 800px de largura)
+                const maxWidth = 800;
+                let width = img.width;
+                let height = img.height;
+
+                if (width > maxWidth) {
+                    height = (height * maxWidth) / width;
+                    width = maxWidth;
+                }
+
+                canvas.width = width;
+                canvas.height = height;
 
                 const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0);
+                ctx.drawImage(img, 0, 0, width, height);
 
-                const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+                // Compressão JPEG 0.85 (balanço qualidade/velocidade)
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
                 resolve(dataUrl);
             } catch (error) {
                 reject(error);
@@ -2158,11 +2179,20 @@ async function loadImageAsBase64(url) {
         };
 
         img.onerror = () => {
+            clearTimeout(timeout);
             reject(new Error('Erro ao carregar imagem'));
         };
 
         img.src = url;
     });
+}
+
+/**
+ * 🖼️ CARREGAR IMAGEM COMO BASE64 (VERSÃO LEGADO)
+ * Mantida para compatibilidade
+ */
+async function loadImageAsBase64(url) {
+    return loadImageAsBase64Fast(url);
 }
 
 // 🚀 EXPORTAR FUNÇÕES GLOBAIS
