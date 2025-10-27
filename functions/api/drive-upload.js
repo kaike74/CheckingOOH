@@ -2,6 +2,8 @@
 // 🔧 CLOUDFLARE WORKER: UPLOAD PARA GOOGLE DRIVE - CORREÇÃO COMPLETA
 // =============================================================================
 
+import { findOrCreateFolder } from './drive-folder-utils.js';
+
 export async function onRequestPost(context) {
     const { request, env } = context;
 
@@ -510,69 +512,11 @@ async function buildFolderStructureForUpload(checkingFolderId, exibidora, tipo, 
 }
 
 // =============================================================================
-// 📁 ENCONTRAR OU CRIAR PASTA V10.1
-// ✅ CORRIGIDO: Proteção contra duplicação + escape de caracteres especiais
+// 📁 ENCONTRAR OU CRIAR PASTA
 // =============================================================================
-async function findOrCreateFolder(folderName, parentId, accessToken) {
-    try {
-        // ✅ V10.1: Escapar aspas simples no nome da pasta para evitar problemas na query
-        const escapedFolderName = folderName.replace(/'/g, "\\'");
-        const query = `name='${escapedFolderName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
-
-        const searchResponse = await fetch(
-            `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&fields=files(id,name)`,
-            {
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`
-                }
-            }
-        );
-
-        if (searchResponse.ok) {
-            const searchResult = await searchResponse.json();
-            if (searchResult.files && searchResult.files.length > 0) {
-                // ✅ V10.1: Se houver múltiplas pastas com mesmo nome (duplicadas), usar a primeira
-                if (searchResult.files.length > 1) {
-                    console.warn(`⚠️ Encontradas ${searchResult.files.length} pastas duplicadas "${folderName}". Usando a primeira.`);
-                }
-                console.log(`📁 Pasta "${folderName}" já existe:`, searchResult.files[0].id);
-                return searchResult.files[0];
-            }
-        }
-
-        // ✅ V10.1: Verificar novamente antes de criar (proteção contra race condition)
-        console.log(`📁 Criando pasta "${folderName}"...`);
-
-        const createResponse = await fetch(
-            'https://www.googleapis.com/drive/v3/files?supportsAllDrives=true',
-            {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    name: folderName,
-                    mimeType: 'application/vnd.google-apps.folder',
-                    parents: [parentId]
-                })
-            }
-        );
-
-        if (!createResponse.ok) {
-            const errorText = await createResponse.text();
-            throw new Error(`Erro ao criar pasta: ${createResponse.status} - ${errorText}`);
-        }
-
-        const newFolder = await createResponse.json();
-        console.log(`✅ Pasta "${folderName}" criada:`, newFolder.id);
-        return newFolder;
-
-    } catch (error) {
-        console.error(`❌ Erro ao encontrar/criar pasta ${folderName}:`, error);
-        return null;
-    }
-}
+// ✅ MOVIDO PARA: drive-folder-utils.js
+// A função findOrCreateFolder agora está centralizada no arquivo drive-folder-utils.js
+// com proteção contra race conditions usando Map de locks em memória
 
 // =============================================================================
 // 🌐 ENCONTRAR PASTA EM TODOS OS DRIVES

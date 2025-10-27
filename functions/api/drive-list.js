@@ -2,6 +2,8 @@
 // 📂 CLOUDFLARE PAGES FUNCTION - GOOGLE DRIVE LIST
 // =============================================================================
 
+import { findOrCreateFolder } from './drive-folder-utils.js';
+
 export async function onRequest(context) {
     // Permitir CORS
     const headers = {
@@ -390,52 +392,24 @@ async function findOrCreateFolderPath(exibidora, tipo, databaseId, pontoId, acce
 
         // PASSO 2: Buscar ou criar pasta da Exibidora
         console.log(`🔍 [2/5] Buscando/criando pasta Exibidora: ${exibidora}...`);
-        let exibidoraFolder = await findFolder(exibidora, checkingFolder.id, accessToken);
-
-        if (!exibidoraFolder) {
-            console.log(`📁 Criando pasta Exibidora: ${exibidora}...`);
-            exibidoraFolder = await createFolder(exibidora, checkingFolder.id, accessToken, checkingFolder.driveId);
-            console.log('✅ Pasta Exibidora criada:', exibidoraFolder.id);
-        } else {
-            console.log('✅ Pasta Exibidora já existe:', exibidoraFolder.id);
-        }
+        const exibidoraFolder = await findOrCreateFolder(exibidora, checkingFolder.id, accessToken);
+        console.log('✅ Pasta Exibidora:', exibidoraFolder.id);
 
         // PASSO 3: Buscar ou criar pasta da Campanha (databaseId)
         console.log(`🔍 [3/5] Buscando/criando pasta Campanha: ${databaseId}...`);
-        let campanhaFolder = await findFolder(databaseId, exibidoraFolder.id, accessToken);
-
-        if (!campanhaFolder) {
-            console.log(`📁 Criando pasta Campanha: ${databaseId}...`);
-            campanhaFolder = await createFolder(databaseId, exibidoraFolder.id, accessToken, checkingFolder.driveId);
-            console.log('✅ Pasta Campanha criada:', campanhaFolder.id);
-        } else {
-            console.log('✅ Pasta Campanha já existe:', campanhaFolder.id);
-        }
+        const campanhaFolder = await findOrCreateFolder(databaseId, exibidoraFolder.id, accessToken);
+        console.log('✅ Pasta Campanha:', campanhaFolder.id);
 
         // PASSO 4: Buscar ou criar pasta do Ponto (pontoId) ✅ V10: Ponto ANTES do Tipo
         console.log(`🔍 [4/5] Buscando/criando pasta Ponto: ${pontoId}...`);
-        let pontoFolder = await findFolder(pontoId, campanhaFolder.id, accessToken);
-
-        if (!pontoFolder) {
-            console.log(`📁 Criando pasta Ponto: ${pontoId}...`);
-            pontoFolder = await createFolder(pontoId, campanhaFolder.id, accessToken, checkingFolder.driveId);
-            console.log('✅ Pasta Ponto criada:', pontoFolder.id);
-        } else {
-            console.log('✅ Pasta Ponto já existe:', pontoFolder.id);
-        }
+        const pontoFolder = await findOrCreateFolder(pontoId, campanhaFolder.id, accessToken);
+        console.log('✅ Pasta Ponto:', pontoFolder.id);
 
         // PASSO 5: Buscar ou criar pasta do Tipo (Entrada/Saida) ✅ V10: Tipo DEPOIS do Ponto
         const tipoFolderName = tipo === 'entrada' ? 'Entrada' : 'Saida';
         console.log(`🔍 [5/5] Buscando/criando pasta Tipo: ${tipoFolderName}...`);
-        let tipoFolder = await findFolder(tipoFolderName, pontoFolder.id, accessToken);
-
-        if (!tipoFolder) {
-            console.log(`📁 Criando pasta Tipo: ${tipoFolderName}...`);
-            tipoFolder = await createFolder(tipoFolderName, pontoFolder.id, accessToken, checkingFolder.driveId);
-            console.log('✅ Pasta Tipo criada:', tipoFolder.id);
-        } else {
-            console.log('✅ Pasta Tipo já existe:', tipoFolder.id);
-        }
+        const tipoFolder = await findOrCreateFolder(tipoFolderName, pontoFolder.id, accessToken);
+        console.log('✅ Pasta Tipo:', tipoFolder.id);
 
         const fullPath = `CheckingOOH/${exibidora}/${databaseId}/${pontoId}/${tipoFolderName}`;
         console.log('🎉 Estrutura completa pronta V10 (CORRETA)! Caminho:', fullPath);
@@ -455,6 +429,8 @@ async function findOrCreateFolderPath(exibidora, tipo, databaseId, pontoId, acce
 // =============================================================================
 // 📁 CRIAR PASTA NO GOOGLE DRIVE
 // =============================================================================
+// ⚠️ DEPRECATED: Use findOrCreateFolder de drive-folder-utils.js
+// Esta função é mantida apenas para compatibilidade com código legado
 async function createFolder(folderName, parentId, accessToken, driveId = null) {
     try {
         console.log(`📁 Criando pasta "${folderName}" dentro de ${parentId}...`);
@@ -495,9 +471,10 @@ async function createFolder(folderName, parentId, accessToken, driveId = null) {
 }
 
 // =============================================================================
-// 📁 ENCONTRAR PASTA V10.1
-// ✅ CORRIGIDO: Proteção contra duplicação + escape de caracteres especiais
+// 📁 ENCONTRAR PASTA
 // =============================================================================
+// ⚠️ DEPRECATED: Use findFolder de drive-folder-utils.js
+// Esta função é mantida apenas para compatibilidade com código legado
 async function findFolder(folderName, parentId, accessToken) {
     try {
         // ✅ V10.1: Escapar aspas simples no nome da pasta
