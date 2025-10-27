@@ -8,7 +8,8 @@ const appData = {
     pontos: [],
     pontoAtual: null,
     databaseId: null, // ID da campanha
-    editMode: {} // { 'pontoId-tipo': boolean }
+    editMode: {}, // { 'pontoId-tipo': boolean }
+    pendingDeletes: {} // { 'pontoId-tipo': [{fileId, fileName, element}] }
 };
 
 /**
@@ -275,6 +276,9 @@ async function createSecaoElement(ponto, tipo, readOnly = false) {
             <button class="btn btn-secondary btn-small" onclick="toggleEditMode('${ponto.id}', '${tipo}')" id="edit-btn-${ponto.id}-${tipo}">
                 ✏️ Editar
             </button>
+            <button class="btn btn-danger btn-small" onclick="cancelEditMode('${ponto.id}', '${tipo}')" id="cancel-btn-${ponto.id}-${tipo}" style="display: none;">
+                ❌ Cancelar
+            </button>
         `;
     } else {
         // Modo campanha/read-only: sem botões de ação
@@ -445,45 +449,53 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false, containerPar
             // ✅ V10.7: Não definir onclick aqui - será tratado pelo img.onclick abaixo
         
         if (DriveAPI.isVideoFile(file.mimeType)) {
-            // ✅ V10.7.2: Vídeo com visual melhorado e download ao clicar
+            // ✅ V10.7.3: Vídeo com thumbnail simples e download ao clicar
             const videoThumb = file.thumbnailUrl || `https://drive.google.com/thumbnail?id=${file.id}&sz=w400`;
 
             const videoDiv = document.createElement('div');
             videoDiv.className = 'video-thumbnail';
             videoDiv.dataset.fileId = file.id;
             videoDiv.dataset.fileName = file.name;
-            videoDiv.dataset.isVideo = 'true'; // ✅ Marcar como vídeo para badges
+            videoDiv.dataset.isVideo = 'true';
             videoDiv.style.cssText = `
                 position: relative;
                 width: 100%;
                 height: 100%;
-                background: linear-gradient(135deg, rgba(6, 5, 91, 0.8) 0%, rgba(170, 30, 165, 0.8) 100%), url('${videoThumb}') center/cover no-repeat;
+                background: url('${videoThumb}') center/cover no-repeat, #000;
                 cursor: pointer;
-                display: flex;
-                align-items: center;
-                justify-content: center;
             `;
 
-            // ✅ V10.7.2: Emoji de vídeo grande e bonito
+            // Ícone de play centralizado + badge VÍDEO
             videoDiv.innerHTML = `
                 <div style="
-                    font-size: 48px;
-                    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.5));
-                ">🎬</div>
+                    position: absolute;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    background: rgba(0,0,0,0.7);
+                    border-radius: 50%;
+                    width: 40px;
+                    height: 40px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: white;
+                    font-size: 20px;
+                ">▶</div>
                 <div style="
                     position: absolute;
-                    top: 8px;
-                    left: 8px;
-                    background: rgba(0, 0, 0, 0.8);
+                    top: 4px;
+                    right: 4px;
+                    background: rgba(0,0,0,0.7);
                     color: white;
-                    padding: 4px 8px;
-                    border-radius: 6px;
-                    font-size: 10px;
+                    padding: 2px 6px;
+                    border-radius: 4px;
+                    font-size: 9px;
                     font-weight: bold;
                 ">VÍDEO</div>
             `;
 
-            // ✅ V10.7.2: Click para baixar vídeo automaticamente
+            // ✅ V10.7.3: Click para baixar vídeo automaticamente
             videoDiv.onclick = (e) => {
                 e.stopPropagation();
                 // Download direto
@@ -716,44 +728,170 @@ async function loadPontoMediaIfNeeded(ponto, tipo, readOnly = false) {
  * Ativa/desativa o modo edição para uma seção
  */
 /**
- * ✏️ ALTERNAR MODO EDIÇÃO V10.6
- * ✅ CORRIGIDO: Usa classe .editing para controle CSS + atualiza UI global
+ * ✏️ ALTERNAR MODO EDIÇÃO V10.7.3
+ * ✅ Com sistema de exclusão pendente e botão cancelar
  */
-function toggleEditMode(pontoId, tipo) {
+async function toggleEditMode(pontoId, tipo) {
     const key = `${pontoId}-${tipo}`;
     const isCurrentlyEditing = appData.editMode[key] || false;
 
-    appData.editMode[key] = !isCurrentlyEditing;
+    if (isCurrentlyEditing) {
+        // CONCLUIR edição - aplicar exclusões pendentes
+        await confirmPendingDeletes(pontoId, tipo);
 
-    const editBtn = document.getElementById(`edit-btn-${pontoId}-${tipo}`);
-    if (editBtn) {
-        editBtn.textContent = appData.editMode[key] ? '✅ Finalizar' : '✏️ Editar';
-        editBtn.className = appData.editMode[key] ? 'btn btn-success btn-small' : 'btn btn-secondary btn-small';
+        // Desativar modo edição
+        appData.editMode[key] = false;
+
+        // Atualizar botões
+        const editBtn = document.getElementById(`edit-btn-${pontoId}-${tipo}`);
+        const cancelBtn = document.getElementById(`cancel-btn-${pontoId}-${tipo}`);
+
+        if (editBtn) {
+            editBtn.textContent = '✏️ Editar';
+            editBtn.className = 'btn btn-secondary btn-small';
+        }
+        if (cancelBtn) {
+            cancelBtn.style.display = 'none';
+        }
+
+        // Remover classe editing
+        const container = document.getElementById(`preview-${pontoId}-${tipo}`);
+        if (container) {
+            const mediaItems = container.querySelectorAll('.media-item');
+            mediaItems.forEach(item => item.classList.remove('editing'));
+        }
+
+        Logger.info('✅ Modo edição CONCLUÍDO', { pontoId, tipo });
+    } else {
+        // ATIVAR modo edição
+        appData.editMode[key] = true;
+
+        // Inicializar lista de exclusões pendentes
+        if (!appData.pendingDeletes[key]) {
+            appData.pendingDeletes[key] = [];
+        }
+
+        // Atualizar botões
+        const editBtn = document.getElementById(`edit-btn-${pontoId}-${tipo}`);
+        const cancelBtn = document.getElementById(`cancel-btn-${pontoId}-${tipo}`);
+
+        if (editBtn) {
+            editBtn.textContent = '✅ Concluir';
+            editBtn.className = 'btn btn-success btn-small';
+        }
+        if (cancelBtn) {
+            cancelBtn.style.display = 'inline-flex';
+        }
+
+        // Adicionar classe editing
+        const container = document.getElementById(`preview-${pontoId}-${tipo}`);
+        if (container) {
+            const mediaItems = container.querySelectorAll('.media-item');
+            mediaItems.forEach(item => item.classList.add('editing'));
+        }
+
+        Logger.info('✏️ Modo edição ATIVADO', { pontoId, tipo });
     }
 
-    // ✅ V10.2: Adicionar/remover classe .editing nos media-items
+    // ✅ Atualizar UI global
+    updateEditModeUI();
+}
+
+/**
+ * ❌ CANCELAR MODO EDIÇÃO V10.7.3
+ * Cancela a edição e restaura fotos marcadas para exclusão
+ */
+function cancelEditMode(pontoId, tipo) {
+    const key = `${pontoId}-${tipo}`;
+
+    Logger.info('❌ Cancelando modo edição', { pontoId, tipo });
+
+    // Restaurar fotos marcadas para exclusão
+    if (appData.pendingDeletes[key] && appData.pendingDeletes[key].length > 0) {
+        appData.pendingDeletes[key].forEach(item => {
+            if (item.element && item.element.parentElement) {
+                item.element.style.display = ''; // Mostrar novamente
+                Logger.info('↩️ Foto restaurada:', item.fileName);
+            }
+        });
+        // Limpar lista de exclusões pendentes
+        appData.pendingDeletes[key] = [];
+    }
+
+    // Desativar modo edição
+    appData.editMode[key] = false;
+
+    // Atualizar botões
+    const editBtn = document.getElementById(`edit-btn-${pontoId}-${tipo}`);
+    const cancelBtn = document.getElementById(`cancel-btn-${pontoId}-${tipo}`);
+
+    if (editBtn) {
+        editBtn.textContent = '✏️ Editar';
+        editBtn.className = 'btn btn-secondary btn-small';
+    }
+    if (cancelBtn) {
+        cancelBtn.style.display = 'none';
+    }
+
+    // Remover classe editing
     const container = document.getElementById(`preview-${pontoId}-${tipo}`);
     if (container) {
         const mediaItems = container.querySelectorAll('.media-item');
-        console.log(`🔧 V10.6: Toggle modo edição - ${mediaItems.length} media-items para ${pontoId}-${tipo}`);
-
-        mediaItems.forEach(item => {
-            if (appData.editMode[key]) {
-                item.classList.add('editing'); // Classe ativa CSS: .media-item.editing .delete-badge
-                console.log('✅ Modo edição ATIVADO:', item);
-            } else {
-                item.classList.remove('editing');
-                console.log('⏹️ Modo edição DESATIVADO:', item);
-            }
-        });
-    } else {
-        console.error(`❌ Container preview-${pontoId}-${tipo} não encontrado ao alternar modo edição!`);
+        mediaItems.forEach(item => item.classList.remove('editing'));
     }
 
-    // ✅ V10.6: Atualizar UI global
+    // Atualizar UI global
     updateEditModeUI();
 
-    Logger.info('Modo edição alternado V10.6', { pontoId, tipo, editMode: appData.editMode[key], method: 'CSS class .editing' });
+    Logger.success('✅ Edição cancelada, fotos restauradas');
+}
+
+/**
+ * ✅ CONFIRMAR EXCLUSÕES PENDENTES V10.7.3
+ * Aplica todas as exclusões marcadas
+ */
+async function confirmPendingDeletes(pontoId, tipo) {
+    const key = `${pontoId}-${tipo}`;
+
+    if (!appData.pendingDeletes[key] || appData.pendingDeletes[key].length === 0) {
+        Logger.info('Nenhuma exclusão pendente');
+        return;
+    }
+
+    const deleteCount = appData.pendingDeletes[key].length;
+    Logger.info(`📝 Confirmando ${deleteCount} exclusão(ões) pendente(s)`);
+
+    showUploadProgress('Excluindo arquivos...');
+
+    // Excluir todos os arquivos marcados
+    for (const item of appData.pendingDeletes[key]) {
+        try {
+            const result = await DriveAPI.deleteFileFromDrive(item.fileId, item.fileName);
+            if (result.success) {
+                Logger.success(`✅ Arquivo excluído: ${item.fileName}`);
+            } else {
+                Logger.error(`❌ Erro ao excluir: ${item.fileName}`);
+            }
+        } catch (error) {
+            Logger.error(`❌ Erro ao excluir ${item.fileName}:`, error);
+        }
+    }
+
+    hideUploadProgress();
+
+    // Limpar lista de exclusões pendentes
+    appData.pendingDeletes[key] = [];
+
+    // Recarregar preview
+    const ponto = appData.pontos.find(p => p.id === pontoId);
+    if (ponto) {
+        const container = document.getElementById(`preview-${pontoId}-${tipo}`);
+        if (container) {
+            await loadMediaPreview(ponto, tipo, container, false);
+        }
+    }
+
+    showSuccessMessage(`🗑️ ${deleteCount} arquivo(s) excluído(s) com sucesso!`);
 }
 
 /**
@@ -765,45 +903,59 @@ function isEditMode(pontoId, tipo) {
 }
 
 /**
- * 🗑️ EXCLUIR ARQUIVO
- * Confirma e exclui um arquivo
+ * 🗑️ MARCAR ARQUIVO PARA EXCLUSÃO V10.7.3
+ * Marca arquivo para exclusão pendente (não apaga imediatamente)
  */
-async function deleteFile(fileId, fileName, pontoId, tipo) {
-    try {
-        if (!confirm(`Tem certeza que deseja excluir "${fileName}"?`)) {
-            return;
-        }
-        
-        Logger.info('Excluindo arquivo', { fileId, fileName });
-        
-        showUploadProgress('Excluindo arquivo...');
-        
-        const result = await DriveAPI.deleteFileFromDrive(fileId, fileName);
-        
-        hideUploadProgress();
-        
-        if (result.success) {
-            Logger.success('Arquivo excluído', { fileName });
-            
-            // Recarregar preview
-            const ponto = appData.pontos.find(p => p.id === pontoId);
-            if (ponto) {
-                const container = document.getElementById(`preview-${pontoId}-${tipo}`);
-                if (container) {
-                    await loadMediaPreview(ponto, tipo, container, false);
-                }
-            }
-            
-            showSuccessMessage('🗑️ Arquivo excluído com sucesso!');
-        } else {
-            throw new Error(result.error || 'Falha na exclusão');
-        }
-        
-    } catch (error) {
-        hideUploadProgress();
-        Logger.error('Erro ao excluir arquivo', error);
-        alert('Erro ao excluir arquivo: ' + error.message);
+function deleteFile(fileId, fileName, pontoId, tipo) {
+    const key = `${pontoId}-${tipo}`;
+
+    Logger.info('Marcando arquivo para exclusão', { fileId, fileName });
+
+    // Encontrar o elemento media-item correspondente
+    const container = document.getElementById(`preview-${pontoId}-${tipo}`);
+    if (!container) {
+        Logger.error('Container não encontrado');
+        return;
     }
+
+    // Buscar o media-item que contém este arquivo
+    const mediaItems = container.querySelectorAll('.media-item');
+    let targetElement = null;
+
+    mediaItems.forEach(item => {
+        const deleteBtn = item.querySelector('.delete-badge');
+        if (deleteBtn && deleteBtn.dataset.pontoId === pontoId && deleteBtn.dataset.tipo === tipo) {
+            // Verificar se é este arquivo (por fileId no data attribute)
+            const img = item.querySelector('img');
+            const videoThumb = item.querySelector('.video-thumbnail');
+
+            if ((img && img.dataset.fileId === fileId) ||
+                (videoThumb && videoThumb.dataset.fileId === fileId)) {
+                targetElement = item;
+            }
+        }
+    });
+
+    if (!targetElement) {
+        Logger.error('Elemento não encontrado');
+        return;
+    }
+
+    // Adicionar à lista de exclusões pendentes
+    if (!appData.pendingDeletes[key]) {
+        appData.pendingDeletes[key] = [];
+    }
+
+    appData.pendingDeletes[key].push({
+        fileId: fileId,
+        fileName: fileName,
+        element: targetElement
+    });
+
+    // Esconder o elemento imediatamente
+    targetElement.style.display = 'none';
+
+    Logger.info(`✅ Arquivo marcado para exclusão: ${fileName} (${appData.pendingDeletes[key].length} pendente(s))`);
 }
 
 /**
@@ -1568,6 +1720,7 @@ async function generateCampanhaPDF() {
 window.togglePontoContent = togglePontoContent;
 window.togglePontoLazy = togglePontoLazy;
 window.toggleEditMode = toggleEditMode;
+window.cancelEditMode = cancelEditMode; // ✅ V10.7.3: Cancelar edição
 window.openMediaChoiceModal = openMediaChoiceModal;
 window.closeMediaChoiceModal = closeMediaChoiceModal;
 window.chooseCamera = chooseCamera;
