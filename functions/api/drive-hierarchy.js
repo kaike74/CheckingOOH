@@ -33,7 +33,17 @@ const stats = {
 export async function ensureFolderHierarchy(exibidora, databaseId, pontoId, tipo, accessToken) {
     try {
         console.log('🏗️ === INICIANDO CRIAÇÃO DE HIERARQUIA ===');
-        console.log('📋 Parâmetros:', { exibidora, databaseId, pontoId, tipo });
+
+        // ✅ CRÍTICO: Normalizar databaseId e pontoId antes de usar
+        const normalizedDatabaseId = normalizeNotionId(databaseId);
+        const normalizedPontoId = normalizeNotionId(pontoId);
+        console.log('📋 Parâmetros (raw):', { exibidora, databaseId, pontoId, tipo });
+        console.log('📋 Parâmetros (normalized):', {
+            exibidora,
+            databaseId: normalizedDatabaseId,
+            pontoId: normalizedPontoId,
+            tipo
+        });
 
         // PASSO 1: Encontrar pasta CheckingOOH
         console.log('🔍 [1/5] Buscando pasta raiz: CheckingOOH...');
@@ -56,20 +66,20 @@ export async function ensureFolderHierarchy(exibidora, databaseId, pontoId, tipo
         );
         console.log('✅ Pasta Exibidora:', exibidoraFolder.id);
 
-        // PASSO 3: Campanha (usando databaseId DIRETAMENTE)
-        console.log(`🔍 [3/5] Garantindo pasta Campanha: ${databaseId}...`);
+        // PASSO 3: Campanha (usando databaseId NORMALIZADO)
+        console.log(`🔍 [3/5] Garantindo pasta Campanha: ${normalizedDatabaseId}...`);
         const campanhaFolder = await findOrCreateFolderWithLock(
-            databaseId,
+            normalizedDatabaseId,
             exibidoraFolder.id,
             accessToken,
             checkingFolder.driveId
         );
         console.log('✅ Pasta Campanha:', campanhaFolder.id);
 
-        // PASSO 4: Ponto
-        console.log(`🔍 [4/5] Garantindo pasta Ponto: ${pontoId}...`);
+        // PASSO 4: Ponto (usando pontoId NORMALIZADO)
+        console.log(`🔍 [4/5] Garantindo pasta Ponto: ${normalizedPontoId}...`);
         const pontoFolder = await findOrCreateFolderWithLock(
-            pontoId,
+            normalizedPontoId,
             campanhaFolder.id,
             accessToken,
             checkingFolder.driveId
@@ -87,14 +97,16 @@ export async function ensureFolderHierarchy(exibidora, databaseId, pontoId, tipo
         );
         console.log('✅ Pasta Tipo:', tipoFolder.id);
 
-        // Construir caminho completo
-        const fullPath = `${basePath}/${exibidora}/${databaseId}/${pontoId}/${tipoFolderName}`;
+        // Construir caminho completo (usando IDs normalizados)
+        const fullPath = `${basePath}/${exibidora}/${normalizedDatabaseId}/${normalizedPontoId}/${tipoFolderName}`;
         console.log('🎉 Hierarquia completa garantida:', fullPath);
         console.log('📊 Estatísticas:', stats);
 
         return {
             id: tipoFolder.id,
             path: fullPath,
+            normalizedDatabaseId: normalizedDatabaseId, // ✅ Retornar IDs normalizados
+            normalizedPontoId: normalizedPontoId, // ✅ Retornar IDs normalizados
             folders: {
                 checking: checkingFolder,
                 exibidora: exibidoraFolder,
@@ -330,6 +342,31 @@ export function validateHierarchyParams(exibidora, databaseId, pontoId, tipo) {
         valid: errors.length === 0,
         errors
     };
+}
+
+// =============================================================================
+// 🔧 NORMALIZAR ID DO NOTION
+// =============================================================================
+/**
+ * Normaliza IDs do Notion para formato com hífens
+ * Garante consistência independente do formato de entrada
+ *
+ * @param {string} id - ID do Notion (com ou sem hífens)
+ * @returns {string} - ID normalizado no formato padrão
+ */
+function normalizeNotionId(id) {
+    if (!id) return id;
+
+    // Remover hífens existentes
+    const cleanId = id.replace(/-/g, '');
+
+    // Se tem 32 caracteres (formato sem hífens), adicionar hífens
+    if (cleanId.length === 32) {
+        return `${cleanId.slice(0, 8)}-${cleanId.slice(8, 12)}-${cleanId.slice(12, 16)}-${cleanId.slice(16, 20)}-${cleanId.slice(20, 32)}`;
+    }
+
+    // Se já está em outro formato, retornar como está
+    return id;
 }
 
 console.log('✅ Módulo Drive Hierarchy Manager carregado');

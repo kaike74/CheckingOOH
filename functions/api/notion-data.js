@@ -91,12 +91,15 @@ async function fetchPontosForExibidora(pontoId, notionToken) {
         });
 
         // Obter o database parent
-        const databaseId = pontoData.parent?.database_id;
-        if (!databaseId) {
+        const rawDatabaseId = pontoData.parent?.database_id;
+        if (!rawDatabaseId) {
             throw new Error('Não foi possível determinar o database deste ponto');
         }
 
-        console.log('🗄️ Database ID:', databaseId);
+        // ✅ CRÍTICO: Normalizar databaseId para garantir consistência
+        const databaseId = normalizeNotionId(rawDatabaseId);
+        console.log('🗄️ Database ID (raw):', rawDatabaseId);
+        console.log('🗄️ Database ID (normalizado):', databaseId);
 
         // ✅ CORREÇÃO: Filtro para campo TEXT em vez de SELECT
         console.log('🔍 Buscando pontos da exibidora:', exibidora);
@@ -230,7 +233,8 @@ async function fetchPontosByCampanha(campanhaId, notionToken) {
         console.log('📋 Buscando todos os pontos da campanha:', campanhaId);
 
         const normalizedId = normalizeNotionId(campanhaId);
-        console.log('🔧 Database ID normalizado:', normalizedId);
+        console.log('🔧 Database ID (raw):', campanhaId);
+        console.log('🔧 Database ID (normalizado):', normalizedId);
 
         // Buscar título e ícone da página pai
         const pageInfo = await fetchPageTitle(normalizedId, notionToken);
@@ -264,7 +268,7 @@ async function fetchPontosByCampanha(campanhaId, notionToken) {
             success: true,
             mode: 'campanha',
             pontos: pontos,
-            databaseId: campanhaId,
+            databaseId: normalizedId, // ✅ CRÍTICO: Retornar ID normalizado, não o raw
             totalPontos: pontos.length,
             pageTitle: pageTitle, // ✅ Incluir título da página pai
             pageIcon: pageIcon // ✅ Incluir ícone da página pai
@@ -341,8 +345,9 @@ function extractPontoData(notionPage) {
         };
         
         // ✅ CAMPOS CORRIGIDOS: Exibidora como rich_text
+        // ✅ CRÍTICO: Normalizar ID do ponto para formato com hífens
         const pontoData = {
-            id: notionPage.id.replace(/-/g, ''),
+            id: normalizeNotionId(notionPage.id), // ✅ Formato: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
             idOriginal: notionPage.id,
             exibidora: extractValue(properties['Exibidora'], 'Exibidora Desconhecida'), // rich_text
             endereco: extractValue(properties['Endereço'], 'Endereço não informado'), // title
