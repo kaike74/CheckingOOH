@@ -145,6 +145,67 @@ async function fetchPontosForExibidora(pontoId, notionToken) {
 }
 
 // =============================================================================
+// 📋 BUSCAR TÍTULO DA PÁGINA PAI (NOTION)
+// =============================================================================
+async function fetchPageTitle(databaseId, notionToken) {
+    try {
+        console.log('📄 Buscando título da página pai do database:', databaseId);
+
+        // 1. Buscar informações do database
+        const databaseResponse = await fetch(`https://api.notion.com/v1/databases/${databaseId}`, {
+            headers: {
+                'Authorization': `Bearer ${notionToken}`,
+                'Notion-Version': '2022-06-28',
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!databaseResponse.ok) {
+            console.warn('⚠️ Não foi possível buscar dados do database');
+            return null;
+        }
+
+        const databaseData = await databaseResponse.json();
+
+        // 2. Verificar se tem página pai
+        const parentPageId = databaseData.parent?.page_id;
+        if (!parentPageId) {
+            console.log('ℹ️ Database não tem página pai');
+            return null;
+        }
+
+        console.log('📄 Página pai encontrada:', parentPageId);
+
+        // 3. Buscar título da página pai
+        const pageResponse = await fetch(`https://api.notion.com/v1/pages/${parentPageId}`, {
+            headers: {
+                'Authorization': `Bearer ${notionToken}`,
+                'Notion-Version': '2022-06-28',
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!pageResponse.ok) {
+            console.warn('⚠️ Não foi possível buscar página pai');
+            return null;
+        }
+
+        const pageData = await pageResponse.json();
+
+        // 4. Extrair título
+        const titleProperty = pageData.properties?.title || pageData.properties?.Name;
+        const title = titleProperty?.title?.[0]?.text?.content || null;
+
+        console.log('✅ Título da página pai extraído:', title);
+        return title;
+
+    } catch (error) {
+        console.error('❌ Erro ao buscar título da página pai:', error);
+        return null;
+    }
+}
+
+// =============================================================================
 // 📋 BUSCAR TODOS OS PONTOS DE UMA CAMPANHA
 // =============================================================================
 async function fetchPontosByCampanha(campanhaId, notionToken) {
@@ -153,6 +214,9 @@ async function fetchPontosByCampanha(campanhaId, notionToken) {
 
         const normalizedId = normalizeNotionId(campanhaId);
         console.log('🔧 Database ID normalizado:', normalizedId);
+
+        // Buscar título da página pai
+        const pageTitle = await fetchPageTitle(normalizedId, notionToken);
 
         // Buscar TODOS os pontos do database (sem filtro)
         const queryResponse = await fetch(`https://api.notion.com/v1/databases/${normalizedId}/query`, {
@@ -182,7 +246,8 @@ async function fetchPontosByCampanha(campanhaId, notionToken) {
             mode: 'campanha',
             pontos: pontos,
             databaseId: campanhaId,
-            totalPontos: pontos.length
+            totalPontos: pontos.length,
+            pageTitle: pageTitle // ✅ Incluir título da página pai
         };
 
     } catch (error) {
