@@ -217,9 +217,52 @@ body {
     z-index: 3;
 }
 
+/* Campo de Pesquisa */
+.search-container {
+    padding: 20px;
+    background: linear-gradient(135deg, rgba(6, 5, 91, 0.02) 0%, var(--emidias-white) 100%);
+    border-bottom: 2px solid var(--emidias-light-gray);
+}
+
+.search-input {
+    width: 100%;
+    padding: 14px 20px;
+    font-size: 15px;
+    font-family: var(--font-primary);
+    font-weight: var(--font-weight-medium);
+    border: 2px solid var(--emidias-light-gray);
+    border-radius: 12px;
+    outline: none;
+    transition: all 0.3s ease;
+    background: var(--emidias-white);
+    color: var(--emidias-dark);
+}
+
+.search-input:focus {
+    border-color: var(--emidias-primary);
+    box-shadow: 0 0 0 3px rgba(6, 5, 91, 0.1);
+}
+
+.search-input::placeholder {
+    color: var(--emidias-gray);
+    opacity: 0.7;
+}
+
+.search-results-count {
+    margin-top: 12px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--emidias-gray);
+    font-weight: var(--font-weight-medium);
+}
+
 .ponto-item {
     border-bottom: 1px solid var(--emidias-light-gray);
     transition: all 0.3s ease;
+}
+
+.ponto-item.hidden-by-search {
+    display: none;
 }
 
 .ponto-item:last-child {
