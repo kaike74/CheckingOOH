@@ -3,182 +3,646 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Checking OOH - E-MÍDIAS</title>
+  <title>CheckingOOH - Plataforma de Monitoramento OOH | E-MÍDIAS</title>
+  <meta name="description" content="Sistema profissional de monitoramento e gestão de campanhas Out of Home (OOH) da E-MÍDIAS">
 
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
-  <!-- Estilos do projeto -->
-  <link rel="stylesheet" href="style.css">
+  <style>
+    :root {
+      --emidias-primary: #06055B;
+      --emidias-magenta: #FC1E75;
+      --emidias-rosa: #D71E97;
+      --emidias-roxo: #AA1EA5;
+      --emidias-success: #10B981;
+      --emidias-gray: #64748B;
+      --emidias-light-gray: #F1F5F9;
+      --emidias-white: #FFFFFF;
+      --emidias-dark: #1E293B;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--emidias-white);
+      color: var(--emidias-dark);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* HEADER */
+    .header {
+      background: var(--emidias-primary);
+      padding: 20px 0;
+      box-shadow: 0 4px 20px rgba(6, 5, 91, 0.15);
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      border-bottom: 3px solid var(--emidias-magenta);
+    }
+
+    .header-content {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 0 40px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .logo {
+      max-height: 50px;
+      height: auto;
+      transition: transform 0.3s ease;
+    }
+
+    .logo:hover {
+      transform: scale(1.05);
+    }
+
+    /* HERO SECTION */
+    .hero {
+      background: linear-gradient(135deg, var(--emidias-primary) 0%, var(--emidias-roxo) 100%);
+      padding: 100px 40px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      right: -10%;
+      width: 80%;
+      height: 200%;
+      background: radial-gradient(circle, rgba(252, 30, 117, 0.15) 0%, transparent 70%);
+      animation: pulse 8s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        transform: scale(1) rotate(0deg);
+        opacity: 1;
+      }
+      50% {
+        transform: scale(1.1) rotate(5deg);
+        opacity: 0.8;
+      }
+    }
+
+    .hero-content {
+      max-width: 1200px;
+      margin: 0 auto;
+      position: relative;
+      z-index: 1;
+    }
+
+    .hero-title {
+      font-size: 64px;
+      font-weight: 700;
+      color: var(--emidias-white);
+      margin-bottom: 20px;
+      animation: fadeInUp 0.8s ease-out;
+    }
+
+    .hero-subtitle {
+      font-size: 24px;
+      color: rgba(255, 255, 255, 0.95);
+      margin-bottom: 40px;
+      font-weight: 400;
+      animation: fadeInUp 0.8s ease-out 0.2s backwards;
+      max-width: 800px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .hero-badge {
+      display: inline-block;
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(10px);
+      padding: 12px 30px;
+      border-radius: 50px;
+      color: var(--emidias-white);
+      font-weight: 600;
+      font-size: 16px;
+      margin-top: 20px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      animation: fadeInUp 0.8s ease-out 0.4s backwards;
+    }
+
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* MAIN CONTENT */
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 80px 40px;
+    }
+
+    .section-title {
+      font-size: 42px;
+      font-weight: 700;
+      color: var(--emidias-primary);
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .section-subtitle {
+      font-size: 18px;
+      color: var(--emidias-gray);
+      text-align: center;
+      margin-bottom: 60px;
+      max-width: 700px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    /* SCREENSHOTS GRID */
+    .screenshots-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+      gap: 40px;
+      margin-bottom: 80px;
+    }
+
+    .screenshot-card {
+      background: var(--emidias-white);
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 10px 40px rgba(6, 5, 91, 0.1);
+      transition: all 0.4s ease;
+      border: 2px solid var(--emidias-light-gray);
+    }
+
+    .screenshot-card:hover {
+      transform: translateY(-10px);
+      box-shadow: 0 20px 60px rgba(6, 5, 91, 0.2);
+      border-color: var(--emidias-magenta);
+    }
+
+    .screenshot-image {
+      width: 100%;
+      height: auto;
+      display: block;
+      transition: transform 0.4s ease;
+    }
+
+    .screenshot-card:hover .screenshot-image {
+      transform: scale(1.05);
+    }
+
+    .screenshot-info {
+      padding: 25px;
+      background: linear-gradient(135deg, rgba(6, 5, 91, 0.02) 0%, var(--emidias-white) 100%);
+    }
+
+    .screenshot-title {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--emidias-primary);
+      margin-bottom: 8px;
+    }
+
+    .screenshot-description {
+      font-size: 15px;
+      color: var(--emidias-gray);
+      line-height: 1.6;
+    }
+
+    /* FEATURES SECTION */
+    .features {
+      background: linear-gradient(135deg, #F8F9FF 0%, var(--emidias-light-gray) 100%);
+      padding: 80px 40px;
+      margin: 80px 0;
+      border-radius: 30px;
+    }
+
+    .features-grid {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 40px;
+    }
+
+    .feature-card {
+      background: var(--emidias-white);
+      padding: 40px 30px;
+      border-radius: 16px;
+      text-align: center;
+      transition: all 0.3s ease;
+      border: 2px solid transparent;
+      box-shadow: 0 4px 15px rgba(6, 5, 91, 0.08);
+    }
+
+    .feature-card:hover {
+      transform: translateY(-8px);
+      border-color: var(--emidias-magenta);
+      box-shadow: 0 12px 40px rgba(6, 5, 91, 0.15);
+    }
+
+    .feature-icon {
+      font-size: 56px;
+      margin-bottom: 20px;
+      display: block;
+    }
+
+    .feature-title {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--emidias-primary);
+      margin-bottom: 12px;
+    }
+
+    .feature-description {
+      font-size: 15px;
+      color: var(--emidias-gray);
+      line-height: 1.6;
+    }
+
+    /* CTA SECTION */
+    .cta-section {
+      background: linear-gradient(135deg, var(--emidias-primary) 0%, var(--emidias-roxo) 100%);
+      padding: 60px 40px;
+      border-radius: 24px;
+      text-align: center;
+      margin: 80px auto;
+      max-width: 1000px;
+      box-shadow: 0 20px 60px rgba(6, 5, 91, 0.3);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .cta-section::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle, rgba(252, 30, 117, 0.1) 0%, transparent 70%);
+    }
+
+    .cta-content {
+      position: relative;
+      z-index: 1;
+    }
+
+    .cta-title {
+      font-size: 36px;
+      font-weight: 700;
+      color: var(--emidias-white);
+      margin-bottom: 16px;
+    }
+
+    .cta-text {
+      font-size: 18px;
+      color: rgba(255, 255, 255, 0.95);
+      margin-bottom: 30px;
+      line-height: 1.7;
+      max-width: 700px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .cta-email {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(10px);
+      padding: 16px 32px;
+      border-radius: 50px;
+      color: var(--emidias-white);
+      font-weight: 600;
+      font-size: 18px;
+      text-decoration: none;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      transition: all 0.3s ease;
+    }
+
+    .cta-email:hover {
+      background: rgba(255, 255, 255, 0.25);
+      border-color: rgba(255, 255, 255, 0.6);
+      transform: translateY(-3px);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    }
+
+    /* FOOTER */
+    .footer {
+      background: var(--emidias-primary);
+      color: rgba(255, 255, 255, 0.8);
+      padding: 40px;
+      text-align: center;
+      border-top: 3px solid var(--emidias-magenta);
+    }
+
+    .footer-content {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .footer-logo {
+      max-height: 45px;
+      height: auto;
+      margin-bottom: 20px;
+      opacity: 0.9;
+    }
+
+    .footer-text {
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+
+    .footer-text strong {
+      color: var(--emidias-white);
+      font-weight: 600;
+    }
+
+    /* RESPONSIVE */
+    @media (max-width: 768px) {
+      .header-content {
+        padding: 0 20px;
+      }
+
+      .hero {
+        padding: 60px 20px;
+      }
+
+      .hero-title {
+        font-size: 36px;
+      }
+
+      .hero-subtitle {
+        font-size: 18px;
+      }
+
+      .container {
+        padding: 60px 20px;
+      }
+
+      .section-title {
+        font-size: 32px;
+      }
+
+      .section-subtitle {
+        font-size: 16px;
+      }
+
+      .screenshots-grid {
+        grid-template-columns: 1fr;
+        gap: 30px;
+      }
+
+      .features {
+        padding: 60px 20px;
+        margin: 60px 0;
+      }
+
+      .features-grid {
+        grid-template-columns: 1fr;
+        gap: 30px;
+      }
+
+      .cta-section {
+        padding: 40px 20px;
+        margin: 60px 20px;
+      }
+
+      .cta-title {
+        font-size: 28px;
+      }
+
+      .cta-text {
+        font-size: 16px;
+      }
+
+      .cta-email {
+        font-size: 16px;
+        padding: 14px 28px;
+      }
+
+      .footer {
+        padding: 30px 20px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .hero-title {
+        font-size: 28px;
+      }
+
+      .hero-subtitle {
+        font-size: 16px;
+      }
+
+      .hero-badge {
+        font-size: 14px;
+        padding: 10px 20px;
+      }
+
+      .section-title {
+        font-size: 26px;
+      }
+
+      .cta-title {
+        font-size: 24px;
+      }
+    }
+
+    /* ANIMATION ON SCROLL */
+    .fade-in {
+      opacity: 0;
+      transform: translateY(30px);
+      animation: fadeInUp 0.8s ease-out forwards;
+    }
+
+    .fade-in-delay-1 {
+      animation-delay: 0.2s;
+    }
+
+    .fade-in-delay-2 {
+      animation-delay: 0.4s;
+    }
+
+    .fade-in-delay-3 {
+      animation-delay: 0.6s;
+    }
+  </style>
 </head>
 <body>
-    <!-- ✅ V10.4: TELA DE CARREGAMENTO OOH - MODELO PIXEL-PERFECT -->
-    <div id="loading-proposta" class="loading-screen" style="display: flex;">
-        <div class="loading-content">
-            <div class="loading-logo-container">
-                <img src="./LogoEmidias.png"
-                     alt="E-MÍDIAS Logo"
-                     class="loading-logo"
-                     onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgZmlsbD0iIzA2MDU1QiIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LXNpemU9IjIwIiBmaWxsPSIjRkZGIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+RS1Nw41ESUFTPC90ZXh0Pjwvc3ZnPg=='">
-            </div>
-            <h1 class="loading-title" id="loading-title">CheckingOOH</h1>
-            <p class="loading-text" id="loading-text">Carregando...</p>
-            <div class="loading-progress">
-                <div class="loading-bar"></div>
-            </div>
+  <!-- HEADER -->
+  <header class="header">
+    <div class="header-content">
+      <img src="https://emidiastec.com.br/wp-content/smush-avif/2025/03/logo-E-MIDIAS-png-fundo-escuro-HORIZONTAL.png.avif"
+           alt="E-MÍDIAS"
+           class="logo"
+           onerror="this.src='./LogoEmidias.png'">
+    </div>
+  </header>
+
+  <!-- HERO SECTION -->
+  <section class="hero">
+    <div class="hero-content">
+      <h1 class="hero-title">CheckingOOH</h1>
+      <p class="hero-subtitle">Plataforma profissional de monitoramento e gestão de campanhas Out of Home</p>
+      <div class="hero-badge">Sistema exclusivo para clientes E-MÍDIAS</div>
+    </div>
+  </section>
+
+  <!-- MAIN CONTENT -->
+  <main class="container">
+    <h2 class="section-title">Visão completa das suas campanhas</h2>
+    <p class="section-subtitle">Monitore, gerencie e otimize suas campanhas OOH em tempo real com nossa plataforma especializada</p>
+
+    <!-- SCREENSHOTS GRID -->
+    <div class="screenshots-grid">
+      <div class="screenshot-card fade-in">
+        <img src="./assets/images/telaExibidora1.png" alt="Interface Exibidora" class="screenshot-image">
+        <div class="screenshot-info">
+          <h3 class="screenshot-title">Gestão para Exibidoras</h3>
+          <p class="screenshot-description">Interface completa para exibidoras gerenciarem pontos de mídia, uploads de evidências e acompanhamento de campanhas</p>
         </div>
-    </div>
+      </div>
 
-    <!-- CABEÇALHO SUPERIOR COM LOGO -->
-    <div class="top-header">
-        <img src="https://emidiastec.com.br/wp-content/smush-avif/2025/03/logo-E-MIDIAS-png-fundo-escuro-HORIZONTAL.png.avif"
-             alt="E-MÍDIAS Logo"
-             class="top-logo"
-             onerror="this.src='./LogoEmidias.png'">
-    </div>
+      <div class="screenshot-card fade-in fade-in-delay-1">
+        <img src="./assets/images/telaExibidora2.png" alt="Painel de Controle" class="screenshot-image">
+        <div class="screenshot-info">
+          <h3 class="screenshot-title">Controle de Veiculação</h3>
+          <p class="screenshot-description">Acompanhe status de veiculação, datas de entrada e saída, e gerencie todas as informações dos pontos</p>
+        </div>
+      </div>
 
+      <div class="screenshot-card fade-in fade-in-delay-2">
+        <img src="./assets/images/TelaCampanha2.png" alt="Visão do Cliente" class="screenshot-image">
+        <div class="screenshot-info">
+          <h3 class="screenshot-title">Portal do Cliente</h3>
+          <p class="screenshot-description">Visualização simplificada para clientes acompanharem suas campanhas com evidências fotográficas e relatórios</p>
+        </div>
+      </div>
+
+      <div class="screenshot-card fade-in">
+        <img src="./assets/images/TelaRelatorio1.png" alt="Relatórios Detalhados" class="screenshot-image">
+        <div class="screenshot-info">
+          <h3 class="screenshot-title">Relatórios Inteligentes</h3>
+          <p class="screenshot-description">Relatórios automáticos com fotos, datas e todas as informações relevantes para cada ponto de mídia</p>
+        </div>
+      </div>
+
+      <div class="screenshot-card fade-in fade-in-delay-1">
+        <img src="./assets/images/TelaRelatorio2.png" alt="Análise de Campanhas" class="screenshot-image">
+        <div class="screenshot-info">
+          <h3 class="screenshot-title">Análise Completa</h3>
+          <p class="screenshot-description">Visualize todo o histórico de veiculação com fotos de entrada e saída organizadas por período</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- FEATURES SECTION -->
+  <section class="features">
+    <div class="features-grid">
+      <div class="feature-card">
+        <span class="feature-icon">📸</span>
+        <h3 class="feature-title">Evidências Fotográficas</h3>
+        <p class="feature-description">Upload e visualização de fotos de entrada e saída de cada ponto de veiculação</p>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">📊</span>
+        <h3 class="feature-title">Relatórios em PDF</h3>
+        <p class="feature-description">Geração automática de relatórios profissionais com todas as informações da campanha</p>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">🗺️</span>
+        <h3 class="feature-title">Gestão de Pontos</h3>
+        <p class="feature-description">Controle completo de todos os pontos de mídia com informações detalhadas e organizadas</p>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">⏱️</span>
+        <h3 class="feature-title">Monitoramento em Tempo Real</h3>
+        <p class="feature-description">Acompanhe o status de veiculação de cada ponto atualizado em tempo real</p>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">🔒</span>
+        <h3 class="feature-title">Acesso Seguro</h3>
+        <p class="feature-description">Plataforma segura com controle de acesso diferenciado para clientes e exibidoras</p>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">📱</span>
+        <h3 class="feature-title">Mobile-First</h3>
+        <p class="feature-description">Interface responsiva otimizada para uso em smartphones, tablets e desktops</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA SECTION -->
   <div class="container">
-    <!-- HEADER -->
-    <div class="header">
-      <div class="header-content">
-        <div class="header-main">
-          <h1 class="header-title" id="page-title">
-            Checking OOH
-          </h1>
-          <div class="header-subtitle">
-            <span id="page-subtitle">Sistema de Monitoramento de Painéis</span>
-          </div>
-        </div>
+    <section class="cta-section">
+      <div class="cta-content">
+        <h2 class="cta-title">Otimize suas campanhas OOH</h2>
+        <p class="cta-text">Quer saber mais como otimizar e monitorar suas campanhas no meio off? Entre em contato</p>
+        <a href="mailto:emidias@hubradios.com.br" class="cta-email">
+          <span>✉️</span>
+          <span>emidias@hubradios.com.br</span>
+        </a>
       </div>
-    </div>
-
-    <!-- LOADING SECUNDÁRIO - REMOVIDO V10.5: Já existe tela de carregamento dedicada -->
-    <div id="loading" class="loading" style="display: none;">
-      <div class="loading-spinner"></div>
-      <p>Processando...</p>
-    </div>
-
-    <!-- ERROR -->
-    <div id="error" class="error" style="display: none;">
-      <div id="error-message"></div>
-      <div id="error-details" class="error-details" style="display: none;"></div>
-    </div>
-
-    <!-- MODO DEMO -->
-    <div id="demo-warning" class="demo-warning" style="display: none;">
-      <div class="demo-content">
-        <h3>🧪 Modo Demonstração</h3>
-        <p>Este é um ambiente de teste com dados fictícios. Para usar com dados reais, configure as variáveis de ambiente.</p>
-        <button onclick="hideDemoWarning()" class="demo-close-btn">Entendi</button>
-      </div>
-    </div>
-
-    <!-- INFORMAÇÕES DA EXIBIDORA -->
-    <div id="exibidora-info" class="info-card" style="display: none;">
-      <h3 class="card-title">📢 Exibidora</h3>
-      <div class="info-item">
-        <span class="info-label">Nome:</span>
-        <span class="info-value" id="exibidora-name">-</span>
-      </div>
-      <div class="info-item">
-        <span class="info-label">Pontos encontrados:</span>
-        <span class="info-value" id="pontos-count">-</span>
-      </div>
-    </div>
-
-    <!-- LISTA DE PONTOS -->
-    <div id="pontos-section" class="pontos-container" style="display: none;">
-      <div id="pontos-list"></div>
-    </div>
-
-    <!-- MODAL DE FOTOS -->
-    <div id="photo-modal" class="modal" style="display: none;">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3 id="modal-title">Fotos e Vídeos</h3>
-          <button class="close-btn" onclick="closePhotoModal()">&times;</button>
-        </div>
-        <div class="modal-body">
-          <div id="photos-grid"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- MODAL DE UPLOAD -->
-    <div id="upload-modal" class="modal" style="display: none;">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3 id="upload-modal-title">📤 Upload de Arquivos</h3>
-          <button class="close-btn" onclick="closeUploadModal()">&times;</button>
-        </div>
-        <div class="modal-body">
-          <div class="upload-zone" id="upload-zone">
-            <div class="upload-icon">📎</div>
-            <div class="upload-text">
-              <p><strong>Clique para selecionar</strong> ou arraste arquivos aqui</p>
-              <small>Fotos (JPG, PNG) ou Vídeos (MP4, MOV) - Máx. 100MB</small>
-            </div>
-            <input type="file" id="file-input" multiple accept="image/*,video/*" style="display: none;">
-          </div>
-          
-          <div id="upload-progress" class="upload-progress" style="display: none;">
-            <div class="progress-bar">
-              <div class="progress-fill" id="progress-fill"></div>
-            </div>
-            <p id="progress-text">Enviando...</p>
-          </div>
-          
-          <div class="upload-actions">
-            <button class="btn btn-camera" onclick="openCamera()">📷 Tirar Foto</button>
-            <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">📁 Selecionar Arquivos</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- CÂMERA -->
-    <div id="camera-modal" class="modal" style="display: none;">
-      <div class="modal-content camera-modal">
-        <div class="modal-header">
-          <h3>📷 Tirar Foto</h3>
-          <button class="close-btn" onclick="closeCameraModal()">&times;</button>
-        </div>
-        <div class="modal-body">
-          <video id="camera-video" autoplay playsinline></video>
-          <canvas id="camera-canvas" style="display: none;"></canvas>
-          <div class="camera-controls">
-            <button class="btn btn-camera" onclick="capturePhoto()">📸 Capturar</button>
-            <button class="btn btn-secondary" onclick="closeCameraModal()">❌ Cancelar</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- RODAPÉ -->
-    <div class="footer">
-      <p class="footer-text">Sistema de Checking OOH • E-MÍDIAS</p>
-    </div>
+    </section>
   </div>
 
-  <!-- ✅ V10.5: NOTIFICAÇÃO FLUTUANTE PARA PDF -->
-  <div id="pdf-notification" class="pdf-notification" style="display: none;">
-    <div class="notification-content">
-      <div class="pdf-spinner"></div>
-      <span id="pdf-notification-text">Gerando PDF...</span>
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="footer-content">
+      <img src="https://emidiastec.com.br/wp-content/smush-avif/2025/03/logo-E-MIDIAS-png-fundo-escuro-HORIZONTAL.png.avif"
+           alt="E-MÍDIAS"
+           class="footer-logo"
+           onerror="this.src='./LogoEmidias.png'">
+      <p class="footer-text"><strong>CheckingOOH</strong> • Sistema de Monitoramento OOH</p>
+      <p class="footer-text">© 2025 E-MÍDIAS • Todos os direitos reservados</p>
     </div>
-  </div>
+  </footer>
 
-  <!-- Scripts -->
-  <!-- ✅ V10: jsPDF para geração de relatórios -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <!-- ✅ V10.2: html2canvas para PDF via print -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script>
+    // Intersection Observer para animações ao scroll
+    const observerOptions = {
+      threshold: 0.1,
+      rootMargin: '0px 0px -50px 0px'
+    };
 
-  <script src="js/config.js"></script>
-  <script src="js/notion-api.js"></script>
-  <script src="js/drive-api.js"></script>
-  <script src="js/camera.js"></script>
-  <script src="js/upload.js"></script>
-  <script src="js/main.js"></script>
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.style.opacity = '1';
+          entry.target.style.transform = 'translateY(0)';
+        }
+      });
+    }, observerOptions);
+
+    // Observar elementos com classe fade-in
+    document.addEventListener('DOMContentLoaded', () => {
+      const fadeElements = document.querySelectorAll('.fade-in');
+      fadeElements.forEach(el => observer.observe(el));
+    });
+  </script>
 </body>
 </html>
