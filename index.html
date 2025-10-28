@@ -3,182 +3,133 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Checking OOH - E-MÍDIAS</title>
+  <title>CheckingOOH - Redirecionando...</title>
+  <meta http-equiv="refresh" content="0; url=https://emidiastec.com.br/plataforma-de-controle">
+  <link rel="canonical" href="https://emidiastec.com.br/plataforma-de-controle">
 
-  <!-- Google Fonts -->
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --emidias-primary: #06055B;
+      --emidias-magenta: #FC1E75;
+      --emidias-roxo: #AA1EA5;
+    }
 
-  <!-- Estilos do projeto -->
-  <link rel="stylesheet" href="style.css">
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, var(--emidias-primary) 0%, var(--emidias-roxo) 100%);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      text-align: center;
+      padding: 20px;
+    }
+
+    .redirect-container {
+      max-width: 500px;
+    }
+
+    .logo {
+      max-width: 200px;
+      margin-bottom: 30px;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    h1 {
+      font-size: 28px;
+      margin-bottom: 16px;
+      font-weight: 600;
+    }
+
+    p {
+      font-size: 16px;
+      opacity: 0.9;
+      margin-bottom: 30px;
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid rgba(255, 255, 255, 0.3);
+      border-top: 4px solid white;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.8; transform: scale(0.95); }
+    }
+
+    .manual-link {
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 1px solid rgba(255, 255, 255, 0.3);
+    }
+
+    .manual-link a {
+      color: white;
+      text-decoration: none;
+      font-weight: 600;
+      padding: 12px 24px;
+      border: 2px solid white;
+      border-radius: 50px;
+      display: inline-block;
+      transition: all 0.3s ease;
+    }
+
+    .manual-link a:hover {
+      background: white;
+      color: var(--emidias-primary);
+      transform: translateY(-2px);
+    }
+
+    @media (max-width: 480px) {
+      h1 {
+        font-size: 22px;
+      }
+      p {
+        font-size: 14px;
+      }
+    }
+  </style>
 </head>
 <body>
-    <!-- ✅ V10.4: TELA DE CARREGAMENTO OOH - MODELO PIXEL-PERFECT -->
-    <div id="loading-proposta" class="loading-screen" style="display: flex;">
-        <div class="loading-content">
-            <div class="loading-logo-container">
-                <img src="./LogoEmidias.png"
-                     alt="E-MÍDIAS Logo"
-                     class="loading-logo"
-                     onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgZmlsbD0iIzA2MDU1QiIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LXNpemU9IjIwIiBmaWxsPSIjRkZGIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+RS1Nw41ESUFTPC90ZXh0Pjwvc3ZnPg=='">
-            </div>
-            <h1 class="loading-title" id="loading-title">CheckingOOH</h1>
-            <p class="loading-text" id="loading-text">Carregando...</p>
-            <div class="loading-progress">
-                <div class="loading-bar"></div>
-            </div>
-        </div>
-    </div>
+  <div class="redirect-container">
+    <img src="https://emidiastec.com.br/wp-content/smush-avif/2025/03/logo-E-MIDIAS-png-fundo-escuro-HORIZONTAL.png.avif"
+         alt="E-MÍDIAS"
+         class="logo"
+         onerror="this.src='./LogoEmidias.png'">
 
-    <!-- CABEÇALHO SUPERIOR COM LOGO -->
-    <div class="top-header">
-        <img src="https://emidiastec.com.br/wp-content/smush-avif/2025/03/logo-E-MIDIAS-png-fundo-escuro-HORIZONTAL.png.avif"
-             alt="E-MÍDIAS Logo"
-             class="top-logo"
-             onerror="this.src='./LogoEmidias.png'">
-    </div>
+    <h1>CheckingOOH</h1>
+    <p>Redirecionando para a página da plataforma...</p>
 
-  <div class="container">
-    <!-- HEADER -->
-    <div class="header">
-      <div class="header-content">
-        <div class="header-main">
-          <h1 class="header-title" id="page-title">
-            Checking OOH
-          </h1>
-          <div class="header-subtitle">
-            <span id="page-subtitle">Sistema de Monitoramento de Painéis</span>
-          </div>
-        </div>
-      </div>
-    </div>
+    <div class="spinner"></div>
 
-    <!-- LOADING SECUNDÁRIO - REMOVIDO V10.5: Já existe tela de carregamento dedicada -->
-    <div id="loading" class="loading" style="display: none;">
-      <div class="loading-spinner"></div>
-      <p>Processando...</p>
-    </div>
-
-    <!-- ERROR -->
-    <div id="error" class="error" style="display: none;">
-      <div id="error-message"></div>
-      <div id="error-details" class="error-details" style="display: none;"></div>
-    </div>
-
-    <!-- MODO DEMO -->
-    <div id="demo-warning" class="demo-warning" style="display: none;">
-      <div class="demo-content">
-        <h3>🧪 Modo Demonstração</h3>
-        <p>Este é um ambiente de teste com dados fictícios. Para usar com dados reais, configure as variáveis de ambiente.</p>
-        <button onclick="hideDemoWarning()" class="demo-close-btn">Entendi</button>
-      </div>
-    </div>
-
-    <!-- INFORMAÇÕES DA EXIBIDORA -->
-    <div id="exibidora-info" class="info-card" style="display: none;">
-      <h3 class="card-title">📢 Exibidora</h3>
-      <div class="info-item">
-        <span class="info-label">Nome:</span>
-        <span class="info-value" id="exibidora-name">-</span>
-      </div>
-      <div class="info-item">
-        <span class="info-label">Pontos encontrados:</span>
-        <span class="info-value" id="pontos-count">-</span>
-      </div>
-    </div>
-
-    <!-- LISTA DE PONTOS -->
-    <div id="pontos-section" class="pontos-container" style="display: none;">
-      <div id="pontos-list"></div>
-    </div>
-
-    <!-- MODAL DE FOTOS -->
-    <div id="photo-modal" class="modal" style="display: none;">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3 id="modal-title">Fotos e Vídeos</h3>
-          <button class="close-btn" onclick="closePhotoModal()">&times;</button>
-        </div>
-        <div class="modal-body">
-          <div id="photos-grid"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- MODAL DE UPLOAD -->
-    <div id="upload-modal" class="modal" style="display: none;">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3 id="upload-modal-title">📤 Upload de Arquivos</h3>
-          <button class="close-btn" onclick="closeUploadModal()">&times;</button>
-        </div>
-        <div class="modal-body">
-          <div class="upload-zone" id="upload-zone">
-            <div class="upload-icon">📎</div>
-            <div class="upload-text">
-              <p><strong>Clique para selecionar</strong> ou arraste arquivos aqui</p>
-              <small>Fotos (JPG, PNG) ou Vídeos (MP4, MOV) - Máx. 100MB</small>
-            </div>
-            <input type="file" id="file-input" multiple accept="image/*,video/*" style="display: none;">
-          </div>
-          
-          <div id="upload-progress" class="upload-progress" style="display: none;">
-            <div class="progress-bar">
-              <div class="progress-fill" id="progress-fill"></div>
-            </div>
-            <p id="progress-text">Enviando...</p>
-          </div>
-          
-          <div class="upload-actions">
-            <button class="btn btn-camera" onclick="openCamera()">📷 Tirar Foto</button>
-            <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">📁 Selecionar Arquivos</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- CÂMERA -->
-    <div id="camera-modal" class="modal" style="display: none;">
-      <div class="modal-content camera-modal">
-        <div class="modal-header">
-          <h3>📷 Tirar Foto</h3>
-          <button class="close-btn" onclick="closeCameraModal()">&times;</button>
-        </div>
-        <div class="modal-body">
-          <video id="camera-video" autoplay playsinline></video>
-          <canvas id="camera-canvas" style="display: none;"></canvas>
-          <div class="camera-controls">
-            <button class="btn btn-camera" onclick="capturePhoto()">📸 Capturar</button>
-            <button class="btn btn-secondary" onclick="closeCameraModal()">❌ Cancelar</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- RODAPÉ -->
-    <div class="footer">
-      <p class="footer-text">Sistema de Checking OOH • E-MÍDIAS</p>
+    <div class="manual-link">
+      <p style="font-size: 14px; margin-bottom: 15px;">Se não for redirecionado automaticamente:</p>
+      <a href="https://emidiastec.com.br/plataforma-de-controle">Clique aqui</a>
     </div>
   </div>
 
-  <!-- ✅ V10.5: NOTIFICAÇÃO FLUTUANTE PARA PDF -->
-  <div id="pdf-notification" class="pdf-notification" style="display: none;">
-    <div class="notification-content">
-      <div class="pdf-spinner"></div>
-      <span id="pdf-notification-text">Gerando PDF...</span>
-    </div>
-  </div>
-
-  <!-- Scripts -->
-  <!-- ✅ V10: jsPDF para geração de relatórios -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <!-- ✅ V10.2: html2canvas para PDF via print -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-
-  <script src="js/config.js"></script>
-  <script src="js/notion-api.js"></script>
-  <script src="js/drive-api.js"></script>
-  <script src="js/camera.js"></script>
-  <script src="js/upload.js"></script>
-  <script src="js/main.js"></script>
+  <script>
+    // Redirecionamento via JavaScript como fallback
+    setTimeout(function() {
+      window.location.href = 'https://emidiastec.com.br/plataforma-de-controle';
+    }, 100);
+  </script>
 </body>
 </html>
