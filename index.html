@@ -31,10 +31,10 @@
     <div id="loading-proposta" class="loading-screen" style="display: flex;">
         <div class="loading-content">
             <div class="loading-logo-container">
-                <img src="./LogoEmidias.png"
+                <img src="./assets/images/logoemidias (2).png"
                      alt="E-MÍDIAS Logo"
                      class="loading-logo"
-                     onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgZmlsbD0iIzA2MDU1QiIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LXNpemU9IjIwIiBmaWxsPSIjRkZGIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+RS1Nw41ESUFTPC90ZXh0Pjwvc3ZnPg=='">
+                     onerror="this.src='https://emidiastec.com.br/wp-content/smush-avif/2025/03/logo-E-MIDIAS-png-fundo-escuro-HORIZONTAL.png.avif'">
             </div>
             <h1 class="loading-title" id="loading-title">CheckingOOH</h1>
             <p class="loading-text" id="loading-text">Carregando...</p>
@@ -103,6 +103,16 @@
 
     <!-- LISTA DE PONTOS -->
     <div id="pontos-section" class="pontos-container" style="display: none;">
+      <!-- Campo de Pesquisa -->
+      <div id="search-container" class="search-container" style="display: none;">
+        <input type="text"
+               id="search-pontos"
+               class="search-input"
+               placeholder="🔍 Pesquisar por endereço, exibidora ou informações do ponto..."
+               onkeyup="filterPontos()">
+        <div id="search-results-count" class="search-results-count"></div>
+      </div>
+
       <div id="pontos-list"></div>
     </div>
 

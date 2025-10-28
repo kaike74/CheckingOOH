@@ -197,22 +197,39 @@ async function loadCampanhaData(campanhaId) {
 async function renderPontos(readOnly = false) {
     try {
         Logger.info('Renderizando pontos', { count: appData.pontos.length, readOnly });
-        
+
         const container = document.getElementById('pontos-list');
         if (!container) throw new Error('Container de pontos não encontrado');
-        
+
         container.innerHTML = '';
-        
-        for (const ponto of appData.pontos) {
+
+        // ✅ Ordenar pontos por exibidora no modo campanha
+        let pontosToRender = [...appData.pontos];
+        if (readOnly) {
+            pontosToRender.sort((a, b) => {
+                const exibidoraA = (a.exibidora || '').toUpperCase();
+                const exibidoraB = (b.exibidora || '').toUpperCase();
+                return exibidoraA.localeCompare(exibidoraB);
+            });
+            Logger.info('Pontos ordenados por exibidora', { count: pontosToRender.length });
+        }
+
+        for (const ponto of pontosToRender) {
             const pontoElement = await createPontoElement(ponto, readOnly);
             container.appendChild(pontoElement);
         }
-        
+
+        // ✅ Mostrar campo de pesquisa apenas no modo campanha
+        const searchContainer = document.getElementById('search-container');
+        if (searchContainer) {
+            searchContainer.style.display = readOnly ? 'block' : 'none';
+        }
+
         // Mostrar seção de pontos
         document.getElementById('pontos-section').style.display = 'block';
-        
-        Logger.success('Pontos renderizados', { count: appData.pontos.length });
-        
+
+        Logger.success('Pontos renderizados', { count: pontosToRender.length });
+
     } catch (error) {
         Logger.error('Erro ao renderizar pontos', error);
         throw error;
@@ -3031,11 +3048,53 @@ function updateEditModeUI() {
     }
 }
 
+/**
+ * 🔍 FILTRAR PONTOS POR PESQUISA
+ * Filtra os pontos exibidos baseado no texto digitado
+ */
+function filterPontos() {
+    const searchInput = document.getElementById('search-pontos');
+    const searchText = searchInput ? searchInput.value.toLowerCase().trim() : '';
+    const pontosItems = document.querySelectorAll('.ponto-item');
+    const resultsCount = document.getElementById('search-results-count');
+
+    let visibleCount = 0;
+    let totalCount = pontosItems.length;
+
+    pontosItems.forEach(pontoItem => {
+        // Buscar texto no título (endereço) e na exibidora
+        const pontoInfo = pontoItem.querySelector('.ponto-info');
+        const pontoText = pontoInfo ? pontoInfo.textContent.toLowerCase() : '';
+
+        // Verificar se o texto da pesquisa está no conteúdo do ponto
+        const matches = searchText === '' || pontoText.includes(searchText);
+
+        if (matches) {
+            pontoItem.classList.remove('hidden-by-search');
+            visibleCount++;
+        } else {
+            pontoItem.classList.add('hidden-by-search');
+        }
+    });
+
+    // Atualizar contador de resultados
+    if (resultsCount) {
+        if (searchText === '') {
+            resultsCount.textContent = '';
+        } else {
+            resultsCount.textContent = `${visibleCount} de ${totalCount} ponto(s) encontrado(s)`;
+        }
+    }
+
+    Logger.debug('Filtro de pesquisa aplicado', { searchText, visibleCount, totalCount });
+}
+
 // ✅ EXPORTAR FUNÇÕES V10.6
 window.addDownloadButtonsToCampaign = addDownloadButtonsToCampaign;
 window.openImageModalV106 = openImageModalV106;
 window.closeImageModalV106 = closeImageModalV106;
 window.navigateModalV106 = navigateModalV106;
+window.filterPontos = filterPontos;
 
 // ✅ INICIALIZAR APLICAÇÃO QUANDO O DOM ESTIVER PRONTO
 if (document.readyState === 'loading') {
