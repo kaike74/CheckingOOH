@@ -1543,3 +1543,223 @@ body[data-mode="campanha"] .download-badge:not(.media-item .download-badge),
         margin-top: 15px;
     }
 }
+
+/* =============================================================================
+    🏠 LANDING PAGE
+    ============================================================================= */
+.landing-page {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 40px 20px;
+    animation: fadeIn 0.6s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.landing-hero {
+    text-align: center;
+    padding: 60px 20px;
+    background: linear-gradient(135deg, var(--emidias-primary) 0%, var(--emidias-roxo) 100%);
+    border-radius: 24px;
+    color: white;
+    margin-bottom: 60px;
+    box-shadow: 0 20px 60px rgba(6, 5, 91, 0.3);
+    position: relative;
+    overflow: hidden;
+}
+
+.landing-hero::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(252, 30, 117, 0.1) 0%, transparent 70%);
+    animation: pulse 8s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.1);
+        opacity: 0.8;
+    }
+}
+
+.landing-icon {
+    font-size: 80px;
+    margin-bottom: 20px;
+    animation: bounce 2s ease-in-out infinite;
+    position: relative;
+    z-index: 1;
+}
+
+@keyframes bounce {
+    0%, 100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-10px);
+    }
+}
+
+.landing-title {
+    font-size: 56px;
+    font-weight: 700;
+    margin-bottom: 16px;
+    position: relative;
+    z-index: 1;
+}
+
+.landing-subtitle {
+    font-size: 20px;
+    opacity: 0.95;
+    font-weight: 400;
+    max-width: 600px;
+    margin: 0 auto;
+    position: relative;
+    z-index: 1;
+}
+
+.landing-features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 30px;
+    margin-bottom: 60px;
+}
+
+.feature-card {
+    background: white;
+    padding: 40px 30px;
+    border-radius: 16px;
+    text-align: center;
+    box-shadow: 0 4px 20px rgba(6, 5, 91, 0.08);
+    transition: all 0.3s ease;
+    border: 2px solid transparent;
+}
+
+.feature-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 12px 40px rgba(6, 5, 91, 0.15);
+    border-color: var(--emidias-magenta);
+}
+
+.feature-icon {
+    font-size: 48px;
+    margin-bottom: 20px;
+}
+
+.feature-card h3 {
+    color: var(--emidias-primary);
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 12px;
+}
+
+.feature-card p {
+    color: var(--emidias-gray);
+    font-size: 15px;
+    line-height: 1.6;
+}
+
+.landing-cta {
+    background: linear-gradient(135deg, #F1F5F9 0%, #E0E7FF 100%);
+    border-radius: 20px;
+    padding: 50px 40px;
+    text-align: center;
+    margin-bottom: 40px;
+    border: 2px solid var(--emidias-primary);
+}
+
+.cta-content h2 {
+    color: var(--emidias-primary);
+    font-size: 32px;
+    font-weight: 700;
+    margin-bottom: 12px;
+}
+
+.cta-content > p {
+    color: var(--emidias-gray);
+    font-size: 18px;
+    margin-bottom: 30px;
+}
+
+.cta-info {
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+    flex-wrap: wrap;
+}
+
+.info-badge {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: white;
+    padding: 16px 24px;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(6, 5, 91, 0.1);
+    font-size: 15px;
+    color: var(--emidias-dark);
+}
+
+.badge-icon {
+    font-size: 24px;
+}
+
+.landing-footer {
+    text-align: center;
+    padding: 30px 20px;
+    color: var(--emidias-gray);
+    font-size: 14px;
+}
+
+.landing-footer strong {
+    color: var(--emidias-primary);
+    font-weight: 600;
+}
+
+/* Responsividade da Landing Page */
+@media (max-width: 768px) {
+    .landing-title {
+        font-size: 36px;
+    }
+
+    .landing-subtitle {
+        font-size: 16px;
+    }
+
+    .landing-hero {
+        padding: 40px 20px;
+    }
+
+    .landing-icon {
+        font-size: 60px;
+    }
+
+    .cta-content h2 {
+        font-size: 24px;
+    }
+
+    .cta-info {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .info-badge {
+        justify-content: center;
+    }
+}

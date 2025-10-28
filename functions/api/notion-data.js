@@ -1,38 +1,70 @@
 // =============================================================================
-// 📄 CLOUDFLARE PAGES FUNCTION - NOTION DATA API (CORRIGIDO)
+// 📄 CLOUDFLARE PAGES FUNCTION - NOTION DATA API (SEGURO)
 // =============================================================================
 
+import {
+    getSecureCorsHeaders,
+    validateAndSanitize,
+    secureLog,
+    secureErrorResponse,
+    checkRateLimit
+} from './_security.js';
+
 export async function onRequest(context) {
-    const headers = {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        'Content-Type': 'application/json'
-    };
+    const headers = getSecureCorsHeaders(context.request);
 
     if (context.request.method === 'OPTIONS') {
         return new Response('', { status: 200, headers });
     }
 
     try {
-        const url = new URL(context.request.url);
-        const pontoId = url.searchParams.get('id');
-        const campanhaId = url.searchParams.get('campanha');
-
-        if (!pontoId && !campanhaId) {
+        // 🛡️ RATE LIMITING
+        const clientIP = context.request.headers.get('CF-Connecting-IP') || 'unknown';
+        if (!checkRateLimit(clientIP, 100, 60000)) {
+            secureLog('warning', 'Rate limit excedido', { ip: clientIP });
             return new Response(JSON.stringify({
-                error: 'ID do ponto ou campanha é obrigatório'
+                error: 'Muitas requisições. Tente novamente em alguns segundos.'
+            }), {
+                status: 429,
+                headers
+            });
+        }
+
+        const url = new URL(context.request.url);
+        const pontoIdRaw = url.searchParams.get('id');
+        const campanhaIdRaw = url.searchParams.get('campanha');
+
+        if (!pontoIdRaw && !campanhaIdRaw) {
+            return new Response(JSON.stringify({
+                error: 'Parâmetros inválidos'
+            }), { status: 400, headers });
+        }
+
+        // 🛡️ VALIDAR E SANITIZAR IDS
+        let pontoId, campanhaId;
+        try {
+            if (pontoIdRaw) {
+                pontoId = validateAndSanitize(pontoIdRaw, 'notionId', 40);
+            }
+            if (campanhaIdRaw) {
+                campanhaId = validateAndSanitize(campanhaIdRaw, 'notionId', 40);
+            }
+        } catch (validationError) {
+            secureLog('warning', 'Validação de ID falhou', { error: validationError.message });
+            return new Response(JSON.stringify({
+                error: 'Parâmetros inválidos'
             }), { status: 400, headers });
         }
 
         const notionToken = context.env.NOTION_TOKEN;
         if (!notionToken) {
+            secureLog('error', 'Credenciais não configuradas');
             return new Response(JSON.stringify({
-                error: 'Token do Notion não configurado'
+                error: 'Serviço temporariamente indisponível'
             }), { status: 500, headers });
         }
 
-        console.log('🔍 Buscando dados no Notion...', { pontoId, campanhaId });
+        secureLog('info', 'Buscando dados');
 
         let responseData;
 
@@ -48,11 +80,7 @@ export async function onRequest(context) {
         });
 
     } catch (error) {
-        console.error('💥 Erro na função Notion:', error);
-        return new Response(JSON.stringify({ 
-            error: 'Erro interno do servidor',
-            details: error.message
-        }), { status: 500, headers });
+        return secureErrorResponse(error, 500, headers);
     }
 }
 

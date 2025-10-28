@@ -13,6 +13,34 @@ const appData = {
 };
 
 /**
+ * 🔧 NORMALIZAR ID DO NOTION
+ * Converte IDs do Notion para formato consistente com hífens
+ * Previne duplicação de pastas no Drive
+ *
+ * @param {string} id - ID do Notion (com ou sem hífens)
+ * @returns {string} - ID normalizado (formato: 8-4-4-4-12)
+ */
+function normalizeNotionId(id) {
+    if (!id || typeof id !== 'string') {
+        return id;
+    }
+
+    // Remover hífens existentes
+    const cleanId = id.replace(/-/g, '');
+
+    // Verificar se tem 32 caracteres
+    if (cleanId.length !== 32) {
+        Logger.warning('ID do Notion com tamanho inválido', { id, length: cleanId.length });
+        return id; // Retornar original se inválido
+    }
+
+    // Adicionar hífens no formato padrão: 8-4-4-4-12
+    const normalized = `${cleanId.slice(0, 8)}-${cleanId.slice(8, 12)}-${cleanId.slice(12, 16)}-${cleanId.slice(16, 20)}-${cleanId.slice(20, 32)}`;
+
+    return normalized;
+}
+
+/**
  * 🎬 INICIALIZAR APLICAÇÃO V10.5
  * ✅ Com tela de carregamento OOH + remoção de textos "Carregando" residuais
  */
@@ -325,7 +353,12 @@ async function loadMediaPreview(ponto, tipo, container, readOnly = false) {
 
         // ✅ CORREÇÃO: Usar ponto.exibidora em vez de appData.exibidora (importante para modo campanha)
         const exibidora = ponto.exibidora || appData.exibidora;
-        const result = await DriveAPI.listDriveFiles(exibidora, ponto.id, tipo, appData.databaseId);
+
+        // 🔧 NORMALIZAR IDS para prevenir duplicação de pastas
+        const normalizedPontoId = normalizeNotionId(ponto.id);
+        const normalizedDatabaseId = normalizeNotionId(appData.databaseId);
+
+        const result = await DriveAPI.listDriveFiles(exibidora, normalizedPontoId, tipo, normalizedDatabaseId);
 
         if (result.success && result.files.length > 0) {
             // ✅ CORREÇÃO: Passar container como parâmetro
@@ -1081,7 +1114,12 @@ async function openPhotoModal(pontoId, tipo) {
 
         // ✅ CORREÇÃO: Usar exibidora do ponto
         const exibidora = ponto.exibidora || appData.exibidora;
-        const result = await DriveAPI.listDriveFiles(exibidora, pontoId, tipo, appData.databaseId);
+
+        // 🔧 NORMALIZAR IDS para prevenir duplicação de pastas
+        const normalizedPontoId = normalizeNotionId(pontoId);
+        const normalizedDatabaseId = normalizeNotionId(appData.databaseId);
+
+        const result = await DriveAPI.listDriveFiles(exibidora, normalizedPontoId, tipo, normalizedDatabaseId);
         
         const container = document.getElementById('photos-grid');
         container.innerHTML = '';
@@ -1193,26 +1231,58 @@ function showWelcomeScreen() {
     const container = document.getElementById('pontos-section');
     container.style.display = 'block';
     container.innerHTML = `
-        <div style="text-align: center; padding: 60px 20px;">
-            <h2 style="color: #1E293B; margin-bottom: 20px;">👋 Bem-vindo ao Checking OOH</h2>
-            <p style="color: #64748B; margin-bottom: 30px;">Para acessar o sistema, use um dos links abaixo:</p>
+        <div class="landing-page">
+            <div class="landing-hero">
+                <div class="landing-icon">📱</div>
+                <h1 class="landing-title">CheckingOOH</h1>
+                <p class="landing-subtitle">Sistema Profissional de Monitoramento de Mídia Out of Home</p>
+            </div>
 
-            <div style="max-width: 600px; margin: 0 auto; text-align: left;">
-                <div style="background: #F1F5F9; padding: 20px; border-radius: 12px; margin-bottom: 20px;">
-                    <h3 style="color: #1E293B; margin-bottom: 10px;">📢 Modo Exibidora</h3>
-                    <p style="color: #64748B; font-size: 14px;">Acesse com o ID do ponto do Notion:</p>
-                    <code style="background: white; padding: 8px 12px; border-radius: 6px; display: block; margin-top: 10px;">
-                        ?id=SEU_PONTO_ID
-                    </code>
+            <div class="landing-features">
+                <div class="feature-card">
+                    <div class="feature-icon">📸</div>
+                    <h3>Verificação em Tempo Real</h3>
+                    <p>Acompanhe e registre suas campanhas com fotos e vídeos de alta qualidade</p>
                 </div>
 
-                <div style="background: linear-gradient(135deg, #F1F5F9 0%, #E0E7FF 100%); padding: 20px; border-radius: 12px; border: 2px solid #06055B;">
-                    <h3 style="color: #06055B; margin-bottom: 10px;">📋 Modo Campanha</h3>
-                    <p style="color: #64748B; font-size: 14px;">Visualize todos os pontos de uma campanha:</p>
-                    <code style="background: white; padding: 8px 12px; border-radius: 6px; display: block; margin-top: 10px;">
-                        ?campanha=DATABASE_ID
-                    </code>
+                <div class="feature-card">
+                    <div class="feature-icon">☁️</div>
+                    <h3>Armazenamento Seguro</h3>
+                    <p>Todos os arquivos são salvos de forma segura e acessível a qualquer momento</p>
                 </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">📊</div>
+                    <h3>Relatórios Completos</h3>
+                    <p>Gere relatórios PDF profissionais com todas as informações de suas campanhas</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🔒</div>
+                    <h3>Acesso Controlado</h3>
+                    <p>Diferentes níveis de acesso para exibidoras e clientes</p>
+                </div>
+            </div>
+
+            <div class="landing-cta">
+                <div class="cta-content">
+                    <h2>Pronto para começar?</h2>
+                    <p>Acesse através do link personalizado enviado por email</p>
+                    <div class="cta-info">
+                        <div class="info-badge">
+                            <span class="badge-icon">📧</span>
+                            <span>Link de acesso exclusivo por email</span>
+                        </div>
+                        <div class="info-badge">
+                            <span class="badge-icon">🔐</span>
+                            <span>Acesso seguro e personalizado</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="landing-footer">
+                <p>Desenvolvido por <strong>E-MÍDIAS</strong> • Tecnologia e Inovação em Mídia OOH</p>
             </div>
         </div>
     `;
@@ -1550,8 +1620,12 @@ async function downloadAllFiles(pontoId, tipo) {
         const ponto = appData.pontos.find(p => p.id === pontoId);
         const exibidora = ponto?.exibidora || appData.exibidora;
 
+        // 🔧 NORMALIZAR IDS para prevenir duplicação de pastas
+        const normalizedPontoId = normalizeNotionId(pontoId);
+        const normalizedDatabaseId = normalizeNotionId(appData.databaseId);
+
         // Buscar arquivos
-        const result = await DriveAPI.listDriveFiles(exibidora, pontoId, tipo, appData.databaseId);
+        const result = await DriveAPI.listDriveFiles(exibidora, normalizedPontoId, tipo, normalizedDatabaseId);
 
         if (!result.success || result.files.length === 0) {
             alert('Nenhum arquivo para baixar');
@@ -1730,11 +1804,10 @@ async function generateCampanhaPDF() {
                     expandidos++;
 
                     // ✅ V10.4: CARREGAR fotos de cada ponto expandido
+                    // ✅ CORREÇÃO: Carregar SEQUENCIALMENTE para evitar duplicação de pastas
                     if (content.dataset.loaded === 'false') {
-                        await Promise.all([
-                            loadPontoMediaIfNeeded(ponto, 'entrada', true),
-                            loadPontoMediaIfNeeded(ponto, 'saida', true)
-                        ]);
+                        await loadPontoMediaIfNeeded(ponto, 'entrada', true);
+                        await loadPontoMediaIfNeeded(ponto, 'saida', true);
                     }
 
                     await sleep(200); // Delay para renderização
@@ -1863,11 +1936,14 @@ async function generatePDFReport() {
         const pontosData = await Promise.all(
             appData.pontos.map(async (ponto) => {
                 try {
-                    // Buscar entrada e saída em PARALELO
-                    const [entradaData, saidaData] = await Promise.all([
-                        DriveAPI.listDriveFiles(ponto.exibidora, ponto.id, 'entrada', appData.databaseId),
-                        DriveAPI.listDriveFiles(ponto.exibidora, ponto.id, 'saida', appData.databaseId)
-                    ]);
+                    // 🔧 NORMALIZAR IDS para prevenir duplicação de pastas
+                    const normalizedPontoId = normalizeNotionId(ponto.id);
+                    const normalizedDatabaseId = normalizeNotionId(appData.databaseId);
+
+                    // ✅ CORREÇÃO: Buscar SEQUENCIALMENTE para evitar duplicação de pastas
+                    // Primeira chamada cria a estrutura, segunda usa as pastas existentes
+                    const entradaData = await DriveAPI.listDriveFiles(ponto.exibidora, normalizedPontoId, 'entrada', normalizedDatabaseId);
+                    const saidaData = await DriveAPI.listDriveFiles(ponto.exibidora, normalizedPontoId, 'saida', normalizedDatabaseId);
 
                     const entradaFiles = (entradaData.files || []).slice(0, 4); // Máx 4 fotos
                     const saidaFiles = (saidaData.files || []).slice(0, 4); // Máx 4 fotos
