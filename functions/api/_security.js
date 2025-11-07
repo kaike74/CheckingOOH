@@ -86,8 +86,10 @@ export function validateAndSanitize(param, type = 'string', maxLength = 255) {
             break;
 
         case 'foldername':
-            // Nomes de pasta: apenas alfanuméricos, espaços, hífens e underscores
-            if (!/^[a-zA-Z0-9\s_-]+$/.test(sanitized)) {
+            // Nomes de pasta: alfanuméricos (incluindo acentos), espaços, hífens e underscores
+            // \p{L} = qualquer letra Unicode (incluindo acentuação)
+            // \p{N} = qualquer número Unicode
+            if (!/^[\p{L}\p{N}\s_-]+$/u.test(sanitized)) {
                 throw new Error('Nome contém caracteres inválidos');
             }
             // Prevenir path traversal
