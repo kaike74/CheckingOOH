@@ -2,7 +2,11 @@
 // 📂 CLOUDFLARE PAGES FUNCTION - GOOGLE DRIVE LIST (SEGURO)
 // =============================================================================
 
-import { ensureFolderHierarchy, validateHierarchyParams } from './drive-hierarchy.js';
+import {
+    ensureFolderHierarchy,
+    validateHierarchyParams,
+    buildDriveHierarchyOptions
+} from './drive-hierarchy.js';
 import {
     getSecureCorsHeaders,
     validateAndSanitize,
@@ -78,12 +82,13 @@ export async function onRequest(context) {
 
         // Listar arquivos
         const listResult = await listFilesFromGoogleDrive(
-            exibidora, 
-            pontoId, 
+            exibidora,
+            pontoId,
             tipo,
             databaseId,
             accessToken,
-            context.env.GOOGLE_DRIVE_FOLDER_ID || 'root'
+            context.env.GOOGLE_DRIVE_FOLDER_ID || 'root',
+            context.env
         );
 
         return new Response(JSON.stringify(listResult), {
@@ -308,12 +313,20 @@ async function listFilesInFolderWithDriveFallback(folderId, sharedDriveId, acces
 // =============================================================================
 // 📂 LISTAR ARQUIVOS DO GOOGLE DRIVE
 // =============================================================================
-async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, accessToken, rootFolderId) {
+async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, accessToken, rootFolderId, env) {
     try {
         console.log('📂 Listando arquivos...', { exibidora, pontoId, tipo, databaseId });
 
         // ✅ CORREÇÃO: Passar pontoId para buscar na nova estrutura
-        const folderPath = await findOrCreateFolderPath(exibidora, tipo, databaseId, pontoId, accessToken, rootFolderId);
+        const folderPath = await findOrCreateFolderPath(
+            exibidora,
+            tipo,
+            databaseId,
+            pontoId,
+            accessToken,
+            rootFolderId,
+            env
+        );
         
         if (!folderPath) {
             console.error('❌ Não foi possível criar/encontrar a estrutura de pastas');
@@ -443,7 +456,7 @@ async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, ac
 // ✅ V10: HIERARQUIA CORRETA CheckingOOH/Exibidora/Campanha/Ponto/Tipo
 // ✅ REFATORADO: Agora usa o módulo compartilhado drive-hierarchy.js
 // =============================================================================
-async function findOrCreateFolderPath(exibidora, tipo, databaseId, pontoId, accessToken, rootFolderId) {
+async function findOrCreateFolderPath(exibidora, tipo, databaseId, pontoId, accessToken, rootFolderId, env) {
     try {
         console.log('📁 [REFATORADO] Usando módulo compartilhado de hierarquia...');
         console.log('📋 Parâmetros:', { exibidora, tipo, databaseId, pontoId });
@@ -461,7 +474,8 @@ async function findOrCreateFolderPath(exibidora, tipo, databaseId, pontoId, acce
             databaseId,
             pontoId,
             tipo,
-            accessToken
+            accessToken,
+            buildDriveHierarchyOptions(env)
         );
 
         console.log('🎉 Estrutura garantida via módulo compartilhado');

@@ -2,7 +2,11 @@
 // 🔧 CLOUDFLARE WORKER: UPLOAD PARA GOOGLE DRIVE - SEGURO
 // =============================================================================
 
-import { ensureFolderHierarchy, validateHierarchyParams } from './drive-hierarchy.js';
+import {
+    ensureFolderHierarchy,
+    validateHierarchyParams,
+    buildDriveHierarchyOptions
+} from './drive-hierarchy.js';
 import {
     getSecureCorsHeaders,
     validateUploadRequest,
@@ -157,7 +161,8 @@ export async function onRequestPost(context) {
                 databaseId,
                 pontoId,
                 accessToken,
-                requestId
+                requestId,
+                env
             );
         } catch (folderErr) {
             return driveUploadJsonError(
@@ -496,9 +501,23 @@ async function makeFileViewable(fileId, accessToken) {
 // =============================================================================
 // ✅ REFATORADO: Agora usa o módulo compartilhado drive-hierarchy.js
 // Isso previne duplicações paralelas e garante consistência
-async function ensureFolderPathInSharedDrive(exibidora, tipo, databaseId, pontoId, accessToken, requestId = '') {
+async function ensureFolderPathInSharedDrive(
+    exibidora,
+    tipo,
+    databaseId,
+    pontoId,
+    accessToken,
+    requestId = '',
+    env = {}
+) {
     try {
-        console.log(`[drive-upload:${requestId}] 📁 hierarquia`, { exibidora, tipo, databaseId, pontoId });
+        console.log(`[drive-upload:${requestId}] 📁 hierarquia`, {
+            exibidora,
+            tipo,
+            databaseId,
+            pontoId,
+            driveOpts: buildDriveHierarchyOptions(env)
+        });
 
         const validation = validateHierarchyParams(exibidora, databaseId, pontoId, tipo);
         if (!validation.valid) {
@@ -510,7 +529,8 @@ async function ensureFolderPathInSharedDrive(exibidora, tipo, databaseId, pontoI
             databaseId,
             pontoId,
             tipo,
-            accessToken
+            accessToken,
+            buildDriveHierarchyOptions(env)
         );
 
         console.log(`[drive-upload:${requestId}] 🎉 hierarquia OK`, { path: result.path, tipoFolderId: result.id });

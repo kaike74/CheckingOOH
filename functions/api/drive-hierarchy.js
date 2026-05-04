@@ -28,9 +28,10 @@ const stats = {
  * @param {string} pontoId - ID do ponto
  * @param {string} tipo - 'entrada' ou 'saida'
  * @param {string} accessToken - Token de acesso do Google Drive
+ * @param {object} [options] - Opcional: { checkingOohFolderId, sharedDriveId } (env Cloudflare)
  * @returns {Promise<{id: string, path: string}>} - ID e caminho da pasta final
  */
-export async function ensureFolderHierarchy(exibidora, databaseId, pontoId, tipo, accessToken) {
+export async function ensureFolderHierarchy(exibidora, databaseId, pontoId, tipo, accessToken, options = {}) {
     try {
         console.log('🏗️ === INICIANDO CRIAÇÃO DE HIERARQUIA ===');
 
@@ -45,12 +46,21 @@ export async function ensureFolderHierarchy(exibidora, databaseId, pontoId, tipo
             tipo
         });
 
-        // PASSO 1: Encontrar pasta CheckingOOH (várias podem existir — escolher a que já contém a exibidora)
-        console.log('🔍 [1/5] Buscando pasta raiz: CheckingOOH...');
-        const checkingFolder = await resolveCheckingOOHRootFolder(accessToken, exibidora);
+        // PASSO 1: Encontrar pasta CheckingOOH
+        console.log('🔍 [1/5] Buscando pasta raiz: CheckingOOH...', {
+            temFolderId: Boolean(options.checkingOohFolderId),
+            temSharedDriveId: Boolean(options.sharedDriveId)
+        });
+        const checkingFolder = await resolveCheckingOOHRootFolder(accessToken, exibidora, options);
 
         if (!checkingFolder) {
-            throw new Error('❌ Pasta CheckingOOH não encontrada. Verifique a configuração do Drive.');
+            throw new Error(
+                '❌ Pasta CheckingOOH não encontrada pela API. ' +
+                    'Em Shared Drives, só partilhar a pasta com o e-mail da service account muitas vezes NÃO basta: ' +
+                    'adicione a conta de serviço como membro do Drive partilhado "REDE COMPARTILHADA E-RÁDIOS" (ou equivalente), ' +
+                    'OU defina no Cloudflare a variável GOOGLE_DRIVE_CHECKINGOOH_FOLDER_ID com o ID da pasta CheckingOOH (trecho da URL após /folders/), ' +
+                    'OU GOOGLE_DRIVE_SHARED_DRIVE_ID com o ID do drive partilhado (URL …/drive/folders/DRIVE_ID na raiz do drive).'
+            );
         }
 
         console.log('✅ Pasta CheckingOOH encontrada:', checkingFolder.id, checkingFolder.driveId || 'My Drive');
@@ -244,18 +254,38 @@ async function findOrCreateFolderInternal(folderName, parentId, accessToken, dri
 }
 
 // =============================================================================
-// 🌐 RESOLVER RAIZ CheckingOOH (várias pastas com o mesmo nome)
+// 🌐 METADATA + BUSCA CheckingOOH (Shared Drive / env / desambiguação)
 // =============================================================================
-/**
- * Se existir mais de uma pasta "CheckingOOH", usa a que já tem subpasta com o
- * nome da exibidora (ex.: Visuarte). Evita apontar para outro drive/projeto antigo.
- */
-async function resolveCheckingOOHRootFolder(accessToken, exibidoraName) {
+
+async function getDriveFileMetadata(fileId, accessToken) {
+    const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=id,name,mimeType,driveId&supportsAllDrives=true`;
+    const r = await fetch(url, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    if (!r.ok) {
+        const t = await r.text();
+        console.error('❌ files.get', String(fileId).slice(0, 16), r.status, t.slice(0, 500));
+        return null;
+    }
+    return r.json();
+}
+
+/** Lista pastas com nome exato CheckingOOH; opcionalmente só dentro de um Shared Drive. */
+async function fetchCheckingOOHCandidates(accessToken, sharedDriveId = null) {
     const escapedRoot = 'CheckingOOH'.replace(/'/g, "\\'");
     const query = `name='${escapedRoot}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
-    const searchUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&fields=files(id,name,driveId)&pageSize=100`;
+    let url =
+        'https://www.googleapis.com/drive/v3/files' +
+        `?q=${encodeURIComponent(query)}` +
+        '&supportsAllDrives=true&includeItemsFromAllDrives=true' +
+        '&fields=files(id,name,driveId)&pageSize=100';
+    if (sharedDriveId) {
+        url += `&corpora=drive&driveId=${encodeURIComponent(sharedDriveId)}`;
+    } else {
+        url += '&corpora=allDrives';
+    }
 
-    const response = await fetch(searchUrl, {
+    const response = await fetch(url, {
         headers: {
             Authorization: `Bearer ${accessToken}`,
             'Content-Type': 'application/json'
@@ -263,14 +293,25 @@ async function resolveCheckingOOHRootFolder(accessToken, exibidoraName) {
     });
 
     if (!response.ok) {
-        console.error('❌ Falha ao listar candidatos CheckingOOH:', response.status);
-        return null;
+        const t = await response.text();
+        console.error(
+            '❌ fetchCheckingOOHCandidates',
+            sharedDriveId ? `driveId=${sharedDriveId}` : 'allDrives',
+            response.status,
+            t.slice(0, 500)
+        );
+        return [];
     }
 
     const result = await response.json();
-    const candidates = result.files || [];
+    return result.files || [];
+}
 
-    if (candidates.length === 0) {
+/**
+ * Vários "CheckingOOH": preferir o que já contém a subpasta da exibidora.
+ */
+async function pickCheckingOOHFromCandidates(candidates, exibidoraName, accessToken) {
+    if (!candidates.length) {
         return null;
     }
 
@@ -280,7 +321,7 @@ async function resolveCheckingOOHRootFolder(accessToken, exibidoraName) {
     }
 
     console.warn(
-        `⚠️ ${candidates.length} pastas "CheckingOOH" — a escolher a que já contém a exibidora "${exibidoraName}" (ids: ${candidates.map((c) => c.id).join(', ')})`
+        `⚠️ ${candidates.length} pastas "CheckingOOH" — desambiguação pela exibidora "${exibidoraName}" (ids: ${candidates.map((c) => c.id).join(', ')})`
     );
 
     const escapedEx = String(exibidoraName || '').replace(/'/g, "\\'");
@@ -304,14 +345,48 @@ async function resolveCheckingOOHRootFolder(accessToken, exibidoraName) {
     const onSharedDrive = candidates.filter((f) => f.driveId);
     if (onSharedDrive.length === 1) {
         console.warn(
-            '⚠️ Exibidora ainda não existe em nenhum CheckingOOH — usando o único CheckingOOH em Shared Drive.'
+            '⚠️ Exibidora ainda não existe — usando o único CheckingOOH com driveId em Shared Drive.'
         );
         return onSharedDrive[0];
     }
 
     const shared = candidates.find((f) => f.driveId);
-    console.warn('⚠️ Nenhum CheckingOOH continha a exibidora — fallback Shared Drive / primeiro.');
+    console.warn('⚠️ Fallback: primeiro CheckingOOH com driveId ou primeiro da lista.');
     return shared || candidates[0];
+}
+
+/**
+ * options.checkingOohFolderId — ID da pasta CheckingOOH (evita pesquisa; resolve permissões só-partilha).
+ * options.sharedDriveId — pesquisa nome só neste Shared Drive (membro com list pode ver).
+ */
+async function resolveCheckingOOHRootFolder(accessToken, exibidoraName, options = {}) {
+    const explicit = String(options.checkingOohFolderId || '').trim();
+    if (explicit) {
+        const meta = await getDriveFileMetadata(explicit, accessToken);
+        if (!meta) {
+            throw new Error(
+                'GOOGLE_DRIVE_CHECKINGOOH_FOLDER_ID: files.get falhou (403/404). Confirme o ID na URL do Drive e que a service account tem acesso.'
+            );
+        }
+        if (meta.mimeType !== 'application/vnd.google-apps.folder') {
+            throw new Error(
+                `GOOGLE_DRIVE_CHECKINGOOH_FOLDER_ID não é uma pasta (mime=${meta.mimeType}).`
+            );
+        }
+        console.log('✅ CheckingOOH por ID fixo (env):', meta.id, meta.name);
+        return { id: meta.id, name: meta.name || 'CheckingOOH', driveId: meta.driveId || null };
+    }
+
+    let candidates = await fetchCheckingOOHCandidates(accessToken, null);
+    console.log('🔍 CheckingOOH candidatos (corpora=allDrives):', candidates.length);
+
+    const sd = String(options.sharedDriveId || '').trim();
+    if (candidates.length === 0 && sd) {
+        candidates = await fetchCheckingOOHCandidates(accessToken, sd);
+        console.log('🔍 CheckingOOH candidatos (corpora=drive driveId=):', candidates.length, sd);
+    }
+
+    return pickCheckingOOHFromCandidates(candidates, exibidoraName, accessToken);
 }
 
 // =============================================================================
@@ -451,6 +526,23 @@ function normalizeNotionId(id) {
     }
 
     return id;
+}
+
+/**
+ * Opções de hierarquia a partir das variáveis Cloudflare / .dev.vars
+ * - GOOGLE_DRIVE_CHECKINGOOH_FOLDER_ID ou CHECKINGOOH_ROOT_FOLDER_ID: ID da pasta CheckingOOH
+ * - GOOGLE_DRIVE_SHARED_DRIVE_ID: ID do Drive partilhado (pesquisa CheckingOOH só lá)
+ */
+export function buildDriveHierarchyOptions(env) {
+    if (!env || typeof env !== 'object') {
+        return {};
+    }
+    const cid = String(env.GOOGLE_DRIVE_CHECKINGOOH_FOLDER_ID || env.CHECKINGOOH_ROOT_FOLDER_ID || '').trim();
+    const sid = String(env.GOOGLE_DRIVE_SHARED_DRIVE_ID || '').trim();
+    return {
+        ...(cid ? { checkingOohFolderId: cid } : {}),
+        ...(sid ? { sharedDriveId: sid } : {})
+    };
 }
 
 console.log('✅ Módulo Drive Hierarchy Manager carregado');
