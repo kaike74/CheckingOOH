@@ -252,6 +252,65 @@ function pemToBinary(pem) {
 }
 
 // =============================================================================
+// 📂 LISTAR ARQUIVOS NA PASTA (SHARED DRIVE + FALLBACK)
+// =============================================================================
+// Em Shared Drives, `corpora=allDrives` + `in parents` pode falhar (400/403).
+// Tentamos primeiro `corpora=drive` + `driveId` quando conhecemos o drive.
+// =============================================================================
+async function listFilesInFolderWithDriveFallback(folderId, sharedDriveId, accessToken) {
+    const query =
+        `'${folderId}' in parents and trashed=false and mimeType!='application/vnd.google-apps.folder'`;
+    const fields =
+        'files(id,name,mimeType,size,createdTime,modifiedTime,webViewLink,webContentLink,thumbnailLink)';
+
+    const buildUrl = (corpora, driveId) => {
+        const params = new URLSearchParams({
+            q: query,
+            supportsAllDrives: 'true',
+            includeItemsFromAllDrives: 'true',
+            corpora,
+            fields
+        });
+        if (driveId) {
+            params.set('driveId', driveId);
+        }
+        return `https://www.googleapis.com/drive/v3/files?${params.toString()}`;
+    };
+
+    const attempts = [];
+    if (sharedDriveId) {
+        attempts.push(() => buildUrl('drive', sharedDriveId));
+    }
+    attempts.push(() => buildUrl('allDrives', ''));
+    attempts.push(() => {
+        const params = new URLSearchParams({
+            q: query,
+            supportsAllDrives: 'true',
+            includeItemsFromAllDrives: 'true',
+            fields
+        });
+        return `https://www.googleapis.com/drive/v3/files?${params.toString()}`;
+    });
+
+    let lastStatus = 0;
+    let lastBody = '';
+    for (const getUrl of attempts) {
+        const url = getUrl();
+        const response = await fetch(url, {
+            headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        if (response.ok) {
+            return response.json();
+        }
+        lastStatus = response.status;
+        lastBody = await response.text();
+        console.warn(`⚠️ list files tentativa falhou (${lastStatus}):`, lastBody.slice(0, 500));
+    }
+
+    throw new Error(`Erro ao listar arquivos: ${lastStatus} - ${lastBody}`);
+}
+
+// =============================================================================
 // 📂 LISTAR ARQUIVOS DO GOOGLE DRIVE
 // =============================================================================
 async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, accessToken, rootFolderId) {
@@ -274,26 +333,13 @@ async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, ac
         console.log('✅ Estrutura de pastas pronta:', folderPath.path);
 
         // Listar arquivos na pasta
-        console.log('📋 Buscando arquivos na pasta:', folderPath.id);
-        
-        // ✅ CORREÇÃO 7: Query menos restritiva para listar TODOS os arquivos da pasta
-        const query = `'${folderPath.id}' in parents and trashed=false and mimeType!='application/vnd.google-apps.folder'`;
-        
-        const response = await fetch(
-            `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&fields=files(id,name,mimeType,size,createdTime,modifiedTime,webViewLink,webContentLink,thumbnailLink)`,
-            {
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`
-                }
-            }
+        console.log('📋 Buscando arquivos na pasta:', folderPath.id, 'driveId:', folderPath.driveId || '(My Drive)');
+
+        const listResult = await listFilesInFolderWithDriveFallback(
+            folderPath.id,
+            folderPath.driveId || null,
+            accessToken
         );
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Erro ao listar arquivos: ${response.status} - ${errorText}`);
-        }
-
-        const listResult = await response.json();
         const allFiles = listResult.files || [];
 
         console.log(`📋 Encontrados ${allFiles.length} arquivos na pasta`);
@@ -302,9 +348,11 @@ async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, ac
         // 1. Arquivos do sistema com pontoId no nome (tipo_pontoId_timestamp.ext)
         // 2. Arquivos manuais que contenham o pontoId em qualquer parte do nome
         // 3. ✅ NOVO: Filtrar arquivos excluídos (soft delete com sufixo _EXCLUIDO_)
+        const pontoIdLower = pontoId.toLowerCase();
+        const pontoIdCompact = pontoIdLower.replace(/-/g, '');
+
         const filteredFiles = allFiles.filter(file => {
-            const fileName = file.name.toLowerCase();
-            const pontoIdLower = pontoId.toLowerCase();
+            const fileName = (file.name || '').toLowerCase();
 
             // ✅ SOFT DELETE: Ignorar arquivos com _EXCLUIDO_ no nome
             if (fileName.includes('_excluido_')) {
@@ -312,12 +360,8 @@ async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, ac
                 return false;
             }
 
-            // Aceitar se o nome contém o pontoId
-            // Exemplos que passam:
-            // - entrada_29520b549cf58127b54be74ba75b1561_2025-10-23.jpg (sistema)
-            // - foto_29520b549cf58127b54be74ba75b1561.jpg (manual)
-            // - 29520b549cf58127b54be74ba75b1561.jpg (manual simples)
-            return fileName.includes(pontoIdLower);
+            // Nomes no Drive costumam usar o ID sem hífens (ex.: entrada_35220b549cf58149…)
+            return fileName.includes(pontoIdLower) || fileName.includes(pontoIdCompact);
         });
 
         console.log(`📋 Arquivos filtrados para ponto ${pontoId}: ${filteredFiles.length} de ${allFiles.length}`);
