@@ -102,11 +102,25 @@ export async function ensureFolderHierarchy(exibidora, databaseId, pontoId, tipo
         console.log('🎉 Hierarquia completa garantida:', fullPath);
         console.log('📊 Estatísticas:', stats);
 
+        // Para files.list em Shared Drives, corpora=drive exige driveId; a pasta raiz
+        // "CheckingOOH" às vezes vem sem driveId na busca, mas as pastas filhas sim.
+        const sharedDriveIdForList =
+            tipoFolder.driveId ||
+            pontoFolder.driveId ||
+            campanhaFolder.driveId ||
+            exibidoraFolder.driveId ||
+            checkingFolder.driveId ||
+            null;
+        if (sharedDriveIdForList) {
+            console.log('📌 sharedDriveIdForList (listagem):', sharedDriveIdForList);
+        }
+
         return {
             id: tipoFolder.id,
             path: fullPath,
             normalizedDatabaseId: normalizedDatabaseId, // ✅ Retornar IDs normalizados
             normalizedPontoId: normalizedPontoId, // ✅ Retornar IDs normalizados
+            sharedDriveIdForList,
             folders: {
                 checking: checkingFolder,
                 exibidora: exibidoraFolder,
@@ -172,7 +186,7 @@ async function findOrCreateFolderInternal(folderName, parentId, accessToken, dri
         const escapedFolderName = folderName.replace(/'/g, "\\'");
         const query = `name='${escapedFolderName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
 
-        const searchUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&supportsAllDrives=true&includeItemsFromAllDrives=true&fields=files(id,name)`;
+        const searchUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&supportsAllDrives=true&includeItemsFromAllDrives=true&fields=files(id,name,driveId)`;
 
         const searchResponse = await fetch(searchUrl, {
             headers: {

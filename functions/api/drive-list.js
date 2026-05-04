@@ -258,23 +258,26 @@ function pemToBinary(pem) {
 // Tentamos primeiro `corpora=drive` + `driveId` quando conhecemos o drive.
 // =============================================================================
 async function listFilesInFolderWithDriveFallback(folderId, sharedDriveId, accessToken) {
-    const query =
-        `'${folderId}' in parents and trashed=false and mimeType!='application/vnd.google-apps.folder'`;
+    // Query mínima: a API do Drive é sensível a operadores/colagens em mimeType no `q`.
+    // Pastas são filtradas em JS após a resposta.
+    const q = `'${folderId}' in parents and trashed=false`;
     const fields =
         'files(id,name,mimeType,size,createdTime,modifiedTime,webViewLink,webContentLink,thumbnailLink)';
 
     const buildUrl = (corpora, driveId) => {
-        const params = new URLSearchParams({
-            q: query,
-            supportsAllDrives: 'true',
-            includeItemsFromAllDrives: 'true',
-            corpora,
-            fields
-        });
-        if (driveId) {
-            params.set('driveId', driveId);
+        let url =
+            'https://www.googleapis.com/drive/v3/files' +
+            `?q=${encodeURIComponent(q)}` +
+            '&supportsAllDrives=true' +
+            '&includeItemsFromAllDrives=true' +
+            `&fields=${encodeURIComponent(fields)}`;
+        if (corpora) {
+            url += `&corpora=${encodeURIComponent(corpora)}`;
         }
-        return `https://www.googleapis.com/drive/v3/files?${params.toString()}`;
+        if (driveId) {
+            url += `&driveId=${encodeURIComponent(driveId)}`;
+        }
+        return url;
     };
 
     const attempts = [];
@@ -282,15 +285,7 @@ async function listFilesInFolderWithDriveFallback(folderId, sharedDriveId, acces
         attempts.push(() => buildUrl('drive', sharedDriveId));
     }
     attempts.push(() => buildUrl('allDrives', ''));
-    attempts.push(() => {
-        const params = new URLSearchParams({
-            q: query,
-            supportsAllDrives: 'true',
-            includeItemsFromAllDrives: 'true',
-            fields
-        });
-        return `https://www.googleapis.com/drive/v3/files?${params.toString()}`;
-    });
+    attempts.push(() => buildUrl('', ''));
 
     let lastStatus = 0;
     let lastBody = '';
@@ -340,9 +335,11 @@ async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, ac
             folderPath.driveId || null,
             accessToken
         );
-        const allFiles = listResult.files || [];
+        const allFiles = (listResult.files || []).filter(
+            (f) => f.mimeType !== 'application/vnd.google-apps.folder'
+        );
 
-        console.log(`📋 Encontrados ${allFiles.length} arquivos na pasta`);
+        console.log(`📋 Encontrados ${allFiles.length} arquivos na pasta (pastas excluídas)`);
 
         // ✅ CORREÇÃO CRÍTICA: Filtro inteligente que aceita:
         // 1. Arquivos do sistema com pontoId no nome (tipo_pontoId_timestamp.ext)
@@ -448,7 +445,7 @@ async function findOrCreateFolderPath(exibidora, tipo, databaseId, pontoId, acce
         return {
             id: result.id,
             path: result.path,
-            driveId: result.folders.checking.driveId
+            driveId: result.sharedDriveIdForList || result.folders.checking.driveId || null
         };
 
     } catch (error) {

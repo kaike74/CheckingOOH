@@ -82,7 +82,8 @@ async function listDriveFiles(exibidora, pontoId, tipo, databaseId) { // ✅ NOV
         
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({ error: 'Erro desconhecido' }));
-            throw new Error(errorData.error || `Erro HTTP ${response.status}`);
+            const parts = [errorData.error, errorData.details].filter(Boolean);
+            throw new Error(parts.length ? parts.join(' — ') : `Erro HTTP ${response.status}`);
         }
         
         const result = await response.json();
