@@ -327,19 +327,43 @@ async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, ac
 
         console.log('✅ Estrutura de pastas pronta:', folderPath.path);
 
-        // Listar arquivos na pasta
-        console.log('📋 Buscando arquivos na pasta:', folderPath.id, 'driveId:', folderPath.driveId || '(My Drive)');
+        const legacyFolderIds = await resolveLegacyTipoFolderIds(folderPath, tipo, accessToken);
+        const folderIdsToScan = [folderPath.id, ...legacyFolderIds];
+        if (legacyFolderIds.length) {
+            console.log('📂 Merge com pastas legadas (uploads antigos):', legacyFolderIds.join(', '));
+        }
 
-        const listResult = await listFilesInFolderWithDriveFallback(
-            folderPath.id,
-            folderPath.driveId || null,
-            accessToken
-        );
-        const allFiles = (listResult.files || []).filter(
+        const seenFileIds = new Set();
+        const allFilesRaw = [];
+        for (const fid of folderIdsToScan) {
+            try {
+                const listResult = await listFilesInFolderWithDriveFallback(
+                    fid,
+                    folderPath.driveId || null,
+                    accessToken
+                );
+                for (const f of listResult.files || []) {
+                    if (seenFileIds.has(f.id)) {
+                        continue;
+                    }
+                    seenFileIds.add(f.id);
+                    allFilesRaw.push(f);
+                }
+            } catch (e) {
+                if (fid === folderPath.id) {
+                    throw e;
+                }
+                console.warn(`⚠️ Listagem legada ignorada (${fid}):`, e.message);
+            }
+        }
+
+        const allFiles = allFilesRaw.filter(
             (f) => f.mimeType !== 'application/vnd.google-apps.folder'
         );
 
-        console.log(`📋 Encontrados ${allFiles.length} arquivos na pasta (pastas excluídas)`);
+        console.log(
+            `📋 Encontrados ${allFiles.length} arquivos em ${folderIdsToScan.length} pasta(s) (pastas excluídas)`
+        );
 
         // ✅ CORREÇÃO CRÍTICA: Filtro inteligente que aceita:
         // 1. Arquivos do sistema com pontoId no nome (tipo_pontoId_timestamp.ext)
@@ -445,13 +469,60 @@ async function findOrCreateFolderPath(exibidora, tipo, databaseId, pontoId, acce
         return {
             id: result.id,
             path: result.path,
-            driveId: result.sharedDriveIdForList || result.folders.checking.driveId || null
+            driveId: result.sharedDriveIdForList || result.folders.checking.driveId || null,
+            campanhaFolderId: result.folders.campanha.id,
+            exibidoraFolderId: result.folders.exibidora.id
         };
 
     } catch (error) {
         console.error('❌ Erro ao encontrar/criar estrutura de pastas:', error);
         return null;
     }
+}
+
+// =============================================================================
+// 📂 PASTAS LEGADAS (uploads antes da pasta por ponto)
+// =============================================================================
+// Estrutura antiga: CheckingOOH / Exibidora / [Campanha]/ Entrada|Saida
+// Estrutura nova:  ... / Campanha / Ponto / Entrada|Saida
+// =============================================================================
+async function findDirectChildFolder(parentId, folderName, accessToken) {
+    const esc = folderName.replace(/'/g, "\\'");
+    const q = `name='${esc}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+    const url =
+        'https://www.googleapis.com/drive/v3/files' +
+        `?q=${encodeURIComponent(q)}` +
+        '&supportsAllDrives=true&includeItemsFromAllDrives=true' +
+        '&corpora=allDrives&fields=files(id,name)';
+    const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    if (!res.ok) {
+        return null;
+    }
+    const data = await res.json();
+    return data.files?.[0] || null;
+}
+
+/** Pastas adicionais onde ficheiros antigos podem estar (não cria pastas). */
+async function resolveLegacyTipoFolderIds(folderPath, tipo, accessToken) {
+    const tipoFolderName = tipo === 'entrada' ? 'Entrada' : 'Saida';
+    const ids = [];
+    const campanhaId = folderPath.campanhaFolderId;
+    const exibidoraId = folderPath.exibidoraFolderId;
+    if (campanhaId) {
+        const underCampanha = await findDirectChildFolder(campanhaId, tipoFolderName, accessToken);
+        if (underCampanha?.id && underCampanha.id !== folderPath.id) {
+            ids.push(underCampanha.id);
+        }
+    }
+    if (exibidoraId) {
+        const underExib = await findDirectChildFolder(exibidoraId, tipoFolderName, accessToken);
+        if (underExib?.id && underExib.id !== folderPath.id && !ids.includes(underExib.id)) {
+            ids.push(underExib.id);
+        }
+    }
+    return ids;
 }
 
 // =============================================================================
