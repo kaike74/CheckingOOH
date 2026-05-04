@@ -9,7 +9,5 @@ PROJECT_VERSION = "v3.1-estrutura-corrigida"
 NODE_ENV = "development"
 PROJECT_VERSION = "v3.1-estrutura-corrigida"
 
-# Opcional (Cloudflare Pages → Environment variables):
-# GOOGLE_DRIVE_CHECKINGOOH_FOLDER_ID — ID da pasta "CheckingOOH" (URL …/folders/ESTE_ID)
-# GOOGLE_DRIVE_SHARED_DRIVE_ID — ID do Drive partilhado (sem ID da pasta: procura CheckingOOH primeiro aqui; senão allDrives)
-# CHECKINGOOH_ROOT_FOLDER_ID — alias do ID da pasta raiz CheckingOOH
+# Variáveis reais vão no dashboard Pages (Production + Preview). Ver README.md.
+# GOOGLE_DRIVE_CHECKINGOOH_FOLDER_ID, GOOGLE_DRIVE_SHARED_DRIVE_ID, CHECKINGOOH_ROOT_FOLDER_ID, etc.

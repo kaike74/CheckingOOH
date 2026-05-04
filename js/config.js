@@ -3,12 +3,7 @@
 // =============================================================================
 
 /**
- * 🔧 VARIÁVEIS DE CONFIGURAÇÃO
- * 
- * IMPORTANTE: Configure as variáveis de ambiente no Cloudflare Pages:
- * - NOTION_TOKEN
- * - GOOGLE_SERVICE_ACCOUNT_KEY (recomendado) ou GOOGLE_DRIVE_API_KEY
- * - GOOGLE_DRIVE_FOLDER_ID (opcional, padrão é 'root')
+ * Configuração do front. Segredos (Notion, Google) ficam só no Cloudflare — ver README.md.
  */
 
 const CONFIG = {
@@ -191,8 +186,9 @@ const Logger = {
     },
 
     warning: (message, data = null) => {
-        // Warnings sempre aparecem, mesmo em produção
-        console.warn(`⚠️ [CheckingOOH] ${message}`, data || '');
+        if (!CONFIG.PRODUCTION_MODE) {
+            console.warn(`⚠️ [CheckingOOH] ${message}`, data || '');
+        }
     },
 
     error: (message, error = null) => {

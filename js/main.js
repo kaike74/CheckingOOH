@@ -440,11 +440,11 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false, containerPar
     // ✅ CORREÇÃO: Aceitar container como parâmetro ou buscar por ID
     const container = containerParam || document.getElementById(`preview-${pontoId}-${tipo}`);
     if (!container) {
-        console.error(`❌ Container preview-${pontoId}-${tipo} não encontrado!`);
+        Logger.error(`Container preview-${pontoId}-${tipo} não encontrado`);
         return;
     }
 
-    console.log(`📸 updateMediaPreview: Renderizando ${files.length} arquivos para ponto ${pontoId} (${tipo}) [modo: ${readOnly ? 'CAMPANHA' : 'EXIBIDORA'}]`);
+    Logger.info(`updateMediaPreview: ${files.length} arquivos`, { pontoId, tipo, readOnly });
 
     container.innerHTML = '';
 
@@ -560,7 +560,7 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false, containerPar
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
-                console.log(`📥 Download iniciado: ${file.name}`);
+                Logger.info('Download iniciado', { name: file.name });
             };
 
             mediaItem.appendChild(videoDiv);
@@ -576,24 +576,24 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false, containerPar
             if (file.alternativeUrls && file.alternativeUrls.length > 0) {
                 img.dataset.alternativeUrls = JSON.stringify(file.alternativeUrls);
                 img.dataset.currentUrlIndex = '0';
-                console.log(`🔄 ${file.name}: ${file.alternativeUrls.length} URLs alternativas disponíveis`);
+                Logger.info('URLs alternativas', { name: file.name, n: file.alternativeUrls.length });
             } else {
-                console.warn(`⚠️ ${file.name}: Sem URLs alternativas!`);
+                Logger.warning('Sem URLs alternativas', { name: file.name });
             }
 
             // ✅ NOVO: Handler de erro com fallback automático
             img.onerror = function() {
-                console.warn(`⚠️ Erro ao carregar imagem: ${this.src}`);
+                Logger.warning('Erro ao carregar imagem', { src: this.src?.slice(0, 80) });
                 handleImageError(this);
             };
 
             // ✅ NOVO: Log quando carrega com sucesso
             img.onload = function() {
-                console.log(`✅ Imagem carregada com sucesso: ${this.dataset.fileName} [${this.naturalWidth}x${this.naturalHeight}]`);
+                Logger.info('Imagem carregada', { name: this.dataset.fileName, w: this.naturalWidth, h: this.naturalHeight });
             };
 
             img.src = file.url;
-            console.log(`🖼️ [${readOnly ? 'CLIENTE' : 'EXIBIDORA'}] Carregando imagem ${file.name} de: ${file.url}`);
+            Logger.info('Carregando imagem', { name: file.name, readOnly });
 
             // ✅ V10.7: Adicionar click handler para zoom simples (sem alert)
             img.onclick = (e) => {
@@ -628,7 +628,7 @@ function updateMediaPreview(pontoId, tipo, files, readOnly = false, containerPar
                 if (currentEditMode) {
                     mediaItem.classList.add('editing');
                 }
-                console.log(`🗑️ V10.7.2: Badge criado para ${file.name} - editMode: ${currentEditMode}`);
+                Logger.info('Badge delete', { name: file.name, editMode: currentEditMode });
             }
         }
 
@@ -759,7 +759,7 @@ async function loadPontoMediaIfNeeded(ponto, tipo, readOnly = false) {
     const isLoaded = previewDiv.dataset.loaded === 'true';
 
     if (!isLoaded) {
-        console.log(`📥 Lazy loading: Carregando arquivos ${tipo} para ponto ${ponto.id} [readOnly: ${readOnly}]`);
+        Logger.info('Lazy loading mídia', { tipo, pontoId: ponto.id, readOnly });
 
         // ✅ OTIMIZAÇÃO: Mostrar skeleton loaders durante carregamento
         previewDiv.className = 'media-preview loading';
@@ -1169,16 +1169,16 @@ async function openPhotoModal(pontoId, tipo) {
 
                     // Handler de erro com fallback
                     img.onerror = function() {
-                        console.warn(`⚠️ Erro ao carregar imagem no modal: ${this.src}`);
+                        Logger.warning('Erro imagem no modal', { src: this.src?.slice(0, 80) });
                         handleImageError(this);
                     };
 
                     img.onload = function() {
-                        console.log(`✅ Imagem carregada no modal: ${this.dataset.fileName}`);
+                        Logger.info('Imagem modal OK', { name: this.dataset.fileName });
                     };
 
                     img.src = file.url;
-                    console.log(`🖼️ Modal: Carregando ${file.name} de: ${file.url}`);
+                    Logger.info('Modal: carregando', { name: file.name });
 
                     const dateDiv = document.createElement('div');
                     dateDiv.className = 'photo-date';
@@ -1566,7 +1566,7 @@ function handleImageError(imgElement) {
     const alternativeUrls = imgElement.dataset.alternativeUrls;
 
     if (!alternativeUrls) {
-        console.error(`❌ Sem URLs alternativas para ${imgElement.dataset.fileName}`);
+        Logger.error('Sem URLs alternativas', { name: imgElement.dataset.fileName });
         showImageErrorPlaceholder(imgElement);
         return;
     }
@@ -1578,15 +1578,15 @@ function handleImageError(imgElement) {
         currentIndex++;
 
         if (currentIndex < urls.length) {
-            console.log(`🔄 Tentando URL alternativa ${currentIndex + 1}/${urls.length}: ${urls[currentIndex]}`);
+            Logger.info('URL alternativa', { index: currentIndex + 1, total: urls.length });
             imgElement.dataset.currentUrlIndex = currentIndex.toString();
             imgElement.src = urls[currentIndex];
         } else {
-            console.error(`❌ Todas as URLs falharam para ${imgElement.dataset.fileName}`);
+            Logger.error('Todas URLs falharam', { name: imgElement.dataset.fileName });
             showImageErrorPlaceholder(imgElement);
         }
     } catch (error) {
-        console.error('❌ Erro ao processar URLs alternativas:', error);
+        Logger.error('Erro URLs alternativas', error);
         showImageErrorPlaceholder(imgElement);
     }
 }
@@ -1666,7 +1666,7 @@ async function downloadAllFiles(pontoId, tipo) {
                 a.click();
                 document.body.removeChild(a);
                 downloadCount++;
-                console.log(`📥 Download iniciado ${downloadCount}/${result.files.length}: ${file.name}`);
+                Logger.info('Download ZIP', { n: downloadCount, total: result.files.length, name: file.name });
             }, index * 500); // Delay de 500ms entre downloads
         });
 

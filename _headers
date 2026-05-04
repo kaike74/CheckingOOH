@@ -1,4 +1,6 @@
 /*
+  Cabeçalhos para assets estáticos. As rotas /api/* são respondidas por Pages Functions,
+  que aplicam CORS em functions/api/_security.js (lista de origens + previews *.pages.dev).
   Access-Control-Allow-Origin: *
   Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS
   Access-Control-Allow-Headers: Content-Type, Authorization

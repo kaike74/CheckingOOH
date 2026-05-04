@@ -45,12 +45,6 @@ export async function onRequestPost(context) {
     }
 
     try {
-        console.log(`[drive-upload:${requestId}] POST`, {
-            cfRay: request.headers.get('cf-ray'),
-            contentLength: request.headers.get('content-length'),
-            contentType: (request.headers.get('content-type') || '').slice(0, 100)
-        });
-
         const clientIP = request.headers.get('CF-Connecting-IP') || 'unknown';
         if (!checkRateLimit(clientIP, 50, 60000)) {
             secureLog('warning', 'Rate limit excedido', { ip: clientIP });
@@ -109,16 +103,6 @@ export async function onRequestPost(context) {
 
         const { file, exibidora, pontoId, tipo, databaseId } = validated;
 
-        console.log(`[drive-upload:${requestId}] metadados`, {
-            exibidora,
-            pontoId,
-            tipo,
-            databaseId,
-            fileName: file?.name,
-            fileSize: file?.size,
-            fileType: file?.type
-        });
-
         secureLog('info', 'Upload validado', {
             fileName: file.name,
             fileSize: file.size,
@@ -150,8 +134,6 @@ export async function onRequestPost(context) {
                 requestId
             );
         }
-
-        console.log(`[drive-upload:${requestId}] token OK`, { prefix: accessToken.slice(0, 10) + '…' });
 
         let folderPath;
         try {
@@ -187,8 +169,6 @@ export async function onRequestPost(context) {
             );
         }
 
-        console.log(`[drive-upload:${requestId}] destino`, { folderId: folderPath.id, path: folderPath.path });
-
         const uploadResult = await uploadToGoogleDrive(
             file,
             folderPath.id,
@@ -212,8 +192,6 @@ export async function onRequestPost(context) {
         }
 
         secureLog('success', 'Upload concluído com sucesso');
-        console.log(`[drive-upload:${requestId}] OK`, { fileId: uploadResult.fileId });
-
         return new Response(
             JSON.stringify({
                 success: true,
@@ -258,8 +236,6 @@ function sanitizeParam(param) {
 // =============================================================================
 async function getGoogleAccessToken(serviceAccountKey, requestId = '') {
     try {
-        console.log(`[drive-upload:${requestId}] 🔑 JWT / OAuth…`);
-
         let serviceAccount;
         try {
             serviceAccount = JSON.parse(serviceAccountKey);
@@ -274,12 +250,6 @@ async function getGoogleAccessToken(serviceAccountKey, requestId = '') {
                 'JSON da service account incompleto: faltam client_email ou private_key.'
             );
         }
-
-        const emailDomain = (serviceAccount.client_email || '').split('@')[1] || '';
-        console.log(`[drive-upload:${requestId}] conta serviço`, {
-            client_email_suffix: `…@${emailDomain}`,
-            hasPrivateKey: Boolean(serviceAccount.private_key)
-        });
 
         const now = Math.floor(Date.now() / 1000);
         const payload = {
@@ -317,7 +287,6 @@ async function getGoogleAccessToken(serviceAccountKey, requestId = '') {
             throw new Error(`OAuth2 resposta sem access_token: ${JSON.stringify(tokenData).slice(0, 500)}`);
         }
 
-        console.log(`[drive-upload:${requestId}] ✅ OAuth OK`);
         return tokenData.access_token;
     } catch (error) {
         console.error(`[drive-upload:${requestId}] ❌ token:`, error);
@@ -364,8 +333,6 @@ async function uploadToGoogleDrive(file, folderId, pontoId, tipo, accessToken, r
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         const fileExtension = file.name.split('.').pop();
         const fileName = `${tipo}_${pontoId}_${timestamp}.${fileExtension}`;
-
-        console.log(`[drive-upload:${requestId}] 📤 init`, { folderId, bytes: file.size, mime: file.type });
 
         const metadata = {
             name: fileName,
@@ -431,8 +398,6 @@ async function uploadToGoogleDrive(file, folderId, pontoId, tipo, accessToken, r
 
         const uploadResult = await uploadResponse.json();
 
-        console.log(`[drive-upload:${requestId}] ✅ ficheiro`, uploadResult.id);
-
         try {
             await makeFileViewable(uploadResult.id, accessToken);
         } catch (permError) {
@@ -462,8 +427,6 @@ async function uploadToGoogleDrive(file, folderId, pontoId, tipo, accessToken, r
 // =============================================================================
 async function makeFileViewable(fileId, accessToken) {
     try {
-        console.log(`🔓 Configurando permissões para o arquivo ${fileId}...`);
-
         // Adicionar permissão de leitura para qualquer pessoa com o link
         const permissionResponse = await fetch(
             `https://www.googleapis.com/drive/v3/files/${fileId}/permissions?supportsAllDrives=true`,
@@ -482,16 +445,15 @@ async function makeFileViewable(fileId, accessToken) {
 
         if (!permissionResponse.ok) {
             const errorText = await permissionResponse.text();
-            console.warn(`⚠️ Aviso ao configurar permissões: ${permissionResponse.status} - ${errorText}`);
+            console.warn('makeFileViewable', permissionResponse.status);
             // Não lançar erro, apenas avisar
             return false;
         }
 
-        console.log('✅ Arquivo configurado como público (visualizável por qualquer pessoa com o link)');
         return true;
 
     } catch (error) {
-        console.warn('⚠️ Erro ao configurar permissões:', error.message);
+        console.warn('makeFileViewable', error?.message || error);
         return false;
     }
 }
@@ -511,14 +473,6 @@ async function ensureFolderPathInSharedDrive(
     env = {}
 ) {
     try {
-        console.log(`[drive-upload:${requestId}] 📁 hierarquia`, {
-            exibidora,
-            tipo,
-            databaseId,
-            pontoId,
-            driveOpts: buildDriveHierarchyOptions(env)
-        });
-
         const validation = validateHierarchyParams(exibidora, databaseId, pontoId, tipo);
         if (!validation.valid) {
             throw new Error(`Parâmetros inválidos: ${validation.errors.join(', ')}`);
@@ -533,7 +487,6 @@ async function ensureFolderPathInSharedDrive(
             buildDriveHierarchyOptions(env)
         );
 
-        console.log(`[drive-upload:${requestId}] 🎉 hierarquia OK`, { path: result.path, tipoFolderId: result.id });
         return result;
     } catch (error) {
         console.error(`[drive-upload:${requestId}] ❌ hierarquia:`, error);

@@ -20,6 +20,24 @@ if (isDevelopment) {
     ALLOWED_ORIGINS.push('http://localhost:8788', 'http://127.0.0.1:8788');
 }
 
+/** Origens Cloudflare Pages (produção + preview com hash). */
+const PAGES_PREVIEW_HOST = /^https:\/\/[a-z0-9-]+\.(checkingooh|checking-ooh)\.pages\.dev$/i;
+
+/**
+ * Indica se o browser pode chamar as APIs a partir desta origem.
+ * Inclui subdomínios de preview do Pages (*.checkingooh.pages.dev).
+ */
+export function isOriginAllowed(origin) {
+    if (!origin) return false;
+    const o = origin.replace(/\/$/, '');
+    if (ALLOWED_ORIGINS.some((allowed) => o === allowed || o.startsWith(`${allowed}/`))) {
+        return true;
+    }
+    if (PAGES_PREVIEW_HOST.test(o)) return true;
+    if (isDevelopment && (o.includes('localhost') || o.includes('127.0.0.1'))) return true;
+    return false;
+}
+
 /**
  * 🛡️ OBTER HEADERS CORS SEGUROS
  * Valida origem e retorna headers apropriados
@@ -27,9 +45,7 @@ if (isDevelopment) {
 export function getSecureCorsHeaders(request) {
     const origin = request.headers.get('Origin');
 
-    // Verificar se a origem está na lista branca ou se é localhost em dev
-    const isAllowed = ALLOWED_ORIGINS.some(allowed => origin?.startsWith(allowed)) ||
-                     (isDevelopment && origin?.includes('localhost'));
+    const isAllowed = isOriginAllowed(origin);
 
     const headers = {
         'Content-Type': 'application/json',
@@ -121,6 +137,9 @@ export function validateAndSanitize(param, type = 'string', maxLength = 255) {
  * Loga informações sem expor dados sensíveis
  */
 export function secureLog(level, message, data = null) {
+    if (!isDevelopment && level === 'info') {
+        return;
+    }
     const timestamp = new Date().toISOString();
     const prefix = {
         'info': 'ℹ️',
@@ -129,13 +148,12 @@ export function secureLog(level, message, data = null) {
         'error': '❌'
     }[level] || 'ℹ️';
 
-    // Em produção, não loga dados sensíveis
     if (data && !isDevelopment) {
-        // Mascarar dados sensíveis
         data = maskSensitiveData(data);
     }
 
-    console.log(`${prefix} [${timestamp}] ${message}`, data || '');
+    const sink = level === 'error' ? console.error : level === 'warning' ? console.warn : console.log;
+    sink(`${prefix} [${timestamp}] ${message}`, data || '');
 }
 
 /**
@@ -302,4 +320,6 @@ export function checkRateLimit(identifier, maxRequests = 100, windowMs = 60000) 
     return true;
 }
 
-secureLog('info', 'Módulo de segurança carregado', { isDevelopment });
+if (isDevelopment) {
+    secureLog('info', 'Módulo de segurança carregado', { isDevelopment });
+}

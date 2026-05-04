@@ -58,13 +58,6 @@ export async function onRequest(context) {
             });
         }
 
-        console.log('📋 Parâmetros da listagem:', {
-            exibidora: exibidora,
-            pontoId: pontoId,
-            tipo: tipo,
-            databaseId: databaseId
-        });
-
         // Verificar variáveis de ambiente
         const serviceAccountKey = context.env.GOOGLE_SERVICE_ACCOUNT_KEY;
         
@@ -97,14 +90,16 @@ export async function onRequest(context) {
         });
 
     } catch (error) {
-        console.error('💥 Erro ao listar arquivos:', error);
-        return new Response(JSON.stringify({ 
-            error: 'Erro interno do servidor',
-            details: error.message
-        }), {
-            status: 500,
-            headers
-        });
+        console.error('drive-list', error?.message || error);
+        return new Response(
+            JSON.stringify({
+                error: 'Erro interno do servidor'
+            }),
+            {
+                status: 500,
+                headers
+            }
+        );
     }
 }
 
@@ -122,24 +117,10 @@ function sanitizeParam(param) {
 // 🔑 OBTER TOKEN DE ACESSO
 // =============================================================================
 async function getAccessToken(env) {
-    try {
-        console.log('🔑 Iniciando obtenção de token de acesso...');
-
-        if (!env.GOOGLE_SERVICE_ACCOUNT_KEY) {
-            console.error('❌ Service Account Key não configurada');
-            throw new Error('Service Account Key não configurada');
-        }
-
-        console.log('✅ Service Account Key encontrada, gerando token...');
-        const token = await getServiceAccountToken(env.GOOGLE_SERVICE_ACCOUNT_KEY);
-        console.log('✅ Token de acesso obtido com sucesso');
-        
-        return token;
-
-    } catch (error) {
-        console.error('❌ Erro ao obter token de acesso:', error);
-        throw error;
+    if (!env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+        throw new Error('Service Account Key não configurada');
     }
+    return await getServiceAccountToken(env.GOOGLE_SERVICE_ACCOUNT_KEY);
 }
 
 // =============================================================================
@@ -185,7 +166,7 @@ async function getServiceAccountToken(serviceAccountKeyJson) {
         return tokenData.access_token;
 
     } catch (error) {
-        console.error('❌ Erro ao obter token da service account:', error);
+        console.error('getServiceAccountToken', error?.message || error);
         throw error;
     }
 }
@@ -224,7 +205,7 @@ async function createJWT(header, payload, privateKey) {
         return `${message}.${signatureB64}`;
 
     } catch (error) {
-        console.error('❌ Erro ao criar JWT:', error);
+        console.error('createJWT', error?.message || error);
         throw error;
     }
 }
@@ -304,7 +285,6 @@ async function listFilesInFolderWithDriveFallback(folderId, sharedDriveId, acces
         }
         lastStatus = response.status;
         lastBody = await response.text();
-        console.warn(`⚠️ list files tentativa falhou (${lastStatus}):`, lastBody.slice(0, 500));
     }
 
     throw new Error(`Erro ao listar arquivos: ${lastStatus} - ${lastBody}`);
@@ -315,8 +295,6 @@ async function listFilesInFolderWithDriveFallback(folderId, sharedDriveId, acces
 // =============================================================================
 async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, accessToken, rootFolderId, env) {
     try {
-        console.log('📂 Listando arquivos...', { exibidora, pontoId, tipo, databaseId });
-
         // ✅ CORREÇÃO: Passar pontoId para buscar na nova estrutura
         const folderPath = await findOrCreateFolderPath(
             exibidora,
@@ -329,7 +307,6 @@ async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, ac
         );
         
         if (!folderPath) {
-            console.error('❌ Não foi possível criar/encontrar a estrutura de pastas');
             return {
                 success: false,
                 files: [],
@@ -338,13 +315,8 @@ async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, ac
             };
         }
 
-        console.log('✅ Estrutura de pastas pronta:', folderPath.path);
-
         const legacyFolderIds = await resolveLegacyTipoFolderIds(folderPath, tipo, accessToken);
         const folderIdsToScan = [folderPath.id, ...legacyFolderIds];
-        if (legacyFolderIds.length) {
-            console.log('📂 Merge com pastas legadas (uploads antigos):', legacyFolderIds.join(', '));
-        }
 
         const seenFileIds = new Set();
         const allFilesRaw = [];
@@ -366,16 +338,11 @@ async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, ac
                 if (fid === folderPath.id) {
                     throw e;
                 }
-                console.warn(`⚠️ Listagem legada ignorada (${fid}):`, e.message);
             }
         }
 
         const allFiles = allFilesRaw.filter(
             (f) => f.mimeType !== 'application/vnd.google-apps.folder'
-        );
-
-        console.log(
-            `📋 Encontrados ${allFiles.length} arquivos em ${folderIdsToScan.length} pasta(s) (pastas excluídas)`
         );
 
         // ✅ CORREÇÃO CRÍTICA: Filtro inteligente que aceita:
@@ -390,15 +357,12 @@ async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, ac
 
             // ✅ SOFT DELETE: Ignorar arquivos com _EXCLUIDO_ no nome
             if (fileName.includes('_excluido_')) {
-                console.log(`🗑️ Arquivo excluído filtrado: ${file.name}`);
                 return false;
             }
 
             // Nomes no Drive costumam usar o ID sem hífens (ex.: entrada_35220b549cf58149…)
             return fileName.includes(pontoIdLower) || fileName.includes(pontoIdCompact);
         });
-
-        console.log(`📋 Arquivos filtrados para ponto ${pontoId}: ${filteredFiles.length} de ${allFiles.length}`);
 
         // Processar arquivos para formato padronizado
         const processedFiles = filteredFiles.map(file => {
@@ -446,7 +410,7 @@ async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, ac
         };
 
     } catch (error) {
-        console.error('❌ Erro ao listar arquivos do Google Drive:', error);
+        console.error('listFilesFromGoogleDrive', error?.message || error);
         throw error;
     }
 }
@@ -458,13 +422,9 @@ async function listFilesFromGoogleDrive(exibidora, pontoId, tipo, databaseId, ac
 // =============================================================================
 async function findOrCreateFolderPath(exibidora, tipo, databaseId, pontoId, accessToken, rootFolderId, env) {
     try {
-        console.log('📁 [REFATORADO] Usando módulo compartilhado de hierarquia...');
-        console.log('📋 Parâmetros:', { exibidora, tipo, databaseId, pontoId });
-
         // ✅ VALIDAR parâmetros antes de prosseguir
         const validation = validateHierarchyParams(exibidora, databaseId, pontoId, tipo);
         if (!validation.valid) {
-            console.error('❌ Parâmetros inválidos:', validation.errors);
             return null;
         }
 
@@ -478,8 +438,6 @@ async function findOrCreateFolderPath(exibidora, tipo, databaseId, pontoId, acce
             buildDriveHierarchyOptions(env)
         );
 
-        console.log('🎉 Estrutura garantida via módulo compartilhado');
-
         return {
             id: result.id,
             path: result.path,
@@ -489,7 +447,7 @@ async function findOrCreateFolderPath(exibidora, tipo, databaseId, pontoId, acce
         };
 
     } catch (error) {
-        console.error('❌ Erro ao encontrar/criar estrutura de pastas:', error);
+        console.error('findOrCreateFolderPath', error?.message || error);
         return null;
     }
 }
@@ -546,8 +504,6 @@ async function resolveLegacyTipoFolderIds(folderPath, tipo, accessToken) {
 // Use drive-hierarchy.js para criar pastas
 async function createFolder(folderName, parentId, accessToken, driveId = null) {
     try {
-        console.log(`📁 Criando pasta "${folderName}" dentro de ${parentId}...`);
-
         const metadata = {
             name: folderName,
             mimeType: 'application/vnd.google-apps.folder',
@@ -573,12 +529,10 @@ async function createFolder(folderName, parentId, accessToken, driveId = null) {
         }
 
         const folder = await response.json();
-        console.log(`✅ Pasta "${folderName}" criada com sucesso:`, folder.id);
-        
         return folder;
 
     } catch (error) {
-        console.error(`❌ Erro ao criar pasta ${folderName}:`, error);
+        console.error('createFolder', folderName, error?.message || error);
         throw error;
     }
 }
@@ -622,7 +576,7 @@ async function findFolder(folderName, parentId, accessToken) {
         return null;
 
     } catch (error) {
-        console.error(`❌ Erro ao encontrar pasta ${folderName}:`, error);
+        console.error('findFolder', folderName, error?.message || error);
         return null;
     }
 }
@@ -634,8 +588,6 @@ async function findFolder(folderName, parentId, accessToken) {
 // Use drive-hierarchy.js para buscar pastas
 async function findFolderInAllDrives(folderName, accessToken) {
     try {
-        console.log(`🌐 Buscando pasta "${folderName}" em My Drive e Shared Drives...`);
-        
         const query = `name='${folderName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
         
         const response = await fetch(
@@ -649,7 +601,6 @@ async function findFolderInAllDrives(folderName, accessToken) {
 
         if (!response.ok) {
             const errorText = await response.text();
-            console.error(`❌ Erro HTTP ao buscar pasta: ${response.status} - ${errorText}`);
             throw new Error(`Erro ao buscar pasta em drives: ${response.status} - ${errorText}`);
         }
 
@@ -657,22 +608,13 @@ async function findFolderInAllDrives(folderName, accessToken) {
         
         if (result.files && result.files.length > 0) {
             const sharedDriveFolder = result.files.find(f => f.driveId);
-            const selectedFolder = sharedDriveFolder || result.files[0];
-            
-            console.log(`✅ Pasta "${folderName}" encontrada (total: ${result.files.length}):`, selectedFolder.id);
-            if (selectedFolder.driveId) {
-                console.log(`   📌 Encontrada em Shared Drive: ${selectedFolder.driveId}`);
-            } else {
-                console.log(`   📌 Encontrada em My Drive`);
-            }
-            return selectedFolder;
+            return sharedDriveFolder || result.files[0];
         }
 
-        console.log(`❌ Pasta "${folderName}" NÃO encontrada em nenhum drive`);
         return null;
 
     } catch (error) {
-        console.error(`❌ Erro ao encontrar pasta ${folderName}:`, error);
+        console.error('findFolderInAllDrives', folderName, error?.message || error);
         return null;
     }
 }
@@ -685,22 +627,14 @@ function getFileViewUrl(file) {
 
     if (file.mimeType && file.mimeType.startsWith('image/')) {
         // ✅ CORREÇÃO: Thumbnail como primeira opção (sz=w800 para boa qualidade)
-        const url = file.thumbnailLink
+        return file.thumbnailLink
             ? file.thumbnailLink.replace('=s220', '=s800')
             : `https://drive.google.com/thumbnail?id=${file.id}&sz=w800`;
-        console.log(`🖼️ URL gerada para imagem ${file.name} (thumbnail): ${url}`);
-        return url;
     }
 
     if (file.mimeType && file.mimeType.startsWith('video/')) {
-        // Para vídeos: formato de preview
-        const url = `https://drive.google.com/file/d/${file.id}/preview`;
-        console.log(`🎥 URL gerada para vídeo ${file.name}: ${url}`);
-        return url;
+        return `https://drive.google.com/file/d/${file.id}/preview`;
     }
 
-    // Para outros tipos: webViewLink ou fallback
-    const url = file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`;
-    console.log(`📄 URL gerada para arquivo ${file.name}: ${url}`);
-    return url;
+    return file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`;
 }

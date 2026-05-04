@@ -57,11 +57,6 @@ export async function onRequest(context) {
             });
         }
 
-        console.log('📋 Dados da exclusão:', {
-            fileId: fileId,
-            fileName: fileName || 'Nome não fornecido'
-        });
-
         // Verificar variáveis de ambiente
         const driveApiKey = context.env.GOOGLE_DRIVE_API_KEY;
         const serviceAccountKey = context.env.GOOGLE_SERVICE_ACCOUNT_KEY;
@@ -87,14 +82,16 @@ export async function onRequest(context) {
         });
 
     } catch (error) {
-        console.error('💥 Erro ao deletar arquivo:', error);
-        return new Response(JSON.stringify({ 
-            error: 'Erro interno do servidor',
-            details: error.message
-        }), {
-            status: 500,
-            headers
-        });
+        console.error('drive-delete', error?.message || error);
+        return new Response(
+            JSON.stringify({
+                error: 'Erro interno do servidor'
+            }),
+            {
+                status: 500,
+                headers
+            }
+        );
     }
 }
 
@@ -103,8 +100,6 @@ export async function onRequest(context) {
 // =============================================================================
 async function getAccessToken(env) {
     try {
-        console.log('🔑 Obtendo token de acesso...');
-
         // Se tem Service Account Key, usar OAuth2
         if (env.GOOGLE_SERVICE_ACCOUNT_KEY) {
             return await getServiceAccountToken(env.GOOGLE_SERVICE_ACCOUNT_KEY);
@@ -118,7 +113,7 @@ async function getAccessToken(env) {
         throw new Error('Credenciais válidas para delete não encontradas');
 
     } catch (error) {
-        console.error('❌ Erro ao obter token de acesso:', error);
+        console.error('drive-delete getAccessToken', error?.message || error);
         throw error;
     }
 }
@@ -167,7 +162,7 @@ async function getServiceAccountToken(serviceAccountKeyJson) {
         return tokenData.access_token;
 
     } catch (error) {
-        console.error('❌ Erro ao obter token da service account:', error);
+        console.error('drive-delete getServiceAccountToken', error?.message || error);
         throw error;
     }
 }
@@ -228,8 +223,6 @@ function pemToBinary(pem) {
 // =============================================================================
 async function deleteFileFromGoogleDrive(fileId, fileName, accessToken) {
     try {
-        console.log('🗑️ Iniciando soft delete do arquivo:', { fileId, fileName });
-
         // Primeiro, verificar se o arquivo existe e obter informações
         const fileInfo = await getFileInfo(fileId, accessToken);
 
@@ -241,17 +234,9 @@ async function deleteFileFromGoogleDrive(fileId, fileName, accessToken) {
             };
         }
 
-        console.log('📋 Informações do arquivo:', {
-            id: fileInfo.id,
-            name: fileInfo.name,
-            mimeType: fileInfo.mimeType
-        });
-
         // ✅ SOFT DELETE: Renomear arquivo com sufixo _EXCLUIDO_timestamp
         const timestamp = Date.now();
         const newName = `${fileInfo.name}_EXCLUIDO_${timestamp}`;
-
-        console.log('🔄 Renomeando arquivo para soft delete:', newName);
 
         const renameResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?supportsAllDrives=true`, {
             method: 'PATCH',
@@ -269,12 +254,10 @@ async function deleteFileFromGoogleDrive(fileId, fileName, accessToken) {
                 throw new Error('Sem permissão para renomear este arquivo');
             } else {
                 const errorText = await renameResponse.text();
-                console.error(`❌ Erro HTTP ${renameResponse.status}:`, errorText);
+                console.error('drive-delete rename', renameResponse.status);
                 throw new Error(`Erro no soft delete: ${renameResponse.status} - ${errorText}`);
             }
         }
-
-        console.log('✅ Arquivo renomeado com sucesso (soft delete):', newName);
 
         // Log da operação (para auditoria)
         await logDeletionOperation(fileInfo, accessToken);
@@ -290,13 +273,12 @@ async function deleteFileFromGoogleDrive(fileId, fileName, accessToken) {
         };
 
     } catch (error) {
-        console.error('❌ Erro ao executar soft delete:', error);
+        console.error('deleteFileFromGoogleDrive', error?.message || error);
 
         return {
             success: false,
             fileId: fileId,
-            error: error.message,
-            details: error.stack,
+            error: error.message || 'Falha no soft delete',
             deletedAt: new Date().toISOString()
         };
     }
@@ -307,8 +289,6 @@ async function deleteFileFromGoogleDrive(fileId, fileName, accessToken) {
 // =============================================================================
 async function getFileInfo(fileId, accessToken) {
     try {
-        console.log('ℹ️ Obtendo informações do arquivo:', fileId);
-
         const response = await fetch(
             `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType,size,createdTime,modifiedTime,parents&supportsAllDrives=true`,
             {
@@ -320,19 +300,16 @@ async function getFileInfo(fileId, accessToken) {
 
         if (!response.ok) {
             if (response.status === 404) {
-                console.log('📄 Arquivo não encontrado:', fileId);
                 return null;
             }
             throw new Error(`Erro ao obter informações: ${response.status}`);
         }
 
         const fileInfo = await response.json();
-        console.log('✅ Informações obtidas:', fileInfo.name);
-        
         return fileInfo;
 
     } catch (error) {
-        console.error('❌ Erro ao obter informações do arquivo:', error);
+        console.error('getFileInfo', error?.message || error);
         return null;
     }
 }
@@ -340,32 +317,10 @@ async function getFileInfo(fileId, accessToken) {
 // =============================================================================
 // 📝 LOG DA OPERAÇÃO DE EXCLUSÃO
 // =============================================================================
-async function logDeletionOperation(fileInfo, accessToken) {
-    try {
-        // Criar um log da exclusão (opcional - para auditoria)
-        const logData = {
-            operation: 'file_deletion',
-            fileId: fileInfo.id,
-            fileName: fileInfo.name,
-            fileType: fileInfo.mimeType,
-            fileSize: fileInfo.size,
-            originalCreatedTime: fileInfo.createdTime,
-            deletedAt: new Date().toISOString(),
-            deletedBy: 'checking-ooh-system'
-        };
-
-        console.log('📝 Log da exclusão:', logData);
-
-        // Aqui você poderia salvar o log em um banco de dados ou arquivo
-        // Por enquanto, apenas logamos no console
-
-        // Opcional: Criar arquivo de log no Google Drive
-        // await createLogFile(logData, accessToken);
-
-    } catch (error) {
-        console.warn('⚠️ Erro ao criar log da exclusão:', error);
-        // Não falhar a operação principal por causa do log
-    }
+async function logDeletionOperation(_fileInfo, _accessToken) {
+    // Reservado: auditoria (ex. webhook, D1); não bloquear a exclusão.
+    void _fileInfo;
+    void _accessToken;
 }
 
 // =============================================================================
@@ -373,8 +328,6 @@ async function logDeletionOperation(fileInfo, accessToken) {
 // =============================================================================
 async function createLogFile(logData, accessToken) {
     try {
-        console.log('🗂️ Criando arquivo de log...');
-
         // Criar conteúdo do log
         const logContent = JSON.stringify(logData, null, 2);
         const logFileName = `deletion_log_${Date.now()}.json`;
@@ -392,15 +345,12 @@ async function createLogFile(logData, accessToken) {
             body: createMultipartBody(logFileName, logContent, logsFolder.id)
         });
 
-        if (response.ok) {
-            const result = await response.json();
-            console.log('✅ Arquivo de log criado:', result.id);
-        } else {
-            console.warn('⚠️ Não foi possível criar arquivo de log:', response.status);
+        if (!response.ok) {
+            console.warn('createLogFile', response.status);
         }
 
     } catch (error) {
-        console.warn('⚠️ Erro ao criar arquivo de log:', error);
+        console.warn('createLogFile', error?.message || error);
     }
 }
 
@@ -442,7 +392,7 @@ async function findOrCreateLogsFolder(accessToken) {
         return newFolder;
 
     } catch (error) {
-        console.error('❌ Erro ao criar pasta de logs:', error);
+        console.error('findOrCreateLogsFolder', error?.message || error);
         throw error;
     }
 }

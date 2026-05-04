@@ -89,10 +89,7 @@ export async function onRequest(context) {
 // =============================================================================
 async function fetchPontosForExibidora(pontoId, notionToken) {
     try {
-        console.log('📡 Buscando ponto inicial:', pontoId);
-
         const normalizedId = normalizeNotionId(pontoId);
-        console.log('🔧 ID normalizado:', normalizedId);
 
         // Buscar o ponto específico primeiro
         const pontoResponse = await fetch(`https://api.notion.com/v1/pages/${normalizedId}`, {
@@ -112,12 +109,6 @@ async function fetchPontosForExibidora(pontoId, notionToken) {
         const pontoExtraido = extractPontoData(pontoData);
         const exibidora = pontoExtraido.exibidora;
 
-        console.log('✅ Ponto encontrado:', { 
-            id: pontoExtraido.id, 
-            exibidora: exibidora,
-            endereco: pontoExtraido.endereco
-        });
-
         // Obter o database parent
         const rawDatabaseId = pontoData.parent?.database_id;
         if (!rawDatabaseId) {
@@ -126,11 +117,6 @@ async function fetchPontosForExibidora(pontoId, notionToken) {
 
         // ✅ CRÍTICO: Normalizar databaseId para garantir consistência
         const databaseId = normalizeNotionId(rawDatabaseId);
-        console.log('🗄️ Database ID (raw):', rawDatabaseId);
-        console.log('🗄️ Database ID (normalizado):', databaseId);
-
-        // ✅ CORREÇÃO: Filtro para campo TEXT em vez de SELECT
-        console.log('🔍 Buscando pontos da exibidora:', exibidora);
 
         const queryResponse = await fetch(`https://api.notion.com/v1/databases/${databaseId}/query`, {
             method: 'POST',
@@ -157,8 +143,6 @@ async function fetchPontosForExibidora(pontoId, notionToken) {
         const queryData = await queryResponse.json();
         const pontos = queryData.results.map(extractPontoData);
 
-        console.log('✅ Pontos da exibidora encontrados:', pontos.length);
-
         return {
             success: true,
             mode: 'exibidora',
@@ -170,7 +154,7 @@ async function fetchPontosForExibidora(pontoId, notionToken) {
         };
 
     } catch (error) {
-        console.error('❌ Erro ao buscar pontos para exibidora:', error);
+        console.error('fetchPontosForExibidora', error?.message || error);
         throw error;
     }
 }
@@ -180,8 +164,6 @@ async function fetchPontosForExibidora(pontoId, notionToken) {
 // =============================================================================
 async function fetchPageTitle(databaseId, notionToken) {
     try {
-        console.log('📄 Buscando título da página pai do database:', databaseId);
-
         // 1. Buscar informações do database
         const databaseResponse = await fetch(`https://api.notion.com/v1/databases/${databaseId}`, {
             headers: {
@@ -192,7 +174,6 @@ async function fetchPageTitle(databaseId, notionToken) {
         });
 
         if (!databaseResponse.ok) {
-            console.warn('⚠️ Não foi possível buscar dados do database');
             return null;
         }
 
@@ -201,11 +182,8 @@ async function fetchPageTitle(databaseId, notionToken) {
         // 2. Verificar se tem página pai
         const parentPageId = databaseData.parent?.page_id;
         if (!parentPageId) {
-            console.log('ℹ️ Database não tem página pai');
             return null;
         }
-
-        console.log('📄 Página pai encontrada:', parentPageId);
 
         // 3. Buscar título da página pai
         const pageResponse = await fetch(`https://api.notion.com/v1/pages/${parentPageId}`, {
@@ -217,7 +195,6 @@ async function fetchPageTitle(databaseId, notionToken) {
         });
 
         if (!pageResponse.ok) {
-            console.warn('⚠️ Não foi possível buscar página pai');
             return null;
         }
 
@@ -242,13 +219,10 @@ async function fetchPageTitle(databaseId, notionToken) {
             }
         }
 
-        console.log('✅ Título da página pai extraído:', title);
-        console.log('✅ Ícone da página pai:', iconUrl || 'Nenhum');
-
         return { title, iconUrl };
 
     } catch (error) {
-        console.error('❌ Erro ao buscar título da página pai:', error);
+        console.error('fetchPageTitle', error?.message || error);
         return null;
     }
 }
@@ -258,11 +232,7 @@ async function fetchPageTitle(databaseId, notionToken) {
 // =============================================================================
 async function fetchPontosByCampanha(campanhaId, notionToken) {
     try {
-        console.log('📋 Buscando todos os pontos da campanha:', campanhaId);
-
         const normalizedId = normalizeNotionId(campanhaId);
-        console.log('🔧 Database ID (raw):', campanhaId);
-        console.log('🔧 Database ID (normalizado):', normalizedId);
 
         // Buscar título e ícone da página pai
         const pageInfo = await fetchPageTitle(normalizedId, notionToken);
@@ -290,8 +260,6 @@ async function fetchPontosByCampanha(campanhaId, notionToken) {
         const queryData = await queryResponse.json();
         const pontos = queryData.results.map(extractPontoData);
 
-        console.log('✅ Pontos da campanha encontrados:', pontos.length);
-
         return {
             success: true,
             mode: 'campanha',
@@ -303,7 +271,7 @@ async function fetchPontosByCampanha(campanhaId, notionToken) {
         };
 
     } catch (error) {
-        console.error('❌ Erro ao buscar pontos da campanha:', error);
+        console.error('fetchPontosByCampanha', error?.message || error);
         throw error;
     }
 }
@@ -328,8 +296,6 @@ function normalizeNotionId(id) {
 // =============================================================================
 function extractPontoData(notionPage) {
     try {
-        console.log('🔧 Extraindo dados do ponto:', notionPage.id);
-
         const properties = notionPage.properties || {};
         
         const extractValue = (prop, defaultValue = '') => {
@@ -363,11 +329,9 @@ function extractPontoData(notionPage) {
                         }
                         return defaultValue;
                     default:
-                        console.warn(`⚠️ Tipo de propriedade não reconhecido: ${prop.type}`);
                         return defaultValue;
                 }
-            } catch (error) {
-                console.error(`❌ Erro ao extrair propriedade ${prop.type}:`, error);
+            } catch {
                 return defaultValue;
             }
         };
@@ -389,16 +353,10 @@ function extractPontoData(notionPage) {
             lastEditedTime: notionPage.last_edited_time
         };
         
-        console.log('📊 Dados extraídos:', {
-            id: pontoData.id,
-            exibidora: pontoData.exibidora,
-            endereco: pontoData.endereco
-        });
-
         return pontoData;
         
     } catch (error) {
-        console.error('❌ Erro ao extrair dados do ponto:', error);
+        console.error('extractPontoData', error?.message || error);
         throw new Error(`Erro ao processar dados do Notion: ${error.message}`);
     }
 }
