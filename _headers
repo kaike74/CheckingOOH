@@ -14,29 +14,29 @@
 /css/*
   Cache-Control: public, max-age=86400, s-maxage=86400
 
-*.css
+/*.css
   Cache-Control: public, max-age=86400, s-maxage=86400
 
-*.js
+/*.js
   Cache-Control: public, max-age=86400, s-maxage=86400
 
-# Cache para imagens
-*.png
+# Cache para imagens (paths na raiz; assets em /assets/* cobertos por regras acima se necessário)
+/*.png
   Cache-Control: public, max-age=2592000, s-maxage=2592000
 
-*.jpg
+/*.jpg
   Cache-Control: public, max-age=2592000, s-maxage=2592000
 
-*.jpeg
+/*.jpeg
   Cache-Control: public, max-age=2592000, s-maxage=2592000
 
-*.gif
+/*.gif
   Cache-Control: public, max-age=2592000, s-maxage=2592000
 
-*.webp
+/*.webp
   Cache-Control: public, max-age=2592000, s-maxage=2592000
 
-*.svg
+/*.svg
   Cache-Control: public, max-age=2592000, s-maxage=2592000
 
 # APIs - sem cache
@@ -50,5 +50,5 @@
 /
   Cache-Control: public, max-age=3600, s-maxage=3600
 
-*.html
+/*.html
   Cache-Control: public, max-age=3600, s-maxage=3600

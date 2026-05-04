@@ -3,6 +3,55 @@
 // =============================================================================
 
 /**
+ * Lê corpo de erro da API (JSON ou HTML/texto) e regista diagnóstico no consola.
+ * @param {Response} response
+ * @param {string} label ex.: drive-upload
+ * @returns {string} mensagem para throw
+ */
+async function parseApiErrorResponse(response, label) {
+    const status = response.status;
+    const contentType = response.headers.get('content-type') || '';
+    const cfRay = response.headers.get('cf-ray') || '';
+    let text = '';
+    try {
+        text = await response.text();
+    } catch (e) {
+        Logger.error(`[${label}] Falha ao ler corpo da resposta`, { status, cfRay });
+        return `Erro HTTP ${status} (corpo ilegível)`;
+    }
+
+    let parsed = null;
+    try {
+        parsed = text ? JSON.parse(text) : null;
+    } catch (e) {
+        Logger.error(`[${label}] Resposta não-JSON`, {
+            status,
+            contentType,
+            cfRay,
+            bodyPreview: text.slice(0, 1200)
+        });
+        return `Erro HTTP ${status} — resposta não-JSON: ${text.slice(0, 400)}`;
+    }
+
+    const err = parsed?.error || `Erro HTTP ${status}`;
+    const details = parsed?.details || parsed?.message || '';
+    const code = parsed?.code || '';
+    const requestId = parsed?.requestId || '';
+
+    Logger.error(`[${label}] API falhou`, {
+        status,
+        code,
+        requestId,
+        cfRay,
+        error: err,
+        details,
+        full: parsed
+    });
+
+    return [err, details, code, requestId].filter(Boolean).join(' — ');
+}
+
+/**
  * 📤 FAZER UPLOAD DE ARQUIVO PARA O GOOGLE DRIVE
  * Envia um arquivo para a pasta específica da exibidora/tipo
  */
@@ -42,24 +91,7 @@ async function uploadFileToDrive(file, exibidora, pontoId, tipo, databaseId) {
         });
 
         if (!response.ok) {
-            // #region agent log
-            const resText = await response.text();
-            if (typeof window !== 'undefined' && window.__dgSend) {
-                window.__dgSend('H3', 'drive-api.js:uploadFileToDrive', 'drive-upload non-OK', {
-                    status: response.status,
-                    contentType: response.headers.get('content-type') || '',
-                    bodySnippet: resText.slice(0, 600)
-                });
-            }
-            // #endregion
-            let errorData;
-            try {
-                errorData = JSON.parse(resText);
-            } catch {
-                errorData = { error: 'Resposta não-JSON', details: resText.slice(0, 300) };
-            }
-            const parts = [errorData.error, errorData.details, errorData.message].filter(Boolean);
-            throw new Error(parts.length ? parts.join(' — ') : `Erro HTTP ${response.status}`);
+            throw new Error(await parseApiErrorResponse(response, 'drive-upload'));
         }
 
         const result = await response.json();
@@ -97,9 +129,7 @@ async function listDriveFiles(exibidora, pontoId, tipo, databaseId) { // ✅ NOV
         const response = await fetch(`${getApiBaseUrl()}/api/drive-list?${params}`);
         
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: 'Erro desconhecido' }));
-            const parts = [errorData.error, errorData.details].filter(Boolean);
-            throw new Error(parts.length ? parts.join(' — ') : `Erro HTTP ${response.status}`);
+            throw new Error(await parseApiErrorResponse(response, 'drive-list'));
         }
         
         const result = await response.json();
@@ -141,8 +171,7 @@ async function deleteFileFromDrive(fileId, fileName) {
         });
         
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: 'Erro desconhecido' }));
-            throw new Error(errorData.error || `Erro HTTP ${response.status}`);
+            throw new Error(await parseApiErrorResponse(response, 'drive-delete'));
         }
         
         const result = await response.json();

@@ -275,10 +275,13 @@ async function resolveCheckingOOHRootFolder(accessToken, exibidoraName) {
     }
 
     if (candidates.length === 1) {
+        console.log('✅ Único candidato CheckingOOH:', candidates[0].id);
         return candidates[0];
     }
 
-    console.log(`⚠️ ${candidates.length} pastas "CheckingOOH" encontradas — desambiguando pela exibidora "${exibidoraName}"...`);
+    console.warn(
+        `⚠️ ${candidates.length} pastas "CheckingOOH" — a escolher a que já contém a exibidora "${exibidoraName}" (ids: ${candidates.map((c) => c.id).join(', ')})`
+    );
 
     const escapedEx = String(exibidoraName || '').replace(/'/g, "\\'");
 

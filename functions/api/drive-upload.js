@@ -7,14 +7,33 @@ import {
     getSecureCorsHeaders,
     validateUploadRequest,
     secureLog,
-    secureErrorResponse,
     checkRateLimit
 } from './_security.js';
 
+function driveUploadJsonError(corsHeaders, status, code, error, details, requestId, extra = {}) {
+    const body = {
+        success: false,
+        error: error || 'Erro no servidor',
+        details: details || error || 'sem_detalhe',
+        code,
+        requestId,
+        t: new Date().toISOString(),
+        ...extra
+    };
+    console.error(`[drive-upload:${requestId}]`, code, JSON.stringify(body).slice(0, 4000));
+    return new Response(JSON.stringify(body), {
+        status,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json; charset=utf-8' }
+    });
+}
+
 export async function onRequestPost(context) {
     const { request, env } = context;
+    const requestId =
+        typeof crypto !== 'undefined' && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `req_${Date.now()}`;
 
-    // 🛡️ CORS SEGURO
     const corsHeaders = getSecureCorsHeaders(request);
 
     if (request.method === 'OPTIONS') {
@@ -22,55 +41,79 @@ export async function onRequestPost(context) {
     }
 
     try {
-        // 🛡️ RATE LIMITING
+        console.log(`[drive-upload:${requestId}] POST`, {
+            cfRay: request.headers.get('cf-ray'),
+            contentLength: request.headers.get('content-length'),
+            contentType: (request.headers.get('content-type') || '').slice(0, 100)
+        });
+
         const clientIP = request.headers.get('CF-Connecting-IP') || 'unknown';
         if (!checkRateLimit(clientIP, 50, 60000)) {
             secureLog('warning', 'Rate limit excedido', { ip: clientIP });
-            return new Response(JSON.stringify({
-                success: false,
-                error: 'Muitas requisições. Tente novamente em alguns segundos.'
-            }), {
-                status: 429,
-                headers: corsHeaders
-            });
+            return driveUploadJsonError(
+                corsHeaders,
+                429,
+                'RATE_LIMIT',
+                'Muitas requisições. Tente novamente em alguns segundos.',
+                `IP: ${clientIP}`,
+                requestId
+            );
         }
 
         secureLog('info', 'Iniciando upload');
 
-        // =============================================================================
-        // ETAPA 1: VALIDAR VARIÁVEIS DE AMBIENTE
-        // =============================================================================
         if (!env.GOOGLE_SERVICE_ACCOUNT_KEY) {
             secureLog('error', 'Credenciais não configuradas');
-            return new Response(JSON.stringify({
-                success: false,
-                error: 'Serviço temporariamente indisponível'
-            }), {
-                status: 500,
-                headers: corsHeaders
-            });
+            return driveUploadJsonError(
+                corsHeaders,
+                500,
+                'MISSING_GOOGLE_SERVICE_ACCOUNT_KEY',
+                'Serviço temporariamente indisponível',
+                'GOOGLE_SERVICE_ACCOUNT_KEY ausente no ambiente.',
+                requestId
+            );
         }
 
-        // =============================================================================
-        // ETAPA 2: VALIDAR E SANITIZAR DADOS DO REQUEST
-        // =============================================================================
-        const formData = await request.formData();
+        let formData;
+        try {
+            formData = await request.formData();
+        } catch (e) {
+            return driveUploadJsonError(
+                corsHeaders,
+                400,
+                'FORMDATA_PARSE',
+                'Pedido inválido',
+                e.message || String(e),
+                requestId
+            );
+        }
 
         let validated;
         try {
             validated = validateUploadRequest(formData);
         } catch (validationError) {
             secureLog('warning', 'Validação falhou', { error: validationError.message });
-            return new Response(JSON.stringify({
-                success: false,
-                error: validationError.message
-            }), {
-                status: 400,
-                headers: corsHeaders
-            });
+            return driveUploadJsonError(
+                corsHeaders,
+                400,
+                'VALIDATION',
+                validationError.message,
+                validationError.message,
+                requestId
+            );
         }
 
         const { file, exibidora, pontoId, tipo, databaseId } = validated;
+
+        console.log(`[drive-upload:${requestId}] metadados`, {
+            exibidora,
+            pontoId,
+            tipo,
+            databaseId,
+            fileName: file?.name,
+            fileSize: file?.size,
+            fileType: file?.type
+        });
 
         secureLog('info', 'Upload validado', {
             fileName: file.name,
@@ -78,84 +121,119 @@ export async function onRequestPost(context) {
             tipo
         });
 
-        // =============================================================================
-        // ETAPA 3: OBTER TOKEN DO GOOGLE
-        // =============================================================================
-        const accessToken = await getGoogleAccessToken(env.GOOGLE_SERVICE_ACCOUNT_KEY);
+        let accessToken;
+        try {
+            accessToken = await getGoogleAccessToken(env.GOOGLE_SERVICE_ACCOUNT_KEY, requestId);
+        } catch (oauthErr) {
+            return driveUploadJsonError(
+                corsHeaders,
+                500,
+                'OAUTH_OR_JWT',
+                'Falha na autenticação Google',
+                oauthErr.message || String(oauthErr),
+                requestId,
+                { hint: 'JSON da service account, chave ativa no GCP, Drive API ativada.' }
+            );
+        }
 
         if (!accessToken) {
-            secureLog('error', 'Falha ao obter token de acesso');
-            return new Response(JSON.stringify({
-                success: false,
-                error: 'Erro ao processar requisição'
-            }), {
-                status: 500,
-                headers: corsHeaders
-            });
+            return driveUploadJsonError(
+                corsHeaders,
+                500,
+                'TOKEN_EMPTY',
+                'Token Google vazio',
+                'Resposta OAuth sem access_token.',
+                requestId
+            );
         }
 
-        // =============================================================================
-        // ETAPA 4: CRIAR ESTRUTURA DE PASTAS E FAZER UPLOAD
-        // =============================================================================
-        const folderPath = await ensureFolderPathInSharedDrive(exibidora, tipo, databaseId, pontoId, accessToken);
+        console.log(`[drive-upload:${requestId}] token OK`, { prefix: accessToken.slice(0, 10) + '…' });
 
-        if (!folderPath) {
-            secureLog('error', 'Falha ao criar estrutura de pastas');
-            return new Response(JSON.stringify({
-                success: false,
-                error: 'Erro ao processar requisição'
-            }), {
-                status: 500,
-                headers: corsHeaders
-            });
+        let folderPath;
+        try {
+            folderPath = await ensureFolderPathInSharedDrive(
+                exibidora,
+                tipo,
+                databaseId,
+                pontoId,
+                accessToken,
+                requestId
+            );
+        } catch (folderErr) {
+            return driveUploadJsonError(
+                corsHeaders,
+                500,
+                'FOLDER_HIERARCHY',
+                'Falha ao resolver pastas no Drive',
+                folderErr.message || String(folderErr),
+                requestId,
+                { hint: 'Permissões na pasta CheckingOOH / Shared Drive; nomes de pastas.' }
+            );
         }
 
-        // Upload do arquivo
+        if (!folderPath?.id) {
+            return driveUploadJsonError(
+                corsHeaders,
+                500,
+                'FOLDER_PATH_INVALID',
+                'Caminho de pastas inválido',
+                'Sem folderId destino.',
+                requestId
+            );
+        }
+
+        console.log(`[drive-upload:${requestId}] destino`, { folderId: folderPath.id, path: folderPath.path });
+
         const uploadResult = await uploadToGoogleDrive(
             file,
             folderPath.id,
             pontoId,
             tipo,
-            accessToken
+            accessToken,
+            requestId
         );
 
         if (!uploadResult.success) {
             secureLog('error', 'Upload falhou', { error: uploadResult.error });
-            return new Response(JSON.stringify({
-                success: false,
-                error: 'Erro ao fazer upload do arquivo',
-                details: uploadResult.error || null
-            }), {
-                status: 500,
-                headers: corsHeaders
-            });
+            return driveUploadJsonError(
+                corsHeaders,
+                500,
+                uploadResult.code || 'UPLOAD_GOOGLE',
+                'Erro ao fazer upload do arquivo',
+                uploadResult.error || 'erro_desconhecido',
+                requestId,
+                uploadResult.extra || {}
+            );
         }
 
         secureLog('success', 'Upload concluído com sucesso');
+        console.log(`[drive-upload:${requestId}] OK`, { fileId: uploadResult.fileId });
 
-        return new Response(JSON.stringify({
-            success: true,
-            fileId: uploadResult.fileId,
-            fileName: uploadResult.fileName,
-            fileUrl: uploadResult.fileUrl,
-            message: 'Upload realizado com sucesso!'
-        }), {
-            status: 200,
-            headers: corsHeaders
-        });
-
-    } catch (error) {
-        secureLog('error', 'drive-upload exceção', { message: error.message });
         return new Response(
             JSON.stringify({
-                success: false,
-                error: 'Erro no servidor',
-                details: error.message || String(error)
+                success: true,
+                fileId: uploadResult.fileId,
+                fileName: uploadResult.fileName,
+                fileUrl: uploadResult.fileUrl,
+                message: 'Upload realizado com sucesso!',
+                requestId
             }),
             {
-                status: 500,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                status: 200,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json; charset=utf-8' }
             }
+        );
+    } catch (error) {
+        secureLog('error', 'drive-upload exceção', { message: error.message });
+        const msg = error?.message || String(error);
+        const stack = error?.stack ? String(error.stack).slice(0, 2000) : '';
+        return driveUploadJsonError(
+            corsHeaders,
+            500,
+            'UNHANDLED',
+            'Erro no servidor',
+            stack ? `${msg}\n---\n${stack}` : msg,
+            requestId
         );
     }
 }
@@ -173,12 +251,31 @@ function sanitizeParam(param) {
 // =============================================================================
 // 🔑 OBTER TOKEN DE ACESSO DO GOOGLE
 // =============================================================================
-async function getGoogleAccessToken(serviceAccountKey) {
+async function getGoogleAccessToken(serviceAccountKey, requestId = '') {
     try {
-        console.log('🔑 Gerando token de acesso...');
+        console.log(`[drive-upload:${requestId}] 🔑 JWT / OAuth…`);
 
-        const serviceAccount = JSON.parse(serviceAccountKey);
-        
+        let serviceAccount;
+        try {
+            serviceAccount = JSON.parse(serviceAccountKey);
+        } catch (parseErr) {
+            throw new Error(
+                `GOOGLE_SERVICE_ACCOUNT_KEY não é JSON válido: ${parseErr.message}. Confirme que colou o ficheiro completo (sem aspas extra no Cloudflare).`
+            );
+        }
+
+        if (!serviceAccount.client_email || !serviceAccount.private_key) {
+            throw new Error(
+                'JSON da service account incompleto: faltam client_email ou private_key.'
+            );
+        }
+
+        const emailDomain = (serviceAccount.client_email || '').split('@')[1] || '';
+        console.log(`[drive-upload:${requestId}] conta serviço`, {
+            client_email_suffix: `…@${emailDomain}`,
+            hasPrivateKey: Boolean(serviceAccount.private_key)
+        });
+
         const now = Math.floor(Date.now() / 1000);
         const payload = {
             iss: serviceAccount.client_email,
@@ -188,7 +285,14 @@ async function getGoogleAccessToken(serviceAccountKey) {
             iat: now
         };
 
-        const jwt = await signJWT(payload, serviceAccount.private_key);
+        let jwt;
+        try {
+            jwt = await signJWT(payload, serviceAccount.private_key);
+        } catch (signErr) {
+            throw new Error(
+                `Falha ao assinar JWT (chave PEM inválida ou formato errado): ${signErr.message}`
+            );
+        }
 
         const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
             method: 'POST',
@@ -200,15 +304,18 @@ async function getGoogleAccessToken(serviceAccountKey) {
 
         if (!tokenResponse.ok) {
             const errorText = await tokenResponse.text();
-            throw new Error(`OAuth2 falhou (${tokenResponse.status}): ${errorText}`);
+            throw new Error(`OAuth2 HTTP ${tokenResponse.status}: ${errorText.slice(0, 2000)}`);
         }
 
         const tokenData = await tokenResponse.json();
-        console.log('✅ Token de acesso obtido');
-        return tokenData.access_token;
+        if (!tokenData.access_token) {
+            throw new Error(`OAuth2 resposta sem access_token: ${JSON.stringify(tokenData).slice(0, 500)}`);
+        }
 
+        console.log(`[drive-upload:${requestId}] ✅ OAuth OK`);
+        return tokenData.access_token;
     } catch (error) {
-        console.error('❌ Erro ao obter token:', error);
+        console.error(`[drive-upload:${requestId}] ❌ token:`, error);
         throw error;
     }
 }
@@ -247,15 +354,14 @@ async function signJWT(payload, privateKey) {
 // =============================================================================
 // 📤 UPLOAD PARA GOOGLE DRIVE
 // =============================================================================
-async function uploadToGoogleDrive(file, folderId, pontoId, tipo, accessToken) {
+async function uploadToGoogleDrive(file, folderId, pontoId, tipo, accessToken, requestId = '') {
     try {
-        console.log('📤 Fazendo upload do arquivo...');
-
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         const fileExtension = file.name.split('.').pop();
         const fileName = `${tipo}_${pontoId}_${timestamp}.${fileExtension}`;
 
-        // ✅ CORREÇÃO 5: Upload usando resumable upload para evitar corrupção
+        console.log(`[drive-upload:${requestId}] 📤 init`, { folderId, bytes: file.size, mime: file.type });
+
         const metadata = {
             name: fileName,
             parents: [folderId]
@@ -269,7 +375,7 @@ async function uploadToGoogleDrive(file, folderId, pontoId, tipo, accessToken) {
                 headers: {
                     'Authorization': `Bearer ${accessToken}`,
                     'Content-Type': 'application/json; charset=UTF-8',
-                    'X-Upload-Content-Type': file.type
+                    'X-Upload-Content-Type': file.type || 'application/octet-stream'
                 },
                 body: JSON.stringify(metadata)
             }
@@ -277,21 +383,31 @@ async function uploadToGoogleDrive(file, folderId, pontoId, tipo, accessToken) {
 
         if (!initResponse.ok) {
             const errorText = await initResponse.text();
-            throw new Error(`Falha ao iniciar upload: ${initResponse.status} - ${errorText}`);
+            console.error(`[drive-upload:${requestId}] init`, initResponse.status, errorText.slice(0, 1200));
+            return {
+                success: false,
+                code: 'UPLOAD_INIT',
+                error: `init ${initResponse.status}: ${errorText.slice(0, 2000)}`,
+                extra: { googleStatus: initResponse.status }
+            };
         }
 
         const uploadUrl = initResponse.headers.get('Location');
         if (!uploadUrl) {
-            throw new Error('URL de upload não retornada');
+            return {
+                success: false,
+                code: 'UPLOAD_NO_LOCATION',
+                error: 'Resumable: header Location ausente.',
+                extra: {}
+            };
         }
 
-        // Passo 2: Upload do conteúdo do arquivo
         const fileBuffer = await file.arrayBuffer();
         
         const uploadResponse = await fetch(uploadUrl, {
             method: 'PUT',
             headers: {
-                'Content-Type': file.type,
+                'Content-Type': file.type || 'application/octet-stream',
                 'Content-Length': fileBuffer.byteLength.toString()
             },
             body: fileBuffer
@@ -299,21 +415,23 @@ async function uploadToGoogleDrive(file, folderId, pontoId, tipo, accessToken) {
 
         if (!uploadResponse.ok) {
             const errorText = await uploadResponse.text();
-            throw new Error(`Upload falhou (${uploadResponse.status}): ${errorText}`);
+            console.error(`[drive-upload:${requestId}] PUT`, uploadResponse.status, errorText.slice(0, 1200));
+            return {
+                success: false,
+                code: 'UPLOAD_PUT',
+                error: `PUT ${uploadResponse.status}: ${errorText.slice(0, 2000)}`,
+                extra: { googleStatus: uploadResponse.status }
+            };
         }
 
         const uploadResult = await uploadResponse.json();
 
-        console.log('✅ Arquivo enviado com sucesso!');
+        console.log(`[drive-upload:${requestId}] ✅ ficheiro`, uploadResult.id);
 
-        // ✅ CORREÇÃO: Tornar arquivo público/compartilhável para visualização
-        console.log('🔓 Configurando permissões do arquivo...');
         try {
             await makeFileViewable(uploadResult.id, accessToken);
-            console.log('✅ Permissões configuradas com sucesso!');
         } catch (permError) {
-            console.warn('⚠️ Aviso: Não foi possível configurar permissões públicas:', permError.message);
-            // Não falhar o upload por causa disso, arquivo pode já ter permissões via pasta compartilhada
+            console.warn(`[drive-upload:${requestId}] permissões anyone:`, permError.message);
         }
 
         return {
@@ -324,10 +442,12 @@ async function uploadToGoogleDrive(file, folderId, pontoId, tipo, accessToken) {
         };
 
     } catch (error) {
-        console.error('❌ Erro no upload para Google Drive:', error);
-        return { 
-            success: false, 
-            error: error.message 
+        console.error(`[drive-upload:${requestId}] ❌`, error);
+        return {
+            success: false,
+            code: 'UPLOAD_EXCEPTION',
+            error: error.message || String(error),
+            extra: {}
         };
     }
 }
@@ -376,18 +496,15 @@ async function makeFileViewable(fileId, accessToken) {
 // =============================================================================
 // ✅ REFATORADO: Agora usa o módulo compartilhado drive-hierarchy.js
 // Isso previne duplicações paralelas e garante consistência
-async function ensureFolderPathInSharedDrive(exibidora, tipo, databaseId, pontoId, accessToken) {
+async function ensureFolderPathInSharedDrive(exibidora, tipo, databaseId, pontoId, accessToken, requestId = '') {
     try {
-        console.log('📁 [REFATORADO] Usando módulo compartilhado de hierarquia...');
-        console.log('📋 Parâmetros:', { exibidora, tipo, databaseId, pontoId });
+        console.log(`[drive-upload:${requestId}] 📁 hierarquia`, { exibidora, tipo, databaseId, pontoId });
 
-        // ✅ VALIDAR parâmetros antes de prosseguir
         const validation = validateHierarchyParams(exibidora, databaseId, pontoId, tipo);
         if (!validation.valid) {
             throw new Error(`Parâmetros inválidos: ${validation.errors.join(', ')}`);
         }
 
-        // ✅ USAR módulo compartilhado (com mutex para prevenir duplicações)
         const result = await ensureFolderHierarchy(
             exibidora,
             databaseId,
@@ -396,11 +513,10 @@ async function ensureFolderPathInSharedDrive(exibidora, tipo, databaseId, pontoI
             accessToken
         );
 
-        console.log('🎉 Estrutura garantida via módulo compartilhado');
+        console.log(`[drive-upload:${requestId}] 🎉 hierarquia OK`, { path: result.path, tipoFolderId: result.id });
         return result;
-
     } catch (error) {
-        console.error('❌ Erro ao garantir estrutura de pastas:', error);
+        console.error(`[drive-upload:${requestId}] ❌ hierarquia:`, error);
         throw error;
     }
 }
