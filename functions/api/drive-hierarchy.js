@@ -257,6 +257,22 @@ async function findOrCreateFolderInternal(folderName, parentId, accessToken, dri
 // 🌐 METADATA + BUSCA CheckingOOH (Shared Drive / env / desambiguação)
 // =============================================================================
 
+/** Normaliza ID colado no Cloudflare (URL completa, aspas, espaços). */
+function sanitizeDriveFileId(raw) {
+    if (raw == null) return '';
+    let s = String(raw).trim();
+    if (!s) return '';
+    if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+        s = s.slice(1, -1).trim();
+    }
+    const fromUrl = s.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+    if (fromUrl) return fromUrl[1];
+    return s.replace(/\s+/g, '');
+}
+
+/**
+ * @returns {Promise<{ ok: true, id: string, name?: string, mimeType: string, driveId?: string|null } | { ok: false, status: number, detail: string }>}
+ */
 async function getDriveFileMetadata(fileId, accessToken) {
     const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=id,name,mimeType,driveId&supportsAllDrives=true`;
     const r = await fetch(url, {
@@ -265,9 +281,10 @@ async function getDriveFileMetadata(fileId, accessToken) {
     if (!r.ok) {
         const t = await r.text();
         console.error('❌ files.get', String(fileId).slice(0, 16), r.status, t.slice(0, 500));
-        return null;
+        return { ok: false, status: r.status, detail: t.slice(0, 400) };
     }
-    return r.json();
+    const meta = await r.json();
+    return { ok: true, ...meta };
 }
 
 /** Lista pastas com nome exato CheckingOOH; opcionalmente só dentro de um Shared Drive. */
@@ -361,24 +378,44 @@ async function pickCheckingOOHFromCandidates(candidates, exibidoraName, accessTo
  *   primeiro neste Shared Drive; só se vazio usa corpora=allDrives.
  */
 async function resolveCheckingOOHRootFolder(accessToken, exibidoraName, options = {}) {
-    const explicit = String(options.checkingOohFolderId || '').trim();
+    const sd = sanitizeDriveFileId(options.sharedDriveId || '');
+    const explicit = sanitizeDriveFileId(options.checkingOohFolderId || '');
+
     if (explicit) {
         const meta = await getDriveFileMetadata(explicit, accessToken);
-        if (!meta) {
+        if (meta.ok) {
+            if (meta.mimeType !== 'application/vnd.google-apps.folder') {
+                throw new Error(
+                    `GOOGLE_DRIVE_CHECKINGOOH_FOLDER_ID não é uma pasta (mime=${meta.mimeType}).`
+                );
+            }
+            console.log('✅ CheckingOOH por ID fixo (env):', meta.id, meta.name);
+            return { id: meta.id, name: meta.name || 'CheckingOOH', driveId: meta.driveId || null };
+        }
+
+        if (meta.status === 403) {
             throw new Error(
-                'GOOGLE_DRIVE_CHECKINGOOH_FOLDER_ID: files.get falhou (403/404). Confirme o ID na URL do Drive e que a service account tem acesso.'
+                'GOOGLE_DRIVE_CHECKINGOOH_FOLDER_ID: Google devolveu 403 (sem permissão). ' +
+                    'No Google Drive, abra o drive partilhado "REDE COMPARTILHADA E-RÁDIOS" (ou equivalente) → Gerir membros → ' +
+                    'adicione o e-mail da service account (campo client_email do JSON em GOOGLE_SERVICE_ACCOUNT_KEY) ' +
+                    'com função Conteúdo ou superior. Partilhar só a pasta CheckingOOH com esse e-mail também funciona. ' +
+                    `Resposta: ${meta.detail.slice(0, 180)}`
             );
         }
-        if (meta.mimeType !== 'application/vnd.google-apps.folder') {
+
+        if (meta.status === 404 && sd) {
+            console.warn(
+                '⚠️ GOOGLE_DRIVE_CHECKINGOOH_FOLDER_ID: files.get 404 — ID pode estar errado ou ficheiro inexistente. ' +
+                    'Tentando localizar "CheckingOOH" por nome no Shared Drive configurado.'
+            );
+        } else if (!meta.ok) {
             throw new Error(
-                `GOOGLE_DRIVE_CHECKINGOOH_FOLDER_ID não é uma pasta (mime=${meta.mimeType}).`
+                `GOOGLE_DRIVE_CHECKINGOOH_FOLDER_ID: files.get falhou (HTTP ${meta.status}). Confirme o ID e o JSON da mesma service account no Cloudflare (Preview vs Production). ${meta.detail.slice(0, 120)}`
             );
         }
-        console.log('✅ CheckingOOH por ID fixo (env):', meta.id, meta.name);
-        return { id: meta.id, name: meta.name || 'CheckingOOH', driveId: meta.driveId || null };
     }
 
-    const sd = String(options.sharedDriveId || '').trim();
+    // Descoberta por nome (sem ID fixo, ou fallback após 404 no ID fixo com shared drive)
     let candidates = [];
 
     // Com drive partilhado configurado: procurar primeiro SÓ lá (corpora=drive).
@@ -544,8 +581,8 @@ export function buildDriveHierarchyOptions(env) {
     if (!env || typeof env !== 'object') {
         return {};
     }
-    const cid = String(env.GOOGLE_DRIVE_CHECKINGOOH_FOLDER_ID || env.CHECKINGOOH_ROOT_FOLDER_ID || '').trim();
-    const sid = String(env.GOOGLE_DRIVE_SHARED_DRIVE_ID || '').trim();
+    const cid = sanitizeDriveFileId(env.GOOGLE_DRIVE_CHECKINGOOH_FOLDER_ID || env.CHECKINGOOH_ROOT_FOLDER_ID || '');
+    const sid = sanitizeDriveFileId(env.GOOGLE_DRIVE_SHARED_DRIVE_ID || '');
     return {
         ...(cid ? { checkingOohFolderId: cid } : {}),
         ...(sid ? { sharedDriveId: sid } : {})
