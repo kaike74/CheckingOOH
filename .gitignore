@@ -7,6 +7,7 @@
 .env.local
 .env.production
 .env.development
+.dev.vars
 *.key
 *.pem
 service-account.json

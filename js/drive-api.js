@@ -42,8 +42,23 @@ async function uploadFileToDrive(file, exibidora, pontoId, tipo, databaseId) {
         });
 
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: 'Erro desconhecido' }));
-            const parts = [errorData.error, errorData.details].filter(Boolean);
+            // #region agent log
+            const resText = await response.text();
+            if (typeof window !== 'undefined' && window.__dgSend) {
+                window.__dgSend('H3', 'drive-api.js:uploadFileToDrive', 'drive-upload non-OK', {
+                    status: response.status,
+                    contentType: response.headers.get('content-type') || '',
+                    bodySnippet: resText.slice(0, 600)
+                });
+            }
+            // #endregion
+            let errorData;
+            try {
+                errorData = JSON.parse(resText);
+            } catch {
+                errorData = { error: 'Resposta não-JSON', details: resText.slice(0, 300) };
+            }
+            const parts = [errorData.error, errorData.details, errorData.message].filter(Boolean);
             throw new Error(parts.length ? parts.join(' — ') : `Erro HTTP ${response.status}`);
         }
 

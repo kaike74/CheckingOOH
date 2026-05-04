@@ -194,6 +194,42 @@
   </div>
 
   <!-- Scripts -->
+  <!-- #region agent log -->
+  <script>
+  (function () {
+    window.__dgSend = function (hypothesisId, location, message, data) {
+      var payload = {
+        sessionId: '359bde',
+        hypothesisId: hypothesisId,
+        location: location,
+        message: message,
+        data: data || {},
+        timestamp: Date.now()
+      };
+      /* Produção HTTPS bloqueia ingest em 127.0.0.1 — cópia sempre no consola para evidência */
+      try {
+        console.warn('[CheckingOOH-debug-359bde]', JSON.stringify(payload));
+      } catch (e) {}
+      fetch('http://127.0.0.1:7587/ingest/5b2000d0-2ba3-46c0-b9ab-4e2f2b11eefa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '359bde' },
+        body: JSON.stringify(payload)
+      }).catch(function () {});
+    };
+    window.addEventListener('error', function (ev) {
+      window.__dgSend('H1', 'index.html:inline', 'window.error', {
+        msg: ev.message,
+        filename: ev.filename,
+        lineno: ev.lineno,
+        colno: ev.colno
+      });
+    });
+    window.addEventListener('unhandledrejection', function (ev) {
+      window.__dgSend('H2', 'index.html:inline', 'unhandledrejection', { reason: String(ev.reason) });
+    });
+  })();
+  </script>
+  <!-- #endregion -->
   <!-- ✅ V10: jsPDF para geração de relatórios -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <!-- ✅ V10.2: html2canvas para PDF via print -->
