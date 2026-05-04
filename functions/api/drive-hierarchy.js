@@ -357,7 +357,8 @@ async function pickCheckingOOHFromCandidates(candidates, exibidoraName, accessTo
 
 /**
  * options.checkingOohFolderId — ID da pasta CheckingOOH (evita pesquisa; resolve permissões só-partilha).
- * options.sharedDriveId — pesquisa nome só neste Shared Drive (membro com list pode ver).
+ * options.sharedDriveId — se definido (sem ID fixo da pasta), pesquisa "CheckingOOH"
+ *   primeiro neste Shared Drive; só se vazio usa corpora=allDrives.
  */
 async function resolveCheckingOOHRootFolder(accessToken, exibidoraName, options = {}) {
     const explicit = String(options.checkingOohFolderId || '').trim();
@@ -377,13 +378,19 @@ async function resolveCheckingOOHRootFolder(accessToken, exibidoraName, options 
         return { id: meta.id, name: meta.name || 'CheckingOOH', driveId: meta.driveId || null };
     }
 
-    let candidates = await fetchCheckingOOHCandidates(accessToken, null);
-    console.log('🔍 CheckingOOH candidatos (corpora=allDrives):', candidates.length);
-
     const sd = String(options.sharedDriveId || '').trim();
-    if (candidates.length === 0 && sd) {
+    let candidates = [];
+
+    // Com drive partilhado configurado: procurar primeiro SÓ lá (corpora=drive).
+    // Só depois tentar allDrives — evita depender de pesquisa global quando a SA
+    // só tem acesso como membro do Shared Drive.
+    if (sd) {
         candidates = await fetchCheckingOOHCandidates(accessToken, sd);
-        console.log('🔍 CheckingOOH candidatos (corpora=drive driveId=):', candidates.length, sd);
+        console.log('🔍 CheckingOOH candidatos (Shared Drive primeiro, driveId=):', candidates.length, sd);
+    }
+    if (candidates.length === 0) {
+        candidates = await fetchCheckingOOHCandidates(accessToken, null);
+        console.log('🔍 CheckingOOH candidatos (fallback corpora=allDrives):', candidates.length);
     }
 
     return pickCheckingOOHFromCandidates(candidates, exibidoraName, accessToken);
@@ -531,7 +538,7 @@ function normalizeNotionId(id) {
 /**
  * Opções de hierarquia a partir das variáveis Cloudflare / .dev.vars
  * - GOOGLE_DRIVE_CHECKINGOOH_FOLDER_ID ou CHECKINGOOH_ROOT_FOLDER_ID: ID da pasta CheckingOOH
- * - GOOGLE_DRIVE_SHARED_DRIVE_ID: ID do Drive partilhado (pesquisa CheckingOOH só lá)
+ * - GOOGLE_DRIVE_SHARED_DRIVE_ID: ID do Drive partilhado (pesquisa CheckingOOH primeiro lá; depois allDrives se vazio)
  */
 export function buildDriveHierarchyOptions(env) {
     if (!env || typeof env !== 'object') {
