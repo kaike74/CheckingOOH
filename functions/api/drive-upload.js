@@ -123,7 +123,8 @@ export async function onRequestPost(context) {
             secureLog('error', 'Upload falhou', { error: uploadResult.error });
             return new Response(JSON.stringify({
                 success: false,
-                error: 'Erro ao fazer upload do arquivo'
+                error: 'Erro ao fazer upload do arquivo',
+                details: uploadResult.error || null
             }), {
                 status: 500,
                 headers: corsHeaders
@@ -144,7 +145,18 @@ export async function onRequestPost(context) {
         });
 
     } catch (error) {
-        return secureErrorResponse(error, 500, corsHeaders);
+        secureLog('error', 'drive-upload exceção', { message: error.message });
+        return new Response(
+            JSON.stringify({
+                success: false,
+                error: 'Erro no servidor',
+                details: error.message || String(error)
+            }),
+            {
+                status: 500,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            }
+        );
     }
 }
 

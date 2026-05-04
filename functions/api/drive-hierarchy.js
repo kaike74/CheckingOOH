@@ -45,15 +45,15 @@ export async function ensureFolderHierarchy(exibidora, databaseId, pontoId, tipo
             tipo
         });
 
-        // PASSO 1: Encontrar pasta CheckingOOH
+        // PASSO 1: Encontrar pasta CheckingOOH (várias podem existir — escolher a que já contém a exibidora)
         console.log('🔍 [1/5] Buscando pasta raiz: CheckingOOH...');
-        const checkingFolder = await findFolderInAllDrives('CheckingOOH', accessToken);
+        const checkingFolder = await resolveCheckingOOHRootFolder(accessToken, exibidora);
 
         if (!checkingFolder) {
             throw new Error('❌ Pasta CheckingOOH não encontrada. Verifique a configuração do Drive.');
         }
 
-        console.log('✅ Pasta CheckingOOH encontrada:', checkingFolder.id);
+        console.log('✅ Pasta CheckingOOH encontrada:', checkingFolder.id, checkingFolder.driveId || 'My Drive');
         const basePath = 'CheckingOOH';
 
         // PASSO 2: Exibidora
@@ -244,6 +244,74 @@ async function findOrCreateFolderInternal(folderName, parentId, accessToken, dri
 }
 
 // =============================================================================
+// 🌐 RESOLVER RAIZ CheckingOOH (várias pastas com o mesmo nome)
+// =============================================================================
+/**
+ * Se existir mais de uma pasta "CheckingOOH", usa a que já tem subpasta com o
+ * nome da exibidora (ex.: Visuarte). Evita apontar para outro drive/projeto antigo.
+ */
+async function resolveCheckingOOHRootFolder(accessToken, exibidoraName) {
+    const escapedRoot = 'CheckingOOH'.replace(/'/g, "\\'");
+    const query = `name='${escapedRoot}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+    const searchUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&fields=files(id,name,driveId)&pageSize=100`;
+
+    const response = await fetch(searchUrl, {
+        headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+        }
+    });
+
+    if (!response.ok) {
+        console.error('❌ Falha ao listar candidatos CheckingOOH:', response.status);
+        return null;
+    }
+
+    const result = await response.json();
+    const candidates = result.files || [];
+
+    if (candidates.length === 0) {
+        return null;
+    }
+
+    if (candidates.length === 1) {
+        return candidates[0];
+    }
+
+    console.log(`⚠️ ${candidates.length} pastas "CheckingOOH" encontradas — desambiguando pela exibidora "${exibidoraName}"...`);
+
+    const escapedEx = String(exibidoraName || '').replace(/'/g, "\\'");
+
+    for (const root of candidates) {
+        const q2 = `name='${escapedEx}' and '${root.id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+        const url2 = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q2)}&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&fields=files(id)&pageSize=5`;
+        const r2 = await fetch(url2, {
+            headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        if (!r2.ok) {
+            continue;
+        }
+        const j2 = await r2.json();
+        if (j2.files && j2.files.length > 0) {
+            console.log('✅ CheckingOOH escolhido (contém a exibidora):', root.id);
+            return root;
+        }
+    }
+
+    const onSharedDrive = candidates.filter((f) => f.driveId);
+    if (onSharedDrive.length === 1) {
+        console.warn(
+            '⚠️ Exibidora ainda não existe em nenhum CheckingOOH — usando o único CheckingOOH em Shared Drive.'
+        );
+        return onSharedDrive[0];
+    }
+
+    const shared = candidates.find((f) => f.driveId);
+    console.warn('⚠️ Nenhum CheckingOOH continha a exibidora — fallback Shared Drive / primeiro.');
+    return shared || candidates[0];
+}
+
+// =============================================================================
 // 🌐 BUSCAR PASTA EM TODOS OS DRIVES
 // =============================================================================
 /**
@@ -371,15 +439,14 @@ export function validateHierarchyParams(exibidora, databaseId, pontoId, tipo) {
 function normalizeNotionId(id) {
     if (!id) return id;
 
-    // Remover hífens existentes
-    const cleanId = id.replace(/-/g, '');
+    // Remover hífens e unificar minúsculas (pastas no Drive seguem o formato Notion em minúsculas)
+    const cleanId = id.replace(/-/g, '').toLowerCase();
 
-    // Se tem 32 caracteres (formato sem hífens), adicionar hífens
-    if (cleanId.length === 32) {
+    // Se tem 32 caracteres hex, formatar 8-4-4-4-12
+    if (cleanId.length === 32 && /^[a-f0-9]{32}$/.test(cleanId)) {
         return `${cleanId.slice(0, 8)}-${cleanId.slice(8, 12)}-${cleanId.slice(12, 16)}-${cleanId.slice(16, 20)}-${cleanId.slice(20, 32)}`;
     }
 
-    // Se já está em outro formato, retornar como está
     return id;
 }
 
